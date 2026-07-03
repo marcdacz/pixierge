@@ -1,0 +1,47 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editors and IDEs
+.idea/
+*.iml
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+
+# Backend
+target/
+backend/target/
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+*.class
+*.log
+hs_err_pid*
+replay_pid*
+
+# Frontend
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+coverage/
+frontend/coverage/
+.vite/
+frontend/.vite/
+*.tsbuildinfo
+
+# Local environment
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Docker and local runtime data
+docker-compose.override.yml
+*.pid
+
+# Local planning notes
+.plans/
