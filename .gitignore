@@ -31,6 +31,10 @@ coverage/
 frontend/coverage/
 .vite/
 frontend/.vite/
+playwright-report/
+frontend/playwright-report/
+test-results/
+frontend/test-results/
 *.tsbuildinfo
 
 # Local environment
