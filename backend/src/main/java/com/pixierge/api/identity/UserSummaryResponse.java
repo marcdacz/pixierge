@@ -6,8 +6,7 @@ import java.util.UUID;
 
 public record UserSummaryResponse(
         UUID id,
-        String email,
-        String displayName,
+        String username,
         String status,
         Set<String> roles,
         OffsetDateTime createdAt

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const apiBaseUrl = 'http://localhost:8080';
 
@@ -6,14 +6,54 @@ const authBody = {
   csrfToken: 'csrf-token',
   user: {
     id: 'user-1',
-    email: 'admin@example.com',
-    displayName: 'Admin User',
+    username: 'admin',
     roles: ['ADMIN'],
     permissions: ['identity:admin', 'identity:read']
   }
 };
 
-test('admin setup, sign out, sign in, and user list visibility', async ({ page }) => {
+test('admin setup, empty library, settings, and profile logout', async ({ page }) => {
+  await mockPixiergeApi(page);
+
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Create admin account' })).toBeVisible();
+
+  await page.getByLabel('Username').fill('admin');
+  await page.getByLabel('Password').fill('correct horse battery staple');
+  await page.getByRole('button', { name: 'Create admin' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Libraries' })).toBeVisible();
+  await expect(page.getByText('No libraries have been added yet.')).toBeVisible();
+
+  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Configuration' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Plugins' }).click();
+  await expect(page.getByRole('heading', { name: 'Plugins' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Backups' }).click();
+  await expect(page.getByRole('heading', { name: 'Backups' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Profile' }).click();
+  await page.getByRole('menuitem', { name: 'Log out' }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+});
+
+test('authenticated shell visual regression @visual', async ({ page }) => {
+  await mockPixiergeApi(page);
+  await completeOnboarding(page);
+
+  await expect(page).toHaveScreenshot('authenticated-libraries.png', {
+    fullPage: true
+  });
+
+  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(page).toHaveScreenshot('settings.png', {
+    fullPage: true
+  });
+});
+
+async function mockPixiergeApi(page: Page) {
   let setupRequired = true;
   let signedIn = false;
 
@@ -60,8 +100,7 @@ test('admin setup, sign out, sign in, and user list visibility', async ({ page }
         json: [
           {
             id: 'user-1',
-            email: 'admin@example.com',
-            displayName: 'Admin User',
+            username: 'admin',
             status: 'active',
             roles: ['ADMIN'],
             createdAt: '2026-07-03T00:00:00Z'
@@ -87,26 +126,15 @@ test('admin setup, sign out, sign in, and user list visibility', async ({ page }
 
     await route.fulfill({ status: 404, json: {} });
   });
+}
 
+async function completeOnboarding(page: Page) {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Create admin account' })).toBeVisible();
 
-  await page.getByLabel('Email').fill('admin@example.com');
-  await page.getByLabel('Display name').fill('Admin User');
+  await page.getByLabel('Username').fill('admin');
   await page.getByLabel('Password').fill('correct horse battery staple');
   await page.getByRole('button', { name: 'Create admin' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Admin' })).toBeVisible();
-  await expect(page.getByText('admin@example.com')).toBeVisible();
-
-  await page.getByRole('button', { name: 'Sign out' }).click();
-  await expect(page.getByRole('heading', { name: 'Admin sign in' })).toBeVisible();
-
-  await page.getByLabel('Email').fill('admin@example.com');
-  await page.getByLabel('Password').fill('correct horse battery staple');
-  await page.getByRole('button', { name: 'Sign in' }).click();
-
-  await expect(page.getByRole('heading', { name: 'Admin' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Admin User' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'ADMIN', exact: true })).toBeVisible();
-});
+  await expect(page.getByRole('heading', { name: 'Libraries' })).toBeVisible();
+}

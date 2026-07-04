@@ -5,8 +5,7 @@ import java.util.UUID;
 
 public record AuthenticatedUser(
         UUID id,
-        String email,
-        String displayName,
+        String username,
         Set<String> roles,
         Set<String> permissions,
         String csrfToken

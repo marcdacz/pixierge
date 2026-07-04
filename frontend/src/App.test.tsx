@@ -13,32 +13,11 @@ const authBody = {
   csrfToken: 'csrf-token',
   user: {
     id: 'user-1',
-    email: 'admin@example.com',
-    displayName: 'Admin User',
+    username: 'admin',
     roles: ['ADMIN'],
     permissions: ['identity:admin', 'identity:read']
   }
 };
-
-const usersBody = [
-  {
-    id: 'user-1',
-    email: 'admin@example.com',
-    displayName: 'Admin User',
-    status: 'active',
-    roles: ['ADMIN'],
-    createdAt: '2026-07-03T00:00:00Z'
-  }
-];
-
-const rolesBody = [
-  {
-    key: 'ADMIN',
-    name: 'Admin',
-    description: 'Full local administration role',
-    permissions: ['identity:admin', 'identity:read']
-  }
-];
 
 describe('App', () => {
   beforeEach(() => {
@@ -52,36 +31,29 @@ describe('App', () => {
 
   it('shows first-admin setup when no users exist', async () => {
     mockFetch([
-      { status: 200, body: { status: 'ok', database: 'ready', app: 'pixierge-api' } },
       { status: 200, body: { required: true } }
     ]);
 
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Pixierge' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Create admin account' })).toBeInTheDocument();
-    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
   });
 
-  it('creates the first admin and loads identity data', async () => {
+  it('creates the first admin and opens the empty library', async () => {
     const fetchMock = mockFetch([
-      { status: 200, body: { status: 'ok', database: 'ready', app: 'pixierge-api' } },
       { status: 200, body: { required: true } },
-      { status: 200, body: authBody },
-      { status: 200, body: usersBody },
-      { status: 200, body: rolesBody }
+      { status: 200, body: authBody }
     ]);
 
     render(<App />);
 
-    await userEvent.type(await screen.findByLabelText('Email'), 'admin@example.com');
-    await userEvent.type(screen.getByLabelText('Display name'), 'Admin User');
+    await userEvent.type(await screen.findByLabelText('Username'), 'admin');
     await userEvent.type(screen.getByLabelText('Password'), 'correct horse battery staple');
     await userEvent.click(screen.getByRole('button', { name: 'Create admin' }));
 
-    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeInTheDocument();
-    expect(screen.getByText('admin@example.com')).toBeInTheDocument();
-    expect(screen.getByText('identity:admin, identity:read')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Libraries' })).toBeInTheDocument();
+    expect(screen.getByText('No libraries have been added yet.')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/setup/admin',
       expect.objectContaining({ credentials: 'include', method: 'POST' })
@@ -90,25 +62,25 @@ describe('App', () => {
 
   it('signs in and sends the csrf token on logout', async () => {
     const fetchMock = mockFetch([
-      { status: 200, body: { status: 'ok', database: 'ready', app: 'pixierge-api' } },
       { status: 200, body: { required: false } },
       { status: 401, body: {} },
       { status: 200, body: authBody },
-      { status: 200, body: usersBody },
-      { status: 200, body: rolesBody },
       { status: 200 }
     ]);
 
     render(<App />);
 
-    await userEvent.type(await screen.findByLabelText('Email'), 'admin@example.com');
+    await userEvent.type(await screen.findByLabelText('Username'), 'admin');
     await userEvent.type(screen.getByLabelText('Password'), 'correct horse battery staple');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
-    expect(await screen.findByRole('heading', { name: 'Admin' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByRole('heading', { name: 'Libraries' })).toBeInTheDocument();
+    expect(screen.getByText('No libraries have been added yet.')).toBeInTheDocument();
 
-    expect(await screen.findByRole('heading', { name: 'Admin sign in' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Profile' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Log out' }));
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenLastCalledWith(
       'http://localhost:8080/api/auth/logout',
       expect.objectContaining({

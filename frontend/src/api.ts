@@ -10,8 +10,7 @@ export type SetupStatusResponse = {
 
 export type CurrentUser = {
   id: string;
-  email: string;
-  displayName: string;
+  username: string;
   roles: string[];
   permissions: string[];
 };
@@ -23,8 +22,7 @@ export type AuthResponse = {
 
 export type UserSummary = {
   id: string;
-  email: string;
-  displayName: string;
+  username: string;
   status: 'active' | 'disabled';
   roles: string[];
   createdAt: string;
@@ -63,8 +61,7 @@ export async function fetchSetupStatus(): Promise<SetupStatusResponse> {
 }
 
 export async function createFirstAdmin(input: {
-  email: string;
-  displayName: string;
+  username: string;
   password: string;
 }): Promise<AuthResponse> {
   return requestJson<AuthResponse>('/api/setup/admin', {
@@ -73,7 +70,7 @@ export async function createFirstAdmin(input: {
   });
 }
 
-export async function login(input: { email: string; password: string }): Promise<AuthResponse> {
+export async function login(input: { username: string; password: string }): Promise<AuthResponse> {
   return requestJson<AuthResponse>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(input)

@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class IdentityIntegrationTest {
 
-    private static final String ADMIN_EMAIL = "admin@example.com";
+    private static final String ADMIN_USERNAME = "admin";
     private static final String ADMIN_PASSWORD = "correct horse battery staple";
 
     @Container
@@ -67,7 +67,7 @@ class IdentityIntegrationTest {
         assertThat(statusBefore.getBody()).containsEntry("required", true);
         assertThat(setup.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(setup.getHeaders().getFirst(HttpHeaders.SET_COOKIE)).contains(IdentityConstants.SESSION_COOKIE_NAME);
-        assertThat(userBody(setup)).containsEntry("email", ADMIN_EMAIL);
+        assertThat(userBody(setup)).containsEntry("username", ADMIN_USERNAME);
         assertThat(statusAfter.getBody()).containsEntry("required", false);
         assertThat(duplicateSetup.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
@@ -78,7 +78,7 @@ class IdentityIntegrationTest {
 
         ResponseEntity<Map> login = restTemplate.postForEntity(
                 "/api/auth/login",
-                Map.of("email", ADMIN_EMAIL, "password", ADMIN_PASSWORD),
+                Map.of("username", ADMIN_USERNAME, "password", ADMIN_PASSWORD),
                 Map.class
         );
 
@@ -113,7 +113,7 @@ class IdentityIntegrationTest {
         assertThat(users.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(users.getBody()).hasSize(1);
         assertThat(session.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(userBody(session)).containsEntry("email", ADMIN_EMAIL);
+        assertThat(userBody(session)).containsEntry("username", ADMIN_USERNAME);
         assertThat(logout.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(revokedSession.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
@@ -141,8 +141,7 @@ class IdentityIntegrationTest {
 
     private Map<String, String> adminSetupBody() {
         return Map.of(
-                "email", ADMIN_EMAIL,
-                "displayName", "Admin User",
+                "username", ADMIN_USERNAME,
                 "password", ADMIN_PASSWORD
         );
     }

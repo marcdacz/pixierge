@@ -5,13 +5,12 @@ import java.util.UUID;
 
 public record CurrentUserResponse(
         UUID id,
-        String email,
-        String displayName,
+        String username,
         Set<String> roles,
         Set<String> permissions
 ) {
 
     public static CurrentUserResponse from(AuthenticatedUser user) {
-        return new CurrentUserResponse(user.id(), user.email(), user.displayName(), user.roles(), user.permissions());
+        return new CurrentUserResponse(user.id(), user.username(), user.roles(), user.permissions());
     }
 }

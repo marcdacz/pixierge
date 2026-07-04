@@ -55,14 +55,13 @@ public class UserRepository {
                 .fetchOne();
     }
 
-    public UUID createUser(String email, String displayName, String passwordHash) {
+    public UUID createUser(String username, String passwordHash) {
         UUID userId = UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now();
 
         queryFactory.insert(USERS)
                 .set(USERS.id, userId)
-                .set(USERS.email, normalizeEmail(email))
-                .set(USERS.displayName, displayName)
+                .set(USERS.username, normalizeUsername(username))
                 .set(USERS.status, IdentityConstants.USER_STATUS_ACTIVE)
                 .set(USERS.createdAt, now)
                 .set(USERS.updatedAt, now)
@@ -96,12 +95,12 @@ public class UserRepository {
     }
 
     @Transactional(readOnly = true)
-    public Optional<LoginCredential> findLoginCredential(String email) {
+    public Optional<LoginCredential> findLoginCredential(String username) {
         Tuple row = queryFactory
                 .select(USERS.id, PASSWORD_CREDENTIALS.passwordHash)
                 .from(USERS)
                 .join(PASSWORD_CREDENTIALS).on(PASSWORD_CREDENTIALS.userId.eq(USERS.id))
-                .where(USERS.email.eq(normalizeEmail(email)).and(USERS.status.eq(IdentityConstants.USER_STATUS_ACTIVE)))
+                .where(USERS.username.eq(normalizeUsername(username)).and(USERS.status.eq(IdentityConstants.USER_STATUS_ACTIVE)))
                 .fetchFirst();
 
         if (row == null) {
@@ -114,7 +113,7 @@ public class UserRepository {
     @Transactional(readOnly = true)
     public Optional<AuthenticatedUser> findAuthenticatedUser(UUID userId, String csrfToken) {
         Tuple userRow = queryFactory
-                .select(USERS.id, USERS.email, USERS.displayName)
+                .select(USERS.id, USERS.username)
                 .from(USERS)
                 .where(USERS.id.eq(userId).and(USERS.status.eq(IdentityConstants.USER_STATUS_ACTIVE)))
                 .fetchOne();
@@ -125,8 +124,7 @@ public class UserRepository {
 
         return Optional.of(new AuthenticatedUser(
                 userRow.get(USERS.id),
-                userRow.get(USERS.email),
-                userRow.get(USERS.displayName),
+                userRow.get(USERS.username),
                 findRoleKeys(userId),
                 findPermissionKeys(userId),
                 csrfToken
@@ -136,9 +134,9 @@ public class UserRepository {
     @Transactional(readOnly = true)
     public List<UserSummaryResponse> listUsers() {
         List<Tuple> userRows = queryFactory
-                .select(USERS.id, USERS.email, USERS.displayName, USERS.status, USERS.createdAt)
+                .select(USERS.id, USERS.username, USERS.status, USERS.createdAt)
                 .from(USERS)
-                .orderBy(USERS.createdAt.asc(), USERS.email.asc())
+                .orderBy(USERS.createdAt.asc(), USERS.username.asc())
                 .fetch();
 
         Map<UUID, Set<String>> rolesByUser = rolesByUser();
@@ -148,8 +146,7 @@ public class UserRepository {
             UUID userId = row.get(USERS.id);
             users.add(new UserSummaryResponse(
                     userId,
-                    row.get(USERS.email),
-                    row.get(USERS.displayName),
+                    row.get(USERS.username),
                     row.get(USERS.status),
                     rolesByUser.getOrDefault(userId, Set.of()),
                     row.get(USERS.createdAt)
@@ -236,8 +233,8 @@ public class UserRepository {
         return permissionsByRole;
     }
 
-    static String normalizeEmail(String email) {
-        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    static String normalizeUsername(String username) {
+        return username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
     }
 
     record LoginCredential(UUID userId, String passwordHash) {

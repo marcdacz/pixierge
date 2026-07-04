@@ -44,8 +44,8 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Initial admin already exists");
         }
 
-        ValidatedAccountInput input = validateAccountInput(request.email(), request.displayName(), request.password());
-        UUID userId = userRepository.createUser(input.email(), input.displayName(), passwordEncoder.encode(input.password()));
+        ValidatedAccountInput input = validateAccountInput(request.username(), request.password());
+        UUID userId = userRepository.createUser(input.username(), passwordEncoder.encode(input.password()));
         userRepository.assignRole(userId, IdentityConstants.ROLE_ADMIN);
 
         return createSessionForUser(userId);
@@ -53,14 +53,14 @@ public class AuthService {
 
     @Transactional
     public CreatedSession login(LoginRequest request) {
-        String email = UserRepository.normalizeEmail(request.email());
+        String username = UserRepository.normalizeUsername(request.username());
         String password = request.password() == null ? "" : request.password();
 
-        UserRepository.LoginCredential credential = userRepository.findLoginCredential(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
+        UserRepository.LoginCredential credential = userRepository.findLoginCredential(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
 
         if (!passwordEncoder.matches(password, credential.passwordHash())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
 
         return createSessionForUser(credential.userId());
@@ -92,27 +92,26 @@ public class AuthService {
         return new CreatedSession(sessionToken, user);
     }
 
-    private ValidatedAccountInput validateAccountInput(String email, String displayName, String password) {
-        String normalizedEmail = UserRepository.normalizeEmail(email);
-        String cleanDisplayName = displayName == null ? "" : displayName.trim();
+    private ValidatedAccountInput validateAccountInput(String username, String password) {
+        String normalizedUsername = UserRepository.normalizeUsername(username);
         String cleanPassword = password == null ? "" : password;
 
-        if (!normalizedEmail.contains("@") || normalizedEmail.length() > 320) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A valid email address is required");
+        if (normalizedUsername.isBlank() || normalizedUsername.length() > 60) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username is required");
         }
-        if (cleanDisplayName.isBlank() || cleanDisplayName.length() > 120) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Display name is required");
+        if (!normalizedUsername.matches("[a-z0-9._-]+")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username may only contain letters, numbers, dots, underscores, and hyphens");
         }
         if (cleanPassword.length() < 12) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 12 characters");
         }
 
-        return new ValidatedAccountInput(normalizedEmail, cleanDisplayName, cleanPassword);
+        return new ValidatedAccountInput(normalizedUsername, cleanPassword);
     }
 
     record CreatedSession(String sessionToken, AuthenticatedUser user) {
     }
 
-    private record ValidatedAccountInput(String email, String displayName, String password) {
+    private record ValidatedAccountInput(String username, String password) {
     }
 }
