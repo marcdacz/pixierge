@@ -22,6 +22,35 @@ Then open:
 - API health: http://localhost:8080/api/health
 - Actuator health: http://localhost:8080/actuator/health
 
+## Photo Sources In Docker
+
+Pixierge validates source folders from inside the API container. Docker must mount your laptop folders into the API container before Pixierge can add them as sources.
+
+Copy the override example:
+
+```sh
+cp docker-compose.override.yml.example docker-compose.override.yml
+```
+
+Then edit `docker-compose.override.yml`. Use one mount for one folder, or multiple mounts for multiple folders:
+
+```yaml
+services:
+  api:
+    volumes:
+      - /Users/your-name/Pictures:/photos/pictures:ro
+      - /Volumes/ArchiveDrive/Photos:/photos/archive:ro
+      - /Users/your-name/Scans:/photos/scans:ro
+```
+
+After restarting Docker Compose, add these source paths in Pixierge:
+
+```sh
+/photos/pictures
+/photos/archive
+/photos/scans
+```
+
 ## Test Commands
 
 Backend:
@@ -60,7 +89,3 @@ docker run --rm -v "$PWD/backend:/workspace" -w /workspace maven:3.9.9-eclipse-t
 ```
 
 4. Run backend and frontend tests.
-
-## Current Scope
-
-The application currently provides the local runtime foundation and health checks. Authentication, libraries, scanner, plugins, albums, and photo management behavior are not implemented yet.

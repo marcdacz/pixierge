@@ -45,6 +45,8 @@ frontend/test-results/
 
 # Docker and local runtime data
 docker-compose.override.yml
+docker-compose.local-test.yml
+.pixierge-library/
 *.pid
 
 # Local planning notes

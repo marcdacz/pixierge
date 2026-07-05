@@ -8,7 +8,7 @@ const authBody = {
     id: 'user-1',
     username: 'admin',
     roles: ['ADMIN'],
-    permissions: ['identity:admin', 'identity:read']
+    permissions: ['identity:admin', 'identity:read', 'library:admin', 'library:read']
   }
 };
 
@@ -23,11 +23,26 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   await page.getByRole('button', { name: 'Create admin' }).click();
 
   await expect(page.getByRole('heading', { name: 'Libraries' })).toBeVisible();
-  await expect(page.getByText('No libraries have been added yet.')).toBeVisible();
+  await expect(page.getByText('No library sources have been added yet.')).toBeVisible();
 
-  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Configure sources' }).click();
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Configuration' })).toBeVisible();
+
+  await page.getByLabel('Library name').fill('Family Photos');
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByText('0 sources')).toBeVisible();
+
+  await expect(page.getByRole('button', { name: 'Browse' })).toBeVisible();
+  await expect(page.getByText(/Docker sources must use container paths/)).toBeVisible();
+  await page.getByLabel('Source path').fill('/photos/family');
+  await page.getByRole('button', { name: 'Add source' }).click();
+  await expect(page.getByText('/photos/family')).toBeVisible();
+  await expect(page.getByText('1 source')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Expand navigation' }).click();
+  await expect(page.getByRole('navigation', { name: 'Primary' }).getByText('Family Photos')).toBeVisible();
+
   await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Plugins' }).click();
   await expect(page.getByRole('heading', { name: 'Plugins' })).toBeVisible();
   await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Backups' }).click();
@@ -56,6 +71,17 @@ test('authenticated shell visual regression @visual', async ({ page }) => {
 async function mockPixiergeApi(page: Page) {
   let setupRequired = true;
   let signedIn = false;
+  const libraries = new Map<string, {
+    id: string;
+    name: string;
+    sources: {
+      id: string;
+      path: string;
+      available: boolean;
+      unavailableReason: string | null;
+      createdAt: string;
+    }[];
+  }>();
 
   await page.route(`${apiBaseUrl}/api/**`, async (route) => {
     const request = route.request();
@@ -95,6 +121,51 @@ async function mockPixiergeApi(page: Page) {
       return;
     }
 
+    if (path === '/api/libraries' && request.method() === 'GET') {
+      await route.fulfill({ json: libraryResponses(libraries) });
+      return;
+    }
+
+    if (path === '/api/libraries' && request.method() === 'POST') {
+      const body = await request.postDataJSON();
+      libraries.set('library-1', {
+        id: 'library-1',
+        name: body.name,
+        sources: []
+      });
+      await route.fulfill({ status: 201, json: libraryResponses(libraries)[0] });
+      return;
+    }
+
+    const addRootMatch = path.match(/^\/api\/libraries\/([^/]+)\/roots$/);
+    if (addRootMatch && request.method() === 'POST') {
+      const body = await request.postDataJSON();
+      const library = libraries.get(addRootMatch[1]);
+      if (!library) {
+        await route.fulfill({ status: 404, json: {} });
+        return;
+      }
+      library.sources.push({
+        id: `source-${library.sources.length + 1}`,
+        path: body.path,
+        available: true,
+        unavailableReason: null,
+        createdAt: '2026-07-04T00:00:00Z'
+      });
+      await route.fulfill({ status: 201, json: libraryResponses(libraries).find((item) => item.id === library.id) });
+      return;
+    }
+
+    const deleteRootMatch = path.match(/^\/api\/libraries\/([^/]+)\/roots\/([^/]+)$/);
+    if (deleteRootMatch && request.method() === 'DELETE') {
+      const library = libraries.get(deleteRootMatch[1]);
+      if (library) {
+        library.sources = library.sources.filter((source) => source.id !== deleteRootMatch[2]);
+      }
+      await route.fulfill({ status: 200, body: '' });
+      return;
+    }
+
     if (path === '/api/admin/users') {
       await route.fulfill({
         json: [
@@ -125,6 +196,33 @@ async function mockPixiergeApi(page: Page) {
     }
 
     await route.fulfill({ status: 404, json: {} });
+  });
+}
+
+function libraryResponses(libraries: Map<string, {
+  id: string;
+  name: string;
+  sources: {
+    id: string;
+    path: string;
+    available: boolean;
+    unavailableReason: string | null;
+    createdAt: string;
+  }[];
+}>) {
+  return [...libraries.values()].map((library) => {
+    const availableSourceCount = library.sources.filter((source) => source.available).length;
+
+    return {
+      id: library.id,
+      name: library.name,
+      sourceCount: library.sources.length,
+      availableSourceCount,
+      unavailableSourceCount: library.sources.length - availableSourceCount,
+      createdAt: '2026-07-04T00:00:00Z',
+      updatedAt: '2026-07-04T00:00:00Z',
+      sources: library.sources
+    };
   });
 }
 

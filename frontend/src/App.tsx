@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { fetchSession, fetchSetupStatus, type AuthResponse } from '@/api';
+import { useCallback, useEffect, useState } from 'react';
+import { fetchLibraries, fetchSession, fetchSetupStatus, type AuthResponse, type LibrarySummary } from '@/api';
 import { AppFrame } from '@/components/app-frame';
 import { LoginForm, SetupForm } from '@/features/identity/identity-forms';
 import { LibraryHome } from '@/features/library/library-home';
@@ -16,6 +16,22 @@ type AppState =
 export function App() {
   const [appState, setAppState] = useState<AppState>({ state: 'loading' });
   const [currentView, setCurrentView] = useState<AppView>('libraries');
+  const [libraries, setLibraries] = useState<LibrarySummary[]>([]);
+  const [librariesLoading, setLibrariesLoading] = useState(false);
+  const [librariesError, setLibrariesError] = useState<string | null>(null);
+
+  const loadLibraries = useCallback(async () => {
+    setLibrariesLoading(true);
+    setLibrariesError(null);
+
+    try {
+      setLibraries(await fetchLibraries());
+    } catch (error) {
+      setLibrariesError('Library sources could not be loaded.');
+    } finally {
+      setLibrariesLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -56,6 +72,14 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (appState.state === 'app') {
+      void loadLibraries();
+    } else {
+      setLibraries([]);
+    }
+  }, [appState.state, loadLibraries]);
+
   if (appState.state === 'loading') {
     return <AppLoading />;
   }
@@ -88,12 +112,28 @@ export function App() {
       auth={appState.auth}
       contentMode={currentView === 'settings' ? 'edge' : 'constrained'}
       currentView={currentView}
+      libraries={libraries}
       onLogout={() => setAppState({ state: 'login' })}
       onViewChange={setCurrentView}
     >
-      {currentView === 'libraries' && <LibraryHome />}
+      {currentView === 'libraries' && (
+        <LibraryHome
+          error={librariesError}
+          libraries={libraries}
+          loading={librariesLoading}
+          onConfigureSources={() => setCurrentView('settings')}
+        />
+      )}
       {currentView === 'albums' && <LibraryHome variant="albums" />}
-      {currentView === 'settings' && <SettingsPage />}
+      {currentView === 'settings' && (
+        <SettingsPage
+          auth={appState.auth}
+          error={librariesError}
+          libraries={libraries}
+          loading={librariesLoading}
+          onLibrariesChange={loadLibraries}
+        />
+      )}
     </AppFrame>
   );
 }

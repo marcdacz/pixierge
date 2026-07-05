@@ -35,6 +35,25 @@ export type RoleSummary = {
   permissions: string[];
 };
 
+export type LibrarySource = {
+  id: string;
+  path: string;
+  available: boolean;
+  unavailableReason: string | null;
+  createdAt: string;
+};
+
+export type LibrarySummary = {
+  id: string;
+  name: string;
+  sourceCount: number;
+  availableSourceCount: number;
+  unavailableSourceCount: number;
+  createdAt: string;
+  updatedAt: string;
+  sources: LibrarySource[];
+};
+
 export class ApiError extends Error {
   readonly status: number;
 
@@ -94,6 +113,37 @@ export async function fetchUsers(): Promise<UserSummary[]> {
 
 export async function fetchRoles(): Promise<RoleSummary[]> {
   return requestJson<RoleSummary[]>('/api/admin/roles');
+}
+
+export async function fetchLibraries(): Promise<LibrarySummary[]> {
+  return requestJson<LibrarySummary[]>('/api/libraries');
+}
+
+export async function createLibrary(input: { name: string }, csrfToken: string): Promise<LibrarySummary> {
+  return requestJson<LibrarySummary>('/api/libraries', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export async function addLibraryRoot(
+  libraryId: string,
+  input: { path: string },
+  csrfToken: string
+): Promise<LibrarySummary> {
+  return requestJson<LibrarySummary>(`/api/libraries/${libraryId}/roots`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export async function deleteLibraryRoot(libraryId: string, rootId: string, csrfToken: string): Promise<void> {
+  await requestWithoutBody(`/api/libraries/${libraryId}/roots/${rootId}`, {
+    method: 'DELETE',
+    csrfToken
+  });
 }
 
 async function requestJson<T>(

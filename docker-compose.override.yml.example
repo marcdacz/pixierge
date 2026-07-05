@@ -1,0 +1,8 @@
+services:
+  api:
+    volumes:
+      # Copy this file to docker-compose.override.yml and replace these
+      # host paths with folders on your machine.
+      - /Users/your-name/Pictures:/photos/pictures:ro
+      - /Volumes/ArchiveDrive/Photos:/photos/archive:ro
+      - /Users/your-name/Scans:/photos/scans:ro

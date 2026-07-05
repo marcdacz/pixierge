@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { useState } from 'react';
-import { logout, type AuthResponse } from '@/api';
+import { logout, type AuthResponse, type LibrarySummary } from '@/api';
 import type { AppView } from '@/App';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,12 +34,12 @@ type AppFrameProps = {
   children: ReactNode;
   contentMode?: 'constrained' | 'edge';
   currentView: AppView;
+  libraries: LibrarySummary[];
   onLogout: () => void;
   onViewChange: (view: AppView) => void;
 };
 
 const primaryNav: NavItemDefinition[] = [
-  { icon: FolderOpen, label: 'Libraries', view: 'libraries' },
   { icon: Images, label: 'Albums', view: 'albums' }
 ];
 
@@ -75,6 +75,7 @@ export function AppFrame({
   children,
   contentMode = 'constrained',
   currentView,
+  libraries,
   onLogout,
   onViewChange
 }: AppFrameProps) {
@@ -97,6 +98,12 @@ export function AppFrame({
         <div className={cn('grid min-h-0', navExpanded ? shellContentColumns.expanded : shellContentColumns.collapsed)}>
           <aside className="flex min-h-0 flex-col border-r border-border bg-sidebar px-3 py-4">
             <nav aria-label="Primary" className="grid gap-2">
+              <LibraryNav
+                active={currentView === 'libraries'}
+                expanded={navExpanded}
+                libraries={libraries}
+                onSelect={() => onViewChange('libraries')}
+              />
               {primaryNav.map((item) => (
                 <NavItem
                   active={currentView === item.view}
@@ -202,6 +209,48 @@ function TopBar({
   );
 }
 
+function LibraryNav({
+  active,
+  expanded,
+  libraries,
+  onSelect
+}: {
+  active: boolean;
+  expanded: boolean;
+  libraries: LibrarySummary[];
+  onSelect: () => void;
+}) {
+  const librariesWithSources = libraries.filter((library) => library.sourceCount > 0);
+
+  return (
+    <div className="grid gap-1">
+      <NavItem
+        active={active}
+        expanded={expanded}
+        item={{ icon: FolderOpen, label: 'Libraries', view: 'libraries' }}
+        onSelect={onSelect}
+      />
+      {expanded && librariesWithSources.length > 0 && (
+        <div className="grid gap-1 pl-4">
+          {librariesWithSources.map((library) => (
+            <button
+              className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              key={library.id}
+              onClick={onSelect}
+              type="button"
+            >
+              <span className="truncate">{library.name}</span>
+              <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground">
+                {formatSourceCount(library.sourceCount)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NavItem({
   active,
   expanded,
@@ -236,6 +285,10 @@ function NavItem({
       {!expanded && <TooltipContent side="right">{item.label}</TooltipContent>}
     </Tooltip>
   );
+}
+
+function formatSourceCount(count: number) {
+  return `${count} ${count === 1 ? 'source' : 'sources'}`;
 }
 
 function RailToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {

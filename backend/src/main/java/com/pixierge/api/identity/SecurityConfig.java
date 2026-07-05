@@ -35,6 +35,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error", "/api/health", "/api/setup/status", "/api/setup/admin", "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/libraries/**").hasAuthority("library:read")
+                        .requestMatchers("/api/libraries/**").hasAuthority("library:admin")
                         .requestMatchers("/api/admin/**").hasAuthority(IdentityConstants.PERMISSION_IDENTITY_ADMIN)
                         .anyRequest().authenticated())
                 .addFilterBefore(sessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
