@@ -31,14 +31,19 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
 
   await page.getByLabel('Library name').fill('Family Photos');
   await page.getByRole('button', { name: 'Create' }).click();
-  await expect(page.getByText('0 sources')).toBeVisible();
+  const librariesNavigation = page.getByRole('navigation', { name: 'Libraries' });
+  await expect(
+    librariesNavigation.getByRole('button', { name: /Family Photos\s+0 sources/ })
+  ).toBeVisible();
 
   await expect(page.getByRole('button', { name: 'Browse' })).toBeVisible();
   await expect(page.getByText(/Docker sources must use container paths/)).toBeVisible();
   await page.getByLabel('Source path').fill('/photos/family');
   await page.getByRole('button', { name: 'Add source' }).click();
   await expect(page.getByText('/photos/family')).toBeVisible();
-  await expect(page.getByText('1 source')).toBeVisible();
+  await expect(
+    librariesNavigation.getByRole('button', { name: /Family Photos\s+1 source/ })
+  ).toBeVisible();
 
   await page.getByRole('button', { name: 'Expand navigation' }).click();
   await expect(page.getByRole('navigation', { name: 'Primary' }).getByText('Family Photos')).toBeVisible();
@@ -74,11 +79,17 @@ async function mockPixiergeApi(page: Page) {
   const libraries = new Map<string, {
     id: string;
     name: string;
+    status: 'active' | 'archived';
     sources: {
       id: string;
       path: string;
       available: boolean;
       unavailableReason: string | null;
+      createdAt: string;
+    }[];
+    exclusionPatterns: {
+      id: string;
+      pattern: string;
       createdAt: string;
     }[];
   }>();
@@ -131,7 +142,15 @@ async function mockPixiergeApi(page: Page) {
       libraries.set('library-1', {
         id: 'library-1',
         name: body.name,
-        sources: []
+        status: 'active',
+        sources: [],
+        exclusionPatterns: [
+          {
+            id: 'pattern-1',
+            pattern: '**/@eaDir/**',
+            createdAt: '2026-07-04T00:00:00Z'
+          }
+        ]
       });
       await route.fulfill({ status: 201, json: libraryResponses(libraries)[0] });
       return;
@@ -163,6 +182,44 @@ async function mockPixiergeApi(page: Page) {
         library.sources = library.sources.filter((source) => source.id !== deleteRootMatch[2]);
       }
       await route.fulfill({ status: 200, body: '' });
+      return;
+    }
+
+    const archiveLibraryMatch = path.match(/^\/api\/libraries\/([^/]+)\/archive$/);
+    if (archiveLibraryMatch && request.method() === 'POST') {
+      const library = libraries.get(archiveLibraryMatch[1]);
+      if (library) {
+        library.status = 'archived';
+      }
+      await route.fulfill({ json: libraryResponses(libraries).find((item) => item.id === archiveLibraryMatch[1]) });
+      return;
+    }
+
+    const restoreLibraryMatch = path.match(/^\/api\/libraries\/([^/]+)\/restore$/);
+    if (restoreLibraryMatch && request.method() === 'POST') {
+      const library = libraries.get(restoreLibraryMatch[1]);
+      if (library) {
+        library.status = 'active';
+      }
+      await route.fulfill({ json: libraryResponses(libraries).find((item) => item.id === restoreLibraryMatch[1]) });
+      return;
+    }
+
+    const scanLibraryMatch = path.match(/^\/api\/libraries\/([^/]+)\/scans$/);
+    if (scanLibraryMatch && request.method() === 'POST') {
+      await route.fulfill({
+        status: 201,
+        json: scanResponse(scanLibraryMatch[1], null)
+      });
+      return;
+    }
+
+    const scanRootMatch = path.match(/^\/api\/libraries\/([^/]+)\/roots\/([^/]+)\/scans$/);
+    if (scanRootMatch && request.method() === 'POST') {
+      await route.fulfill({
+        status: 201,
+        json: scanResponse(scanRootMatch[1], scanRootMatch[2])
+      });
       return;
     }
 
@@ -202,13 +259,19 @@ async function mockPixiergeApi(page: Page) {
 function libraryResponses(libraries: Map<string, {
   id: string;
   name: string;
+  status: 'active' | 'archived';
   sources: {
-    id: string;
-    path: string;
-    available: boolean;
-    unavailableReason: string | null;
-    createdAt: string;
-  }[];
+      id: string;
+      path: string;
+      available: boolean;
+      unavailableReason: string | null;
+      createdAt: string;
+    }[];
+    exclusionPatterns: {
+      id: string;
+      pattern: string;
+      createdAt: string;
+    }[];
 }>) {
   return [...libraries.values()].map((library) => {
     const availableSourceCount = library.sources.filter((source) => source.available).length;
@@ -216,14 +279,38 @@ function libraryResponses(libraries: Map<string, {
     return {
       id: library.id,
       name: library.name,
+      status: library.status,
       sourceCount: library.sources.length,
       availableSourceCount,
       unavailableSourceCount: library.sources.length - availableSourceCount,
       createdAt: '2026-07-04T00:00:00Z',
       updatedAt: '2026-07-04T00:00:00Z',
-      sources: library.sources
+      archivedAt: library.status === 'archived' ? '2026-07-05T00:00:00Z' : null,
+      sources: library.sources,
+      exclusionPatterns: library.exclusionPatterns
     };
   });
+}
+
+function scanResponse(libraryId: string, rootId: string | null) {
+  return {
+    id: 'scan-1',
+    libraryId,
+    rootId,
+    status: 'completed',
+    startedAt: '2026-07-04T00:00:00Z',
+    completedAt: '2026-07-04T00:01:00Z',
+    scannedFileCount: 1,
+    addedCount: 1,
+    unchangedCount: 0,
+    movedCount: 0,
+    modifiedCount: 0,
+    duplicateCount: 0,
+    missingCount: 0,
+    reappearedCount: 0,
+    errorCount: 0,
+    errors: []
+  };
 }
 
 async function completeOnboarding(page: Page) {

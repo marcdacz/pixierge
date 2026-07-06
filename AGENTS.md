@@ -29,6 +29,7 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean test
 - Prefer small, focused changes that match the existing code style.
 - Use Maven for backend build work.
 - Use Querydsl for repository SQL access instead of handwritten SQL strings.
+- Import Java types normally; avoid fully qualified class names in method signatures, fields, and local declarations unless needed to resolve a real naming conflict.
 - Add Flyway migrations under `backend/src/main/resources/db/migration/`.
 - During early development, when migrations are squashed or deleted, run backend tests with `mvn clean test` so stale copied migrations are removed from `target/classes`.
 - Keep React code typed and covered by nearby Vitest tests when behavior changes.

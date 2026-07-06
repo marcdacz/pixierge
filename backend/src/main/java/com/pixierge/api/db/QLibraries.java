@@ -22,6 +22,8 @@ public class QLibraries extends RelationalPathBase<QLibraries> {
     public final ComparablePath<UUID> createdBy = createComparable("createdBy", UUID.class);
     public final DateTimePath<OffsetDateTime> createdAt = createDateTime("createdAt", OffsetDateTime.class);
     public final DateTimePath<OffsetDateTime> updatedAt = createDateTime("updatedAt", OffsetDateTime.class);
+    public final StringPath status = createString("status");
+    public final DateTimePath<OffsetDateTime> archivedAt = createDateTime("archivedAt", OffsetDateTime.class);
 
     public QLibraries(String variable) {
         super(QLibraries.class, forVariable(variable), null, "libraries");
@@ -34,6 +36,8 @@ public class QLibraries extends RelationalPathBase<QLibraries> {
         addMetadata(createdBy, ColumnMetadata.named("created_by").withIndex(3).ofType(Types.OTHER));
         addMetadata(createdAt, ColumnMetadata.named("created_at").withIndex(4).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
         addMetadata(updatedAt, ColumnMetadata.named("updated_at").withIndex(5).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
+        addMetadata(status, ColumnMetadata.named("status").withIndex(6).ofType(Types.VARCHAR).notNull());
+        addMetadata(archivedAt, ColumnMetadata.named("archived_at").withIndex(7).ofType(Types.TIMESTAMP_WITH_TIMEZONE));
     }
 
     @Override

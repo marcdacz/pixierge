@@ -7,11 +7,14 @@ import java.util.UUID;
 public record LibraryResponse(
         UUID id,
         String name,
+        String status,
         long sourceCount,
         long availableSourceCount,
         long unavailableSourceCount,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
-        List<LibrarySourceResponse> sources
+        OffsetDateTime archivedAt,
+        List<LibrarySourceResponse> sources,
+        List<LibraryExclusionPatternResponse> exclusionPatterns
 ) {
 }

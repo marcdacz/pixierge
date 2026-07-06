@@ -220,7 +220,7 @@ function LibraryNav({
   libraries: LibrarySummary[];
   onSelect: () => void;
 }) {
-  const librariesWithSources = libraries.filter((library) => library.sourceCount > 0);
+  const librariesWithSources = libraries.filter((library) => library.status === 'active' && library.sourceCount > 0);
 
   return (
     <div className="grid gap-1">

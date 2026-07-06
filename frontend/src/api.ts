@@ -43,15 +43,53 @@ export type LibrarySource = {
   createdAt: string;
 };
 
+export type LibraryExclusionPattern = {
+  id: string;
+  pattern: string;
+  createdAt: string;
+};
+
+export type GlobalExclusionPattern = LibraryExclusionPattern;
+
 export type LibrarySummary = {
   id: string;
   name: string;
+  status: 'active' | 'archived';
   sourceCount: number;
   availableSourceCount: number;
   unavailableSourceCount: number;
   createdAt: string;
   updatedAt: string;
+  archivedAt: string | null;
   sources: LibrarySource[];
+  exclusionPatterns: LibraryExclusionPattern[];
+};
+
+export type ScanError = {
+  id: string;
+  path: string | null;
+  errorCode: string;
+  message: string;
+  createdAt: string;
+};
+
+export type ScanRun = {
+  id: string;
+  libraryId: string;
+  rootId: string | null;
+  status: 'running' | 'completed' | 'completed_with_errors' | 'failed' | 'cancelled' | 'queued';
+  startedAt: string;
+  completedAt: string | null;
+  scannedFileCount: number;
+  addedCount: number;
+  unchangedCount: number;
+  movedCount: number;
+  modifiedCount: number;
+  duplicateCount: number;
+  missingCount: number;
+  reappearedCount: number;
+  errorCount: number;
+  errors: ScanError[];
 };
 
 export class ApiError extends Error {
@@ -119,6 +157,10 @@ export async function fetchLibraries(): Promise<LibrarySummary[]> {
   return requestJson<LibrarySummary[]>('/api/libraries');
 }
 
+export async function fetchGlobalExclusionPatterns(): Promise<GlobalExclusionPattern[]> {
+  return requestJson<GlobalExclusionPattern[]>('/api/settings/global-exclusion-patterns');
+}
+
 export async function createLibrary(input: { name: string }, csrfToken: string): Promise<LibrarySummary> {
   return requestJson<LibrarySummary>('/api/libraries', {
     method: 'POST',
@@ -146,6 +188,79 @@ export async function deleteLibraryRoot(libraryId: string, rootId: string, csrfT
   });
 }
 
+export async function archiveLibrary(libraryId: string, csrfToken: string): Promise<LibrarySummary> {
+  return requestJson<LibrarySummary>(`/api/libraries/${libraryId}/archive`, {
+    method: 'POST',
+    csrfToken
+  });
+}
+
+export async function restoreLibrary(libraryId: string, csrfToken: string): Promise<LibrarySummary> {
+  return requestJson<LibrarySummary>(`/api/libraries/${libraryId}/restore`, {
+    method: 'POST',
+    csrfToken
+  });
+}
+
+export async function addLibraryExclusionPattern(
+  libraryId: string,
+  input: { pattern: string },
+  csrfToken: string
+): Promise<LibrarySummary> {
+  return requestJson<LibrarySummary>(`/api/libraries/${libraryId}/exclusion-patterns`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export async function deleteLibraryExclusionPattern(
+  libraryId: string,
+  patternId: string,
+  csrfToken: string
+): Promise<void> {
+  await requestWithoutBody(`/api/libraries/${libraryId}/exclusion-patterns/${patternId}`, {
+    method: 'DELETE',
+    csrfToken
+  });
+}
+
+export async function addGlobalExclusionPattern(
+  input: { pattern: string },
+  csrfToken: string
+): Promise<GlobalExclusionPattern> {
+  return requestJson<GlobalExclusionPattern>('/api/settings/global-exclusion-patterns', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export async function deleteGlobalExclusionPattern(patternId: string, csrfToken: string): Promise<void> {
+  await requestWithoutBody(`/api/settings/global-exclusion-patterns/${patternId}`, {
+    method: 'DELETE',
+    csrfToken
+  });
+}
+
+export async function scanLibrary(libraryId: string, csrfToken: string): Promise<ScanRun> {
+  return requestJson<ScanRun>(`/api/libraries/${libraryId}/scans`, {
+    method: 'POST',
+    csrfToken
+  });
+}
+
+export async function scanLibraryRoot(libraryId: string, rootId: string, csrfToken: string): Promise<ScanRun> {
+  return requestJson<ScanRun>(`/api/libraries/${libraryId}/roots/${rootId}/scans`, {
+    method: 'POST',
+    csrfToken
+  });
+}
+
+export async function fetchScan(scanRunId: string): Promise<ScanRun> {
+  return requestJson<ScanRun>(`/api/scans/${scanRunId}`);
+}
+
 async function requestJson<T>(
   path: string,
   options: { method?: string; body?: string; csrfToken?: string } = {}
@@ -158,7 +273,7 @@ async function requestJson<T>(
   });
 
   if (!response.ok) {
-    throw new ApiError(response.status, `Request failed with ${response.status}`);
+    throw new ApiError(response.status, await responseErrorMessage(response));
   }
 
   return response.json() as Promise<T>;
@@ -175,8 +290,67 @@ async function requestWithoutBody(
   });
 
   if (!response.ok) {
-    throw new ApiError(response.status, `Request failed with ${response.status}`);
+    throw new ApiError(response.status, await responseErrorMessage(response));
   }
+}
+
+async function responseErrorMessage(response: Response): Promise<string> {
+  const fallback = `Request failed with ${response.status}`;
+  const contentType = response.headers.get('Content-Type') ?? '';
+
+  if (!contentType.includes('json')) {
+    return fallback;
+  }
+
+  try {
+    const body = await response.json() as {
+      detail?: unknown;
+      error?: unknown;
+      message?: unknown;
+      title?: unknown;
+    };
+    return stringValue(body.detail)
+      ?? stringValue(body.message)
+      ?? stringValue(body.error)
+      ?? nonGenericTitle(body.title, response.status)
+      ?? fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function nonGenericTitle(value: unknown, status: number): string | null {
+  const title = stringValue(value);
+  if (title === null) {
+    return null;
+  }
+  if (title.toLowerCase() === genericStatusTitle(status)) {
+    return null;
+  }
+  return title;
+}
+
+function genericStatusTitle(status: number): string {
+  if (status === 400) {
+    return 'bad request';
+  }
+  if (status === 401) {
+    return 'unauthorized';
+  }
+  if (status === 403) {
+    return 'forbidden';
+  }
+  if (status === 404) {
+    return 'not found';
+  }
+  if (status === 409) {
+    return 'conflict';
+  }
+  return '';
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
 function requestHeaders(options: { body?: string; csrfToken?: string }): HeadersInit {

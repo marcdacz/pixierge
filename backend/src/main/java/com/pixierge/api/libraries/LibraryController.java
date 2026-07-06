@@ -50,4 +50,29 @@ public class LibraryController {
     void deleteRoot(@PathVariable UUID libraryId, @PathVariable UUID rootId) {
         libraryService.deleteRoot(libraryId, rootId);
     }
+
+    @PostMapping("/{libraryId}/archive")
+    LibraryResponse archiveLibrary(@PathVariable UUID libraryId) {
+        return libraryService.archiveLibrary(libraryId);
+    }
+
+    @PostMapping("/{libraryId}/restore")
+    LibraryResponse restoreLibrary(@PathVariable UUID libraryId) {
+        return libraryService.restoreLibrary(libraryId);
+    }
+
+    @PostMapping("/{libraryId}/exclusion-patterns")
+    @ResponseStatus(HttpStatus.CREATED)
+    LibraryResponse addExclusionPattern(
+            @PathVariable UUID libraryId,
+            @RequestBody AddLibraryExclusionPatternRequest request
+    ) {
+        return libraryService.addExclusionPattern(libraryId, request);
+    }
+
+    @DeleteMapping("/{libraryId}/exclusion-patterns/{patternId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void deleteExclusionPattern(@PathVariable UUID libraryId, @PathVariable UUID patternId) {
+        libraryService.deleteExclusionPattern(libraryId, patternId);
+    }
 }

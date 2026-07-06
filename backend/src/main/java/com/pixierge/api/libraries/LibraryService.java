@@ -18,6 +18,7 @@ public class LibraryService {
 
     private static final int MAX_LIBRARY_NAME_LENGTH = 80;
     private static final int MAX_PATH_LENGTH = 1_024;
+    private static final int MAX_EXCLUSION_PATTERN_LENGTH = 256;
 
     private final LibraryRepository libraryRepository;
 
@@ -52,6 +53,44 @@ public class LibraryService {
         return findLibrary(libraryId);
     }
 
+    @Transactional(readOnly = true)
+    public List<LibraryExclusionPatternResponse> listGlobalExclusionPatterns() {
+        return libraryRepository.listGlobalExclusionPatterns().stream()
+                .map(this::toGlobalExclusionPatternResponse)
+                .toList();
+    }
+
+    @Transactional
+    public LibraryExclusionPatternResponse addGlobalExclusionPattern(AddGlobalExclusionPatternRequest request) {
+        String pattern = validateExclusionPattern(request.pattern());
+        if (libraryRepository.globalExclusionPatternExists(pattern)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Global exclusion pattern already exists");
+        }
+
+        UUID patternId;
+        try {
+            patternId = libraryRepository.addGlobalExclusionPattern(pattern);
+        } catch (DataIntegrityViolationException exception) {
+            if (libraryRepository.isDuplicateKey(exception)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Global exclusion pattern already exists", exception);
+            }
+            throw exception;
+        }
+
+        return libraryRepository.listGlobalExclusionPatterns().stream()
+                .filter(candidate -> candidate.id().equals(patternId))
+                .findFirst()
+                .map(this::toGlobalExclusionPatternResponse)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Global exclusion pattern not found"));
+    }
+
+    @Transactional
+    public void deleteGlobalExclusionPattern(UUID patternId) {
+        if (!libraryRepository.deleteGlobalExclusionPattern(patternId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Global exclusion pattern not found");
+        }
+    }
+
     @Transactional
     public LibraryResponse addRoot(UUID libraryId, AddLibraryRootRequest request) {
         SourcePath sourcePath = validateSourcePath(request.path());
@@ -81,6 +120,20 @@ public class LibraryService {
         }
     }
 
+    @Transactional
+    public LibraryResponse archiveLibrary(UUID libraryId) {
+        findLibraryRecord(libraryId);
+        libraryRepository.archiveLibrary(libraryId);
+        return findLibrary(libraryId);
+    }
+
+    @Transactional
+    public LibraryResponse restoreLibrary(UUID libraryId) {
+        findLibraryRecord(libraryId);
+        libraryRepository.restoreLibrary(libraryId);
+        return findLibrary(libraryId);
+    }
+
     private LibraryResponse findLibrary(UUID libraryId) {
         return toResponse(findLibraryRecord(libraryId));
     }
@@ -94,17 +147,23 @@ public class LibraryService {
         List<LibrarySourceResponse> sources = library.roots().stream()
                 .map(this::toSourceResponse)
                 .toList();
+        List<LibraryExclusionPatternResponse> exclusionPatterns = library.exclusionPatterns().stream()
+                .map(this::toExclusionPatternResponse)
+                .toList();
         long available = sources.stream().filter(LibrarySourceResponse::available).count();
 
         return new LibraryResponse(
                 library.id(),
                 library.name(),
+                library.status(),
                 sources.size(),
                 available,
                 sources.size() - available,
                 library.createdAt(),
                 library.updatedAt(),
-                sources
+                library.archivedAt(),
+                sources,
+                exclusionPatterns
         );
     }
 
@@ -117,6 +176,46 @@ public class LibraryService {
                 health.unavailableReason(),
                 root.createdAt()
         );
+    }
+
+    @Transactional
+    public LibraryResponse addExclusionPattern(UUID libraryId, AddLibraryExclusionPatternRequest request) {
+        String pattern = validateExclusionPattern(request.pattern());
+        findLibraryRecord(libraryId);
+        if (libraryRepository.exclusionPatternExists(libraryId, pattern)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Exclusion pattern already exists");
+        }
+
+        try {
+            libraryRepository.addExclusionPattern(libraryId, pattern);
+        } catch (DataIntegrityViolationException exception) {
+            if (libraryRepository.isDuplicateKey(exception)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Exclusion pattern already exists", exception);
+            }
+            throw exception;
+        }
+
+        return findLibrary(libraryId);
+    }
+
+    @Transactional
+    public void deleteExclusionPattern(UUID libraryId, UUID patternId) {
+        findLibraryRecord(libraryId);
+        if (!libraryRepository.deleteExclusionPattern(libraryId, patternId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exclusion pattern not found");
+        }
+    }
+
+    private LibraryExclusionPatternResponse toExclusionPatternResponse(
+            LibraryRepository.LibraryExclusionPatternRecord pattern
+    ) {
+        return new LibraryExclusionPatternResponse(pattern.id(), pattern.pattern(), pattern.createdAt());
+    }
+
+    private LibraryExclusionPatternResponse toGlobalExclusionPatternResponse(
+            LibraryRepository.GlobalExclusionPatternRecord pattern
+    ) {
+        return new LibraryExclusionPatternResponse(pattern.id(), pattern.pattern(), pattern.createdAt());
     }
 
     private SourceHealth sourceHealth(String normalizedPath) {
@@ -146,6 +245,20 @@ public class LibraryService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Library name is too long");
         }
         return name;
+    }
+
+    private String validateExclusionPattern(String rawPattern) {
+        String pattern = rawPattern == null ? "" : rawPattern.trim().replace('\\', '/');
+        if (pattern.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exclusion pattern is required");
+        }
+        if (pattern.length() > MAX_EXCLUSION_PATTERN_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exclusion pattern is too long");
+        }
+        if (pattern.startsWith("/") || pattern.contains("..")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Exclusion pattern must be a relative glob");
+        }
+        return pattern;
     }
 
     private SourcePath validateSourcePath(String rawPath) {

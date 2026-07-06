@@ -1,6 +1,8 @@
 package com.pixierge.api.libraries;
 
+import com.pixierge.api.db.QGlobalExclusionPatterns;
 import com.pixierge.api.db.QLibraries;
+import com.pixierge.api.db.QLibraryExclusionPatterns;
 import com.pixierge.api.db.QLibraryMembers;
 import com.pixierge.api.db.QLibraryRoots;
 import com.querydsl.core.Tuple;
@@ -22,10 +24,13 @@ import java.util.UUID;
 public class LibraryRepository {
 
     private static final QLibraries LIBRARIES = QLibraries.libraries;
+    private static final QGlobalExclusionPatterns GLOBAL_EXCLUSION_PATTERNS =
+            QGlobalExclusionPatterns.globalExclusionPatterns;
+    private static final QLibraryExclusionPatterns LIBRARY_EXCLUSION_PATTERNS =
+            QLibraryExclusionPatterns.libraryExclusionPatterns;
     private static final QLibraryMembers LIBRARY_MEMBERS = QLibraryMembers.libraryMembers;
     private static final QLibraryRoots LIBRARY_ROOTS = QLibraryRoots.libraryRoots;
     private static final String OWNER_ROLE = "owner";
-
     private final SQLQueryFactory queryFactory;
 
     public LibraryRepository(SQLQueryFactory queryFactory) {
@@ -35,7 +40,7 @@ public class LibraryRepository {
     @Transactional(readOnly = true)
     public List<LibraryRecord> listLibraries() {
         List<Tuple> libraryRows = queryFactory
-                .select(LIBRARIES.id, LIBRARIES.name, LIBRARIES.createdAt, LIBRARIES.updatedAt)
+                .select(LIBRARIES.id, LIBRARIES.name, LIBRARIES.status, LIBRARIES.createdAt, LIBRARIES.updatedAt, LIBRARIES.archivedAt)
                 .from(LIBRARIES)
                 .orderBy(LIBRARIES.name.lower().asc())
                 .fetch();
@@ -44,6 +49,7 @@ public class LibraryRepository {
                 .map(row -> row.get(LIBRARIES.id))
                 .toList();
         Map<UUID, List<LibraryRootRecord>> rootsByLibrary = rootsByLibrary(libraryIds);
+        Map<UUID, List<LibraryExclusionPatternRecord>> patternsByLibrary = exclusionPatternsByLibrary(libraryIds);
         List<LibraryRecord> libraries = new ArrayList<>();
 
         for (Tuple row : libraryRows) {
@@ -51,9 +57,12 @@ public class LibraryRepository {
             libraries.add(new LibraryRecord(
                     libraryId,
                     row.get(LIBRARIES.name),
+                    row.get(LIBRARIES.status),
                     row.get(LIBRARIES.createdAt),
                     row.get(LIBRARIES.updatedAt),
-                    rootsByLibrary.getOrDefault(libraryId, List.of())
+                    row.get(LIBRARIES.archivedAt),
+                    rootsByLibrary.getOrDefault(libraryId, List.of()),
+                    patternsByLibrary.getOrDefault(libraryId, List.of())
             ));
         }
 
@@ -63,7 +72,7 @@ public class LibraryRepository {
     @Transactional(readOnly = true)
     public Optional<LibraryRecord> findLibrary(UUID libraryId) {
         Tuple row = queryFactory
-                .select(LIBRARIES.id, LIBRARIES.name, LIBRARIES.createdAt, LIBRARIES.updatedAt)
+                .select(LIBRARIES.id, LIBRARIES.name, LIBRARIES.status, LIBRARIES.createdAt, LIBRARIES.updatedAt, LIBRARIES.archivedAt)
                 .from(LIBRARIES)
                 .where(LIBRARIES.id.eq(libraryId))
                 .fetchOne();
@@ -75,9 +84,12 @@ public class LibraryRepository {
         return Optional.of(new LibraryRecord(
                 row.get(LIBRARIES.id),
                 row.get(LIBRARIES.name),
+                row.get(LIBRARIES.status),
                 row.get(LIBRARIES.createdAt),
                 row.get(LIBRARIES.updatedAt),
-                rootsByLibrary(List.of(libraryId)).getOrDefault(libraryId, List.of())
+                row.get(LIBRARIES.archivedAt),
+                rootsByLibrary(List.of(libraryId)).getOrDefault(libraryId, List.of()),
+                exclusionPatternsByLibrary(List.of(libraryId)).getOrDefault(libraryId, List.of())
         ));
     }
 
@@ -89,6 +101,7 @@ public class LibraryRepository {
                 .set(LIBRARIES.id, libraryId)
                 .set(LIBRARIES.name, name)
                 .set(LIBRARIES.createdBy, creatorId)
+                .set(LIBRARIES.status, "active")
                 .set(LIBRARIES.createdAt, now)
                 .set(LIBRARIES.updatedAt, now)
                 .execute();
@@ -101,6 +114,49 @@ public class LibraryRepository {
                 .execute();
 
         return libraryId;
+    }
+
+    @Transactional(readOnly = true)
+    public List<GlobalExclusionPatternRecord> listGlobalExclusionPatterns() {
+        return queryFactory
+                .select(GLOBAL_EXCLUSION_PATTERNS.id, GLOBAL_EXCLUSION_PATTERNS.pattern, GLOBAL_EXCLUSION_PATTERNS.createdAt)
+                .from(GLOBAL_EXCLUSION_PATTERNS)
+                .orderBy(GLOBAL_EXCLUSION_PATTERNS.pattern.lower().asc())
+                .fetch()
+                .stream()
+                .map(row -> new GlobalExclusionPatternRecord(
+                        row.get(GLOBAL_EXCLUSION_PATTERNS.id),
+                        row.get(GLOBAL_EXCLUSION_PATTERNS.pattern),
+                        row.get(GLOBAL_EXCLUSION_PATTERNS.createdAt)
+                ))
+                .toList();
+    }
+
+    public UUID addGlobalExclusionPattern(String pattern) {
+        UUID patternId = UUID.randomUUID();
+        OffsetDateTime now = OffsetDateTime.now();
+        queryFactory.insert(GLOBAL_EXCLUSION_PATTERNS)
+                .set(GLOBAL_EXCLUSION_PATTERNS.id, patternId)
+                .set(GLOBAL_EXCLUSION_PATTERNS.pattern, pattern)
+                .set(GLOBAL_EXCLUSION_PATTERNS.createdAt, now)
+                .execute();
+        return patternId;
+    }
+
+    public boolean deleteGlobalExclusionPattern(UUID patternId) {
+        return queryFactory.delete(GLOBAL_EXCLUSION_PATTERNS)
+                .where(GLOBAL_EXCLUSION_PATTERNS.id.eq(patternId))
+                .execute() > 0;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean globalExclusionPatternExists(String pattern) {
+        Integer exists = queryFactory
+                .selectOne()
+                .from(GLOBAL_EXCLUSION_PATTERNS)
+                .where(GLOBAL_EXCLUSION_PATTERNS.pattern.eq(pattern))
+                .fetchFirst();
+        return exists != null;
     }
 
     public UUID addRoot(UUID libraryId, String path, String normalizedPath) {
@@ -137,6 +193,69 @@ public class LibraryRepository {
         }
 
         return deleted > 0;
+    }
+
+    public boolean archiveLibrary(UUID libraryId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        return queryFactory.update(LIBRARIES)
+                .set(LIBRARIES.status, "archived")
+                .set(LIBRARIES.archivedAt, now)
+                .set(LIBRARIES.updatedAt, now)
+                .where(LIBRARIES.id.eq(libraryId).and(LIBRARIES.status.ne("archived")))
+                .execute() > 0;
+    }
+
+    public boolean restoreLibrary(UUID libraryId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        return queryFactory.update(LIBRARIES)
+                .set(LIBRARIES.status, "active")
+                .setNull(LIBRARIES.archivedAt)
+                .set(LIBRARIES.updatedAt, now)
+                .where(LIBRARIES.id.eq(libraryId).and(LIBRARIES.status.eq("archived")))
+                .execute() > 0;
+    }
+
+    public UUID addExclusionPattern(UUID libraryId, String pattern) {
+        UUID patternId = UUID.randomUUID();
+        OffsetDateTime now = OffsetDateTime.now();
+        queryFactory.insert(LIBRARY_EXCLUSION_PATTERNS)
+                .set(LIBRARY_EXCLUSION_PATTERNS.id, patternId)
+                .set(LIBRARY_EXCLUSION_PATTERNS.libraryId, libraryId)
+                .set(LIBRARY_EXCLUSION_PATTERNS.pattern, pattern)
+                .set(LIBRARY_EXCLUSION_PATTERNS.createdAt, now)
+                .execute();
+        queryFactory.update(LIBRARIES)
+                .set(LIBRARIES.updatedAt, now)
+                .where(LIBRARIES.id.eq(libraryId))
+                .execute();
+        return patternId;
+    }
+
+    public boolean deleteExclusionPattern(UUID libraryId, UUID patternId) {
+        long deleted = queryFactory.delete(LIBRARY_EXCLUSION_PATTERNS)
+                .where(LIBRARY_EXCLUSION_PATTERNS.id.eq(patternId)
+                        .and(LIBRARY_EXCLUSION_PATTERNS.libraryId.eq(libraryId)))
+                .execute();
+
+        if (deleted > 0) {
+            queryFactory.update(LIBRARIES)
+                    .set(LIBRARIES.updatedAt, OffsetDateTime.now())
+                    .where(LIBRARIES.id.eq(libraryId))
+                    .execute();
+        }
+
+        return deleted > 0;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean exclusionPatternExists(UUID libraryId, String pattern) {
+        Integer exists = queryFactory
+                .selectOne()
+                .from(LIBRARY_EXCLUSION_PATTERNS)
+                .where(LIBRARY_EXCLUSION_PATTERNS.libraryId.eq(libraryId)
+                        .and(LIBRARY_EXCLUSION_PATTERNS.pattern.eq(pattern)))
+                .fetchFirst();
+        return exists != null;
     }
 
     @Transactional(readOnly = true)
@@ -195,12 +314,45 @@ public class LibraryRepository {
         return rootsByLibrary;
     }
 
+    private Map<UUID, List<LibraryExclusionPatternRecord>> exclusionPatternsByLibrary(List<UUID> libraryIds) {
+        if (libraryIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Tuple> rows = queryFactory
+                .select(
+                        LIBRARY_EXCLUSION_PATTERNS.id,
+                        LIBRARY_EXCLUSION_PATTERNS.libraryId,
+                        LIBRARY_EXCLUSION_PATTERNS.pattern,
+                        LIBRARY_EXCLUSION_PATTERNS.createdAt
+                )
+                .from(LIBRARY_EXCLUSION_PATTERNS)
+                .where(LIBRARY_EXCLUSION_PATTERNS.libraryId.in(libraryIds))
+                .orderBy(LIBRARY_EXCLUSION_PATTERNS.pattern.lower().asc())
+                .fetch();
+
+        Map<UUID, List<LibraryExclusionPatternRecord>> patternsByLibrary = new LinkedHashMap<>();
+        for (Tuple row : rows) {
+            patternsByLibrary.computeIfAbsent(row.get(LIBRARY_EXCLUSION_PATTERNS.libraryId), ignored -> new ArrayList<>())
+                    .add(new LibraryExclusionPatternRecord(
+                            row.get(LIBRARY_EXCLUSION_PATTERNS.id),
+                            row.get(LIBRARY_EXCLUSION_PATTERNS.libraryId),
+                            row.get(LIBRARY_EXCLUSION_PATTERNS.pattern),
+                            row.get(LIBRARY_EXCLUSION_PATTERNS.createdAt)
+                    ));
+        }
+        return patternsByLibrary;
+    }
+
     public record LibraryRecord(
             UUID id,
             String name,
+            String status,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt,
-            List<LibraryRootRecord> roots
+            OffsetDateTime archivedAt,
+            List<LibraryRootRecord> roots,
+            List<LibraryExclusionPatternRecord> exclusionPatterns
     ) {
     }
 
@@ -209,6 +361,21 @@ public class LibraryRepository {
             UUID libraryId,
             String path,
             String normalizedPath,
+            OffsetDateTime createdAt
+    ) {
+    }
+
+    public record LibraryExclusionPatternRecord(
+            UUID id,
+            UUID libraryId,
+            String pattern,
+            OffsetDateTime createdAt
+    ) {
+    }
+
+    public record GlobalExclusionPatternRecord(
+            UUID id,
+            String pattern,
             OffsetDateTime createdAt
     ) {
     }

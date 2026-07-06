@@ -22,7 +22,7 @@ export function LibraryHome({
 }: LibraryHomeProps) {
   const isAlbums = variant === 'albums';
   const Icon = isAlbums ? Images : FolderOpen;
-  const librariesWithSources = libraries.filter((library) => library.sourceCount > 0);
+  const librariesWithSources = libraries.filter((library) => library.status === 'active' && library.sourceCount > 0);
 
   return (
     <div className="grid gap-10">
@@ -78,7 +78,7 @@ export function LibraryHome({
             </h2>
             <p className="text-sm text-muted-foreground">
               {isAlbums
-                ? 'Album creation will be added in a later slice.'
+                ? 'Album creation is not available yet.'
                 : 'Configure named libraries and source folders to start building your catalog.'}
             </p>
             {!isAlbums && onConfigureSources && (

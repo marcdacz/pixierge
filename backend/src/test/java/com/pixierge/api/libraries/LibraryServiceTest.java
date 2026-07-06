@@ -101,7 +101,7 @@ class LibraryServiceTest {
 
         private LibraryRecord library(List<LibraryRootRecord> roots) {
             OffsetDateTime now = OffsetDateTime.now();
-            return new LibraryRecord(LIBRARY_ID, "Family Photos", now, now, roots);
+            return new LibraryRecord(LIBRARY_ID, "Family Photos", "active", now, now, null, roots, List.of());
         }
     }
 }
