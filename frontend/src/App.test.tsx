@@ -91,6 +91,96 @@ const runningScan = {
   unchangedCount: 0
 };
 
+const libraryTree = {
+  roots: [
+    {
+      id: 'library-1:/photos',
+      libraryId: 'library-1',
+      libraryName: 'Family Photos',
+      path: '/photos',
+      name: 'photos',
+      assetCount: 2,
+      childCount: 1,
+      children: [
+        {
+          id: 'library-1:/photos/family',
+          libraryId: 'library-1',
+          libraryName: 'Family Photos',
+          path: '/photos/family',
+          name: 'family',
+          assetCount: 2,
+          childCount: 0,
+          children: []
+        }
+      ]
+    }
+  ],
+  libraryRootAssetCounts: {}
+};
+
+const browseAssets = {
+  sections: [
+    {
+      folderPath: '/photos/family',
+      folderName: 'family',
+      assets: [
+        {
+          id: 'asset-1',
+          fileName: 'beach.jpg',
+          displayPath: '/photos/family/beach.jpg',
+          folderPath: '/photos/family',
+          libraryId: 'library-1',
+          libraryName: 'Family Photos',
+          availability: 'available',
+          duplicateCount: 2,
+          capturedAt: '2026-07-04T00:00:00Z',
+          observedAt: '2026-07-04T00:00:00Z',
+          mediaType: 'image/jpeg',
+          mimeType: 'image/jpeg',
+          width: 1200,
+          height: 800,
+          previewable: true
+        }
+      ]
+    }
+  ],
+  totalCount: 1,
+  page: 0,
+  pageSize: 48,
+  hasNext: false
+};
+
+const assetDetail = {
+  id: 'asset-1',
+  contentHash: 'sha256:aaa',
+  mediaType: 'image/jpeg',
+  availability: 'available',
+  duplicateCount: 2,
+  metadata: {
+    capturedAt: '2026-07-04T00:00:00Z',
+    width: 1200,
+    height: 800,
+    fileExtension: 'jpg',
+    mimeType: 'image/jpeg',
+    extractionStatus: 'extracted',
+    extractedAt: '2026-07-04T00:00:00Z',
+    errorMessage: null
+  },
+  files: [
+    {
+      id: 'file-1',
+      libraryId: 'library-1',
+      libraryName: 'Family Photos',
+      path: '/photos/family/beach.jpg',
+      folderPath: '/photos/family',
+      fileName: 'beach.jpg',
+      sizeBytes: 1200,
+      modifiedAt: '2026-07-04T00:00:00Z',
+      status: 'active'
+    }
+  ]
+};
+
 describe('App', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -182,21 +272,26 @@ describe('App', () => {
     expect(screen.getByLabelText('Library name')).toBeInTheDocument();
   });
 
-  it('shows library source counts in the expanded nav and configuration health totals', async () => {
+  it('shows library folders in the browse tree and configuration health totals', async () => {
     mockFetch([
       { status: 200, body: { required: false } },
       { status: 200, body: authBody },
       { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
       { status: 200, body: globalExclusionPatterns }
     ]);
 
     render(<App />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Expand navigation' }));
+    const foldersNav = await screen.findByRole('navigation', { name: 'Folders' });
+    expect(await within(foldersNav).findByRole('button', { name: /^Family Photos/ })).toBeInTheDocument();
+    expect(await within(foldersNav).findByRole('button', { name: /^family/ })).toBeInTheDocument();
 
+    await userEvent.click(await screen.findByRole('button', { name: 'Expand navigation' }));
     const primaryNav = screen.getByRole('navigation', { name: 'Primary' });
-    expect(await within(primaryNav).findByText('Family Photos')).toBeInTheDocument();
-    expect(within(primaryNav).getByText('3 sources')).toBeInTheDocument();
+    expect(within(primaryNav).queryByText('Family Photos')).not.toBeInTheDocument();
+    expect(within(primaryNav).queryByText('3 sources')).not.toBeInTheDocument();
 
     await userEvent.click(
       within(screen.getByRole('navigation', { name: 'Utilities' })).getByRole('button', { name: 'Settings' })
@@ -205,6 +300,114 @@ describe('App', () => {
     expect(await screen.findAllByText('2 available')).not.toHaveLength(0);
     expect(screen.getAllByText('1 unavailable')).not.toHaveLength(0);
     expect(screen.getByText('Unavailable: missing')).toBeInTheDocument();
+  });
+
+  it('defaults to all folders and applies recursive folder filtering when selected', async () => {
+    const fetchMock = mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
+      { status: 200, body: browseAssets },
+      { status: 200, body: browseAssets },
+      { status: 200, body: assetDetail }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole('navigation', { name: 'Folders' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All folders' })).toBeInTheDocument();
+    expect(await screen.findByText('1 item')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open beach.jpg' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/assets?libraryId=library-1&page=0&pageSize=48',
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /^family/ }));
+    expect(await screen.findByRole('heading', { name: 'family', level: 2 })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide folders' }));
+    expect(screen.queryByRole('navigation', { name: 'Folders' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Show folders' }));
+    expect(await screen.findByRole('navigation', { name: 'Folders' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Search'), 'beach');
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8080/api/assets?libraryId=library-1&folder=%2Fphotos%2Ffamily&includeDescendants=true&q=beach&page=0&pageSize=48',
+        expect.objectContaining({ credentials: 'include', method: 'GET' })
+      );
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Open beach.jpg' }));
+    expect(await screen.findByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Folders' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('/photos/family/beach.jpg')).not.toHaveLength(0);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/assets/asset-1',
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
+  });
+
+  it('loads the next browse page when the asset grid reaches the scroll end', async () => {
+    const pageZeroAssets = {
+      ...browseAssets,
+      totalCount: 2,
+      hasNext: true
+    };
+    const pageOneAssets = {
+      sections: [
+        {
+          folderPath: '/photos/family',
+          folderName: 'family',
+          assets: [
+            {
+              ...browseAssets.sections[0].assets[0],
+              id: 'asset-2',
+              fileName: 'sunset.jpg',
+              displayPath: '/photos/family/sunset.jpg'
+            }
+          ]
+        }
+      ],
+      totalCount: 2,
+      page: 1,
+      pageSize: 48,
+      hasNext: false
+    };
+
+    const fetchMock = mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: pageZeroAssets },
+      { status: 200, body: pageOneAssets }
+    ]);
+
+    const intersectionObserver = installIntersectionObserverMock();
+
+    render(<App />);
+
+    expect(await screen.findByText('2 items')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Open beach.jpg' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open sunset.jpg' })).not.toBeInTheDocument();
+
+    act(() => {
+      intersectionObserver.trigger();
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8080/api/assets?libraryId=library-1&page=1&pageSize=48',
+        expect.objectContaining({ credentials: 'include', method: 'GET' })
+      );
+    });
+
+    expect(await screen.findByRole('button', { name: 'Open sunset.jpg' })).toBeInTheDocument();
+    intersectionObserver.restore();
   });
 
   it('creates libraries and adds sources from configuration', async () => {
@@ -264,13 +467,15 @@ describe('App', () => {
       { status: 200, body: { required: false } },
       { status: 200, body: authBody },
       { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
       { status: 200, body: globalExclusionPatterns },
       { status: 400, body: { title: 'Bad Request' } }
     ]);
 
     render(<App />);
 
-    await screen.findByRole('heading', { name: 'Libraries' });
+    await screen.findByRole('heading', { name: 'All folders', level: 2 });
     await userEvent.click(
       within(screen.getByRole('navigation', { name: 'Utilities' })).getByRole('button', { name: 'Settings' })
     );
@@ -303,6 +508,8 @@ describe('App', () => {
       { status: 200, body: { required: false } },
       { status: 200, body: authBody },
       { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
       { status: 200, body: globalExclusionPatterns },
       { status: 201, body: updatedGlobalExclusions[2] },
       { status: 200, body: updatedGlobalExclusions },
@@ -312,7 +519,7 @@ describe('App', () => {
 
     render(<App />);
 
-    await screen.findByRole('heading', { name: 'Libraries' });
+    await screen.findByRole('heading', { name: 'All folders', level: 2 });
     await userEvent.click(
       within(screen.getByRole('navigation', { name: 'Utilities' })).getByRole('button', { name: 'Settings' })
     );
@@ -357,6 +564,8 @@ describe('App', () => {
       { status: 200, body: { required: false } },
       { status: 200, body: authBody },
       { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
       { status: 200, body: globalExclusionPatterns },
       { status: 201, body: libraryWithCustomExclusion },
       { status: 200, body: [libraryWithCustomExclusion] },
@@ -366,7 +575,7 @@ describe('App', () => {
 
     render(<App />);
 
-    await screen.findByRole('heading', { name: 'Libraries' });
+    await screen.findByRole('heading', { name: 'All folders', level: 2 });
     await userEvent.click(
       within(screen.getByRole('navigation', { name: 'Utilities' })).getByRole('button', { name: 'Settings' })
     );
@@ -418,6 +627,8 @@ describe('App', () => {
       { status: 200, body: { required: false } },
       { status: 200, body: authBody },
       { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
       { status: 200, body: globalExclusionPatterns },
       { status: 200, body: archivedLibrary },
       { status: 200, body: [archivedLibrary] },
@@ -427,7 +638,7 @@ describe('App', () => {
 
     render(<App />);
 
-    await screen.findByRole('heading', { name: 'Libraries' });
+    await screen.findByRole('heading', { name: 'All folders', level: 2 });
     await userEvent.click(
       within(screen.getByRole('navigation', { name: 'Utilities' })).getByRole('button', { name: 'Settings' })
     );
@@ -467,6 +678,36 @@ describe('App', () => {
     );
   });
 });
+
+function installIntersectionObserverMock() {
+  let callback: IntersectionObserverCallback | null = null;
+  const original = globalThis.IntersectionObserver;
+
+  class MockIntersectionObserver {
+    constructor(next: IntersectionObserverCallback) {
+      callback = next;
+    }
+
+    observe = vi.fn();
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+  }
+
+  vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+
+  return {
+    trigger() {
+      callback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+    },
+    restore() {
+      if (original) {
+        vi.stubGlobal('IntersectionObserver', original);
+      } else {
+        vi.unstubAllGlobals();
+      }
+    }
+  };
+}
 
 function mockFetch(responses: MockResponse[]) {
   const fetchMock = vi.fn(async () => {

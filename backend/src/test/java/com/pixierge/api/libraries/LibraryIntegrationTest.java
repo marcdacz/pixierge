@@ -298,6 +298,31 @@ class LibraryIntegrationTest {
                 withCookie(cookie),
                 Map.class
         );
+        ResponseEntity<Map> tree = restTemplate.exchange(
+                "/api/library-tree?libraryId=" + libraryId,
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+        ResponseEntity<Map> assets = restTemplate.exchange(
+                "/api/assets?libraryId=" + libraryId + "&q=beach&pageSize=12",
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+        String assetId = firstAsset(assets).get("id").toString();
+        ResponseEntity<Map> assetDetail = restTemplate.exchange(
+                "/api/assets/" + assetId,
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+        ResponseEntity<Map> backfill = restTemplate.exchange(
+                "/api/assets/metadata/backfill",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
 
         assertThat(firstScanStart.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         assertThat(firstScan.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -327,6 +352,147 @@ class LibraryIntegrationTest {
         assertThat(scanHistory.getBody()).hasSize(4);
         assertThat(scanDetail.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(scanDetail.getBody()).containsEntry("id", latestScanId);
+        assertThat(tree.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(firstTreeRoot(tree)).containsEntry("libraryId", libraryId);
+        assertThat(firstTreeRoot(tree)).containsKey("children");
+        assertThat(assets.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(assets.getBody()).containsEntry("totalCount", 1);
+        assertThat(firstAsset(assets)).containsEntry("fileName", "beach.jpg");
+        assertThat(firstAsset(assets)).containsEntry("duplicateCount", 1);
+        assertThat(assetDetail.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(assetDetail.getBody()).containsEntry("id", assetId);
+        assertThat(assetDetail.getBody()).containsEntry("availability", "available");
+        assertThat(assetFiles(assetDetail)).isNotEmpty();
+        assertThat(backfill.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(backfill.getBody()).containsKey("processedCount");
+    }
+
+    @Test
+    void libraryTreeShowsNestedFoldersRelativeToSourceRoot() throws Exception {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String cookie = cookiePair(admin);
+        String csrfToken = csrfToken(admin);
+        Path source = Files.createDirectory(tempDir.resolve("pixierge-library"));
+        Path japanDay = Files.createDirectories(source.resolve("Japan 2026").resolve("31 March 2026"));
+        Path janeen = Files.createDirectories(source.resolve("janeen"));
+        Files.writeString(japanDay.resolve("IMG_1.jpeg"), "img-one");
+        Files.writeString(janeen.resolve("file_1.jpg"), "img-two");
+
+        ResponseEntity<Map> createdLibrary = restTemplate.exchange(
+                "/api/libraries",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("name", "Family Photos")),
+                Map.class
+        );
+        String libraryId = createdLibrary.getBody().get("id").toString();
+        restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/roots",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("path", source.toString())),
+                Map.class
+        );
+        ResponseEntity<Map> scanStart = restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/scans",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        ResponseEntity<Map> scan = waitForScan(scanStart, cookie);
+        ResponseEntity<Map> tree = restTemplate.exchange(
+                "/api/library-tree?libraryId=" + libraryId,
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+
+        assertThat(scan.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(scan.getBody()).containsEntry("addedCount", 2);
+        assertThat(tree.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<String, Object>> roots = treeRoots(tree);
+        assertThat(roots).extracting(node -> node.get("name")).containsExactlyInAnyOrder("Japan 2026", "janeen");
+
+        Map<String, Object> japan = roots.stream()
+                .filter(node -> "Japan 2026".equals(node.get("name")))
+                .findFirst()
+                .orElseThrow();
+        List<Map<String, Object>> japanChildren = treeChildren(japan);
+        assertThat(japanChildren).hasSize(1);
+        assertThat(japanChildren.get(0)).containsEntry("name", "31 March 2026");
+        assertThat(japanChildren.get(0)).containsEntry("assetCount", 1);
+    }
+
+    @Test
+    void libraryTreeCountsAssetsAtNestedLibraryRoot() throws Exception {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String cookie = cookiePair(admin);
+        String csrfToken = csrfToken(admin);
+        Path source = Files.createDirectory(tempDir.resolve("pixierge-library"));
+        Path janeen = Files.createDirectories(source.resolve("janeen"));
+        Files.writeString(janeen.resolve("file_1.jpg"), "img-one");
+        Files.writeString(janeen.resolve("file_2.jpg"), "img-two");
+
+        ResponseEntity<Map> famLibrary = restTemplate.exchange(
+                "/api/libraries",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("name", "fam")),
+                Map.class
+        );
+        String famLibraryId = famLibrary.getBody().get("id").toString();
+        restTemplate.exchange(
+                "/api/libraries/" + famLibraryId + "/roots",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("path", source.toString())),
+                Map.class
+        );
+
+        ResponseEntity<Map> janeenLibrary = restTemplate.exchange(
+                "/api/libraries",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("name", "janeen")),
+                Map.class
+        );
+        String janeenLibraryId = janeenLibrary.getBody().get("id").toString();
+        restTemplate.exchange(
+                "/api/libraries/" + janeenLibraryId + "/roots",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("path", janeen.toString())),
+                Map.class
+        );
+
+        ResponseEntity<Map> famScanStart = restTemplate.exchange(
+                "/api/libraries/" + famLibraryId + "/scans",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        waitForScan(famScanStart, cookie);
+        ResponseEntity<Map> janeenScanStart = restTemplate.exchange(
+                "/api/libraries/" + janeenLibraryId + "/scans",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        waitForScan(janeenScanStart, cookie);
+
+        ResponseEntity<Map> tree = restTemplate.exchange(
+                "/api/library-tree",
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+
+        assertThat(tree.getStatusCode()).isEqualTo(HttpStatus.OK);
+        List<Map<String, Object>> roots = treeRoots(tree);
+        Map<String, Object> famJaneenNode = roots.stream()
+                .filter(node -> famLibraryId.equals(node.get("libraryId")) && "janeen".equals(node.get("name")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(famJaneenNode).containsEntry("assetCount", 2);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> rootCounts = (Map<String, Object>) tree.getBody().get("libraryRootAssetCounts");
+        assertThat(rootCounts).containsEntry(janeenLibraryId, 2);
+        assertThat(roots.stream().noneMatch(node -> janeenLibraryId.equals(node.get("libraryId")))).isTrue();
     }
 
     @Test
@@ -488,6 +654,49 @@ class LibraryIntegrationTest {
         Object first = response.getBody().get(0);
         assertThat(first).isInstanceOf(Map.class);
         return (Map<String, Object>) first;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> firstTreeRoot(ResponseEntity<Map> response) {
+        Object roots = response.getBody().get("roots");
+        assertThat(roots).isInstanceOf(List.class);
+        Object first = ((List<?>) roots).get(0);
+        assertThat(first).isInstanceOf(Map.class);
+        return (Map<String, Object>) first;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> treeRoots(ResponseEntity<Map> response) {
+        Object roots = response.getBody().get("roots");
+        assertThat(roots).isInstanceOf(List.class);
+        return (List<Map<String, Object>>) roots;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> treeChildren(Map<String, Object> node) {
+        Object children = node.get("children");
+        assertThat(children).isInstanceOf(List.class);
+        return (List<Map<String, Object>>) children;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> firstAsset(ResponseEntity<Map> response) {
+        Object sections = response.getBody().get("sections");
+        assertThat(sections).isInstanceOf(List.class);
+        Object firstSection = ((List<?>) sections).get(0);
+        assertThat(firstSection).isInstanceOf(Map.class);
+        Object assets = ((Map<?, ?>) firstSection).get("assets");
+        assertThat(assets).isInstanceOf(List.class);
+        Object first = ((List<?>) assets).get(0);
+        assertThat(first).isInstanceOf(Map.class);
+        return (Map<String, Object>) first;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> assetFiles(ResponseEntity<Map> response) {
+        Object files = response.getBody().get("files");
+        assertThat(files).isInstanceOf(List.class);
+        return (List<Map<String, Object>>) files;
     }
 
 }

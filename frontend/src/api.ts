@@ -92,6 +92,87 @@ export type ScanRun = {
   errors: ScanError[];
 };
 
+export type LibraryTreeNode = {
+  id: string;
+  libraryId: string;
+  libraryName: string;
+  path: string;
+  name: string;
+  assetCount: number;
+  childCount: number;
+  children: LibraryTreeNode[];
+};
+
+export type LibraryTreeResponse = {
+  roots: LibraryTreeNode[];
+  libraryRootAssetCounts: Record<string, number>;
+};
+
+export type AssetSummary = {
+  id: string;
+  fileName: string;
+  displayPath: string;
+  folderPath: string;
+  libraryId: string;
+  libraryName: string;
+  availability: 'available' | 'missing';
+  duplicateCount: number;
+  capturedAt: string | null;
+  observedAt: string;
+  mediaType: string;
+  mimeType: string | null;
+  width: number | null;
+  height: number | null;
+  previewable: boolean;
+};
+
+export type AssetSection = {
+  folderPath: string;
+  folderName: string;
+  assets: AssetSummary[];
+};
+
+export type AssetBrowseResponse = {
+  sections: AssetSection[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  hasNext: boolean;
+};
+
+export type AssetFileOccurrence = {
+  id: string;
+  libraryId: string;
+  libraryName: string;
+  path: string;
+  folderPath: string;
+  fileName: string;
+  sizeBytes: number;
+  modifiedAt: string;
+  status: 'active' | 'missing' | 'superseded';
+};
+
+export type AssetMetadata = {
+  capturedAt: string | null;
+  width: number | null;
+  height: number | null;
+  fileExtension: string | null;
+  mimeType: string | null;
+  extractionStatus: 'pending' | 'extracted' | 'unsupported' | 'failed' | null;
+  extractedAt: string | null;
+  errorMessage: string | null;
+};
+
+export type AssetDetail = {
+  id: string;
+  contentHash: string;
+  mediaType: string;
+  availability: 'available' | 'missing';
+  duplicateCount: number;
+  metadata: AssetMetadata;
+  files: AssetFileOccurrence[];
+};
+
 export class ApiError extends Error {
   readonly status: number;
 
@@ -261,6 +342,71 @@ export async function fetchScan(scanRunId: string): Promise<ScanRun> {
   return requestJson<ScanRun>(`/api/scans/${scanRunId}`);
 }
 
+export async function fetchLibraryTree(libraryId?: string): Promise<LibraryTreeResponse> {
+  const params = new URLSearchParams();
+  if (libraryId) {
+    params.set('libraryId', libraryId);
+  }
+  return requestJson<LibraryTreeResponse>(`/api/library-tree${queryString(params)}`);
+}
+
+export async function fetchAssets(input: {
+  libraryId?: string;
+  folder?: string;
+  includeDescendants?: boolean;
+  q?: string;
+  availability?: string;
+  fileType?: string;
+  duplicatesOnly?: boolean;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<AssetBrowseResponse> {
+  const params = new URLSearchParams();
+  if (input.libraryId) {
+    params.set('libraryId', input.libraryId);
+  }
+  if (input.folder) {
+    params.set('folder', input.folder);
+  }
+  if (input.includeDescendants !== undefined) {
+    params.set('includeDescendants', String(input.includeDescendants));
+  }
+  if (input.q) {
+    params.set('q', input.q);
+  }
+  if (input.availability) {
+    params.set('availability', input.availability);
+  }
+  if (input.fileType) {
+    params.set('fileType', input.fileType);
+  }
+  if (input.duplicatesOnly) {
+    params.set('duplicatesOnly', 'true');
+  }
+  if (input.page !== undefined) {
+    params.set('page', String(input.page));
+  }
+  if (input.pageSize !== undefined) {
+    params.set('pageSize', String(input.pageSize));
+  }
+  return requestJson<AssetBrowseResponse>(`/api/assets${queryString(params)}`);
+}
+
+export async function fetchAsset(assetId: string): Promise<AssetDetail> {
+  return requestJson<AssetDetail>(`/api/assets/${assetId}`);
+}
+
+export async function backfillAssetMetadata(csrfToken: string): Promise<{ processedCount: number; failedCount: number }> {
+  return requestJson<{ processedCount: number; failedCount: number }>('/api/assets/metadata/backfill', {
+    method: 'POST',
+    csrfToken
+  });
+}
+
+export function assetFileUrl(assetId: string): string {
+  return `${apiBaseUrl}/api/assets/${assetId}/file`;
+}
+
 async function requestJson<T>(
   path: string,
   options: { method?: string; body?: string; csrfToken?: string } = {}
@@ -347,6 +493,11 @@ function genericStatusTitle(status: number): string {
     return 'conflict';
   }
   return '';
+}
+
+function queryString(params: URLSearchParams): string {
+  const value = params.toString();
+  return value ? `?${value}` : '';
 }
 
 function stringValue(value: unknown): string | null {

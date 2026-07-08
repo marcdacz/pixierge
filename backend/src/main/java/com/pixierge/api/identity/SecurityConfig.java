@@ -14,6 +14,9 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import static com.pixierge.api.libraries.LibraryConstants.PERMISSION_LIBRARY_ADMIN;
+import static com.pixierge.api.libraries.LibraryConstants.PERMISSION_LIBRARY_READ;
+
 @Configuration
 public class SecurityConfig {
 
@@ -35,11 +38,14 @@ public class SecurityConfig {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error", "/api/health", "/api/setup/status", "/api/setup/admin", "/api/auth/login").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/libraries/**").hasAuthority("library:read")
-                        .requestMatchers(HttpMethod.GET, "/api/scans/**").hasAuthority("library:read")
-                        .requestMatchers(HttpMethod.GET, "/api/settings/**").hasAuthority("library:read")
-                        .requestMatchers("/api/libraries/**").hasAuthority("library:admin")
-                        .requestMatchers("/api/settings/**").hasAuthority("library:admin")
+                        .requestMatchers(HttpMethod.GET, "/api/assets/**").hasAuthority(PERMISSION_LIBRARY_READ)
+                        .requestMatchers(HttpMethod.GET, "/api/library-tree").hasAuthority(PERMISSION_LIBRARY_READ)
+                        .requestMatchers(HttpMethod.GET, "/api/libraries/**").hasAuthority(PERMISSION_LIBRARY_READ)
+                        .requestMatchers(HttpMethod.GET, "/api/scans/**").hasAuthority(PERMISSION_LIBRARY_READ)
+                        .requestMatchers(HttpMethod.GET, "/api/settings/**").hasAuthority(PERMISSION_LIBRARY_READ)
+                        .requestMatchers("/api/assets/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)
+                        .requestMatchers("/api/libraries/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)
+                        .requestMatchers("/api/settings/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)
                         .requestMatchers("/api/admin/**").hasAuthority(IdentityConstants.PERMISSION_IDENTITY_ADMIN)
                         .anyRequest().authenticated())
                 .addFilterBefore(sessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

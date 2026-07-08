@@ -12,6 +12,104 @@ const authBody = {
   }
 };
 
+const assetFileSvg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480">
+  <rect width="640" height="480" fill="#1f2937"/>
+  <circle cx="230" cy="210" r="82" fill="#facc15"/>
+  <path d="M0 360L180 250L310 335L430 265L640 390V480H0Z" fill="#16a34a"/>
+</svg>
+`;
+
+const assetDetailResponse = {
+  id: 'asset-1',
+  contentHash: 'sha256:beach',
+  mediaType: 'image/jpeg',
+  availability: 'available',
+  duplicateCount: 1,
+  metadata: {
+    capturedAt: '2026-07-04T00:00:00Z',
+    width: 640,
+    height: 480,
+    fileExtension: 'jpg',
+    mimeType: 'image/jpeg',
+    extractionStatus: 'extracted',
+    extractedAt: '2026-07-04T00:00:00Z',
+    errorMessage: null
+  },
+  files: [
+    {
+      id: 'file-1',
+      libraryId: 'library-1',
+      libraryName: 'Family Photos',
+      path: '/photos/family/beach.jpg',
+      folderPath: '/photos/family',
+      fileName: 'beach.jpg',
+      sizeBytes: 1200,
+      modifiedAt: '2026-07-04T00:00:00Z',
+      status: 'active'
+    }
+  ]
+};
+
+const assetBrowseResponse = {
+  sections: [
+    {
+      folderPath: '/photos/family',
+      folderName: 'family',
+      assets: [
+        {
+          id: 'asset-1',
+          fileName: 'beach.jpg',
+          displayPath: '/photos/family/beach.jpg',
+          folderPath: '/photos/family',
+          libraryId: 'library-1',
+          libraryName: 'Family Photos',
+          availability: 'available',
+          duplicateCount: 1,
+          capturedAt: '2026-07-04T00:00:00Z',
+          observedAt: '2026-07-04T00:00:00Z',
+          mediaType: 'image/jpeg',
+          mimeType: 'image/jpeg',
+          width: 640,
+          height: 480,
+          previewable: true
+        }
+      ]
+    }
+  ],
+  totalCount: 1,
+  page: 0,
+  pageSize: 48,
+  hasNext: false
+};
+
+const libraryTreeResponse = {
+  roots: [
+    {
+      id: 'library-1:/photos',
+      libraryId: 'library-1',
+      libraryName: 'Family Photos',
+      path: '/photos',
+      name: 'photos',
+      assetCount: 1,
+      childCount: 1,
+      children: [
+        {
+          id: 'library-1:/photos/family',
+          libraryId: 'library-1',
+          libraryName: 'Family Photos',
+          path: '/photos/family',
+          name: 'family',
+          assetCount: 1,
+          childCount: 0,
+          children: []
+        }
+      ]
+    }
+  ],
+  libraryRootAssetCounts: {}
+};
+
 test('admin setup, empty library, settings, and profile logout', async ({ page }) => {
   await mockPixiergeApi(page);
 
@@ -46,8 +144,23 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   ).toBeVisible();
 
   await page.getByRole('button', { name: 'Expand navigation' }).click();
-  await expect(page.getByRole('navigation', { name: 'Primary' }).getByText('Family Photos')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Primary' }).getByText('Family Photos')).toBeHidden();
 
+  await page.getByRole('button', { name: 'Libraries' }).click();
+  await expect(page.getByRole('navigation', { name: 'Folders' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'All folders' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open beach.jpg' })).toBeVisible();
+
+  await page.getByRole('button', { name: /^family/ }).click();
+  await expect(page.getByRole('heading', { name: 'family' })).toBeVisible();
+  await page.getByLabel('Search').fill('beach');
+  await expect(page.getByRole('button', { name: 'Open beach.jpg' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open beach.jpg' }).click();
+  await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
+  await expect(page.getByText('/photos/family/beach.jpg').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+
+  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
   await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Plugins' }).click();
   await expect(page.getByRole('heading', { name: 'Plugins' })).toBeVisible();
   await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Backups' }).click();
@@ -60,9 +173,11 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
 
 test('authenticated shell visual regression @visual', async ({ page }) => {
   await mockPixiergeApi(page);
-  await completeOnboarding(page);
+  await completeBrowsableLibrarySetup(page);
 
-  await expect(page).toHaveScreenshot('authenticated-libraries.png', {
+  await expect(page.getByRole('navigation', { name: 'Folders' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open beach.jpg' })).toBeVisible();
+  await expect(page).toHaveScreenshot('browse-library.png', {
     fullPage: true
   });
 
@@ -129,6 +244,29 @@ async function mockPixiergeApi(page: Page) {
     if (path === '/api/auth/logout' && request.method() === 'POST') {
       signedIn = false;
       await route.fulfill({ status: 200, body: '' });
+      return;
+    }
+
+    if (path === '/api/library-tree') {
+      await route.fulfill({ json: libraryTreeResponse });
+      return;
+    }
+
+    if (path === '/api/assets/asset-1/file') {
+      await route.fulfill({
+        body: assetFileSvg,
+        contentType: 'image/svg+xml'
+      });
+      return;
+    }
+
+    if (path === '/api/assets/asset-1') {
+      await route.fulfill({ json: assetDetailResponse });
+      return;
+    }
+
+    if (path === '/api/assets') {
+      await route.fulfill({ json: assetBrowseResponse });
       return;
     }
 
@@ -322,4 +460,15 @@ async function completeOnboarding(page: Page) {
   await page.getByRole('button', { name: 'Create admin' }).click();
 
   await expect(page.getByRole('heading', { name: 'Libraries' })).toBeVisible();
+}
+
+async function completeBrowsableLibrarySetup(page: Page) {
+  await completeOnboarding(page);
+  await page.getByRole('button', { name: 'Configure sources' }).click();
+  await page.getByLabel('Library name').fill('Family Photos');
+  await page.getByRole('button', { name: 'Create' }).click();
+  await page.getByLabel('Source path').fill('/photos/family');
+  await page.getByRole('button', { name: 'Add source' }).click();
+  await page.getByRole('button', { name: 'Libraries' }).click();
+  await expect(page.getByRole('heading', { name: 'All folders' })).toBeVisible();
 }

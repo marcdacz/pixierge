@@ -35,7 +35,11 @@ type AppFrameProps = {
   contentMode?: 'constrained' | 'edge';
   currentView: AppView;
   libraries: LibrarySummary[];
+  onLibrarySearchChange: (value: string) => void;
   onLogout: () => void;
+  searchPlaceholder?: string;
+  searchValue: string;
+  showLibrarySearch?: boolean;
   onViewChange: (view: AppView) => void;
 };
 
@@ -76,7 +80,11 @@ export function AppFrame({
   contentMode = 'constrained',
   currentView,
   libraries,
+  onLibrarySearchChange,
   onLogout,
+  searchPlaceholder = 'Search library...',
+  searchValue,
+  showLibrarySearch = false,
   onViewChange
 }: AppFrameProps) {
   const [navExpanded, setNavExpanded] = useState(false);
@@ -92,8 +100,12 @@ export function AppFrame({
         <TopBar
           auth={auth}
           navExpanded={navExpanded}
+          onLibrarySearchChange={onLibrarySearchChange}
           onLogout={onLogout}
           onSettings={() => onViewChange('settings')}
+          searchPlaceholder={searchPlaceholder}
+          searchValue={searchValue}
+          showLibrarySearch={showLibrarySearch}
         />
         <div className={cn('grid min-h-0', navExpanded ? shellContentColumns.expanded : shellContentColumns.collapsed)}>
           <aside className="flex min-h-0 flex-col border-r border-border bg-sidebar px-3 py-4">
@@ -101,7 +113,6 @@ export function AppFrame({
               <LibraryNav
                 active={currentView === 'libraries'}
                 expanded={navExpanded}
-                libraries={libraries}
                 onSelect={() => onViewChange('libraries')}
               />
               {primaryNav.map((item) => (
@@ -151,13 +162,21 @@ export function AppFrame({
 function TopBar({
   auth,
   navExpanded,
+  onLibrarySearchChange,
   onLogout,
-  onSettings
+  onSettings,
+  searchPlaceholder,
+  searchValue,
+  showLibrarySearch
 }: {
   auth: AuthResponse;
   navExpanded: boolean;
+  onLibrarySearchChange: (value: string) => void;
   onLogout: () => void;
   onSettings: () => void;
+  searchPlaceholder: string;
+  searchValue: string;
+  showLibrarySearch: boolean;
 }) {
   async function submitLogout() {
     await logout(auth.csrfToken);
@@ -177,7 +196,14 @@ function TopBar({
       <div className="flex justify-center px-4">
         <label className="relative block w-full max-w-3xl">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input aria-label="Search" className="h-9 bg-surface pl-9" placeholder="Search library..." />
+          <Input
+            aria-label="Search"
+            className="h-9 bg-surface pl-9"
+            disabled={!showLibrarySearch}
+            onChange={(event) => onLibrarySearchChange(event.target.value)}
+            placeholder={searchPlaceholder}
+            value={searchValue}
+          />
         </label>
       </div>
       <div className="flex items-center gap-2 px-4">
@@ -212,42 +238,19 @@ function TopBar({
 function LibraryNav({
   active,
   expanded,
-  libraries,
   onSelect
 }: {
   active: boolean;
   expanded: boolean;
-  libraries: LibrarySummary[];
   onSelect: () => void;
 }) {
-  const librariesWithSources = libraries.filter((library) => library.status === 'active' && library.sourceCount > 0);
-
   return (
-    <div className="grid gap-1">
-      <NavItem
-        active={active}
-        expanded={expanded}
-        item={{ icon: FolderOpen, label: 'Libraries', view: 'libraries' }}
-        onSelect={onSelect}
-      />
-      {expanded && librariesWithSources.length > 0 && (
-        <div className="grid gap-1 pl-4">
-          {librariesWithSources.map((library) => (
-            <button
-              className="grid min-h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              key={library.id}
-              onClick={onSelect}
-              type="button"
-            >
-              <span className="truncate">{library.name}</span>
-              <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground">
-                {formatSourceCount(library.sourceCount)}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <NavItem
+      active={active}
+      expanded={expanded}
+      item={{ icon: FolderOpen, label: 'Libraries', view: 'libraries' }}
+      onSelect={onSelect}
+    />
   );
 }
 
@@ -285,10 +288,6 @@ function NavItem({
       {!expanded && <TooltipContent side="right">{item.label}</TooltipContent>}
     </Tooltip>
   );
-}
-
-function formatSourceCount(count: number) {
-  return `${count} ${count === 1 ? 'source' : 'sources'}`;
 }
 
 function RailToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {

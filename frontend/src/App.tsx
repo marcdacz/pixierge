@@ -15,6 +15,7 @@ type AppState =
   | { state: 'app'; auth: AuthResponse };
 
 const toastAutoDismissMs = 15_000;
+const librarySearchDebounceMs = 250;
 
 export function App() {
   const [appState, setAppState] = useState<AppState>({ state: 'loading' });
@@ -22,6 +23,8 @@ export function App() {
   const [libraries, setLibraries] = useState<LibrarySummary[]>([]);
   const [librariesLoading, setLibrariesLoading] = useState(false);
   const [librariesError, setLibrariesError] = useState<string | null>(null);
+  const [librarySearchInput, setLibrarySearchInput] = useState('');
+  const [librarySearchQuery, setLibrarySearchQuery] = useState('');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastTimeouts = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
@@ -120,6 +123,16 @@ export function App() {
     }
   }, [appState.state, loadLibraries]);
 
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setLibrarySearchQuery(librarySearchInput.trim());
+    }, librarySearchDebounceMs);
+
+    return () => {
+      window.clearTimeout(handle);
+    };
+  }, [librarySearchInput]);
+
   if (appState.state === 'loading') {
     return <AppLoading />;
   }
@@ -151,10 +164,14 @@ export function App() {
     <>
       <AppFrame
         auth={appState.auth}
-        contentMode={currentView === 'settings' ? 'edge' : 'constrained'}
+        contentMode={currentView === 'settings' || currentView === 'libraries' ? 'edge' : 'constrained'}
         currentView={currentView}
         libraries={libraries}
+        onLibrarySearchChange={setLibrarySearchInput}
         onLogout={() => setAppState({ state: 'login' })}
+        searchPlaceholder="Search this folder"
+        searchValue={librarySearchInput}
+        showLibrarySearch={currentView === 'libraries'}
         onViewChange={setCurrentView}
       >
         {currentView === 'libraries' && (
@@ -163,6 +180,7 @@ export function App() {
             libraries={libraries}
             loading={librariesLoading}
             onConfigureSources={() => setCurrentView('settings')}
+            searchQuery={librarySearchQuery}
           />
         )}
         {currentView === 'albums' && <LibraryHome variant="albums" />}
