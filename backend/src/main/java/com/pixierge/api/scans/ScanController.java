@@ -46,6 +46,11 @@ public class ScanController {
         return scanService.listLibraryScans(libraryId);
     }
 
+    @GetMapping("/api/scans/active")
+    List<ActiveScanResponse> listActiveScans() {
+        return scanService.listActiveScans();
+    }
+
     @GetMapping("/api/scans/{scanRunId}")
     ScanRunResponse getScan(@PathVariable UUID scanRunId) {
         return scanService.getScan(scanRunId);

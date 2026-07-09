@@ -3,6 +3,8 @@ package com.pixierge.api.scans;
 import com.pixierge.api.db.QAssetFiles;
 import com.pixierge.api.db.QAssets;
 import com.pixierge.api.db.QFileObservations;
+import com.pixierge.api.db.QLibraries;
+import com.pixierge.api.db.QLibraryRoots;
 import com.pixierge.api.db.QScanErrors;
 import com.pixierge.api.db.QScanRuns;
 import com.querydsl.core.Tuple;
@@ -11,6 +13,7 @@ import com.querydsl.sql.SQLQueryFactory;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +26,8 @@ class ScanRepository {
     private static final QFileObservations FILE_OBSERVATIONS = QFileObservations.fileObservations;
     private static final QScanRuns SCAN_RUNS = QScanRuns.scanRuns;
     private static final QScanErrors SCAN_ERRORS = QScanErrors.scanErrors;
+    private static final QLibraries LIBRARIES = QLibraries.libraries;
+    private static final QLibraryRoots LIBRARY_ROOTS = QLibraryRoots.libraryRoots;
 
     private final SQLQueryFactory queryFactory;
 
@@ -102,6 +107,54 @@ class ScanRepository {
                 .toList();
     }
 
+    List<ActiveScanRecord> listActiveScanRuns() {
+        return queryFactory
+                .select(
+                        SCAN_RUNS.id,
+                        SCAN_RUNS.libraryId,
+                        LIBRARIES.name,
+                        SCAN_RUNS.rootId,
+                        LIBRARY_ROOTS.path,
+                        SCAN_RUNS.status,
+                        SCAN_RUNS.startedAt,
+                        SCAN_RUNS.scannedFileCount,
+                        SCAN_RUNS.addedCount,
+                        SCAN_RUNS.unchangedCount,
+                        SCAN_RUNS.movedCount,
+                        SCAN_RUNS.modifiedCount,
+                        SCAN_RUNS.duplicateCount,
+                        SCAN_RUNS.missingCount,
+                        SCAN_RUNS.reappearedCount,
+                        SCAN_RUNS.errorCount
+                )
+                .from(SCAN_RUNS)
+                .join(LIBRARIES).on(LIBRARIES.id.eq(SCAN_RUNS.libraryId))
+                .leftJoin(LIBRARY_ROOTS).on(LIBRARY_ROOTS.id.eq(SCAN_RUNS.rootId))
+                .where(SCAN_RUNS.status.in("queued", "running"))
+                .orderBy(SCAN_RUNS.startedAt.asc())
+                .fetch()
+                .stream()
+                .map(row -> new ActiveScanRecord(
+                        row.get(SCAN_RUNS.id),
+                        row.get(SCAN_RUNS.libraryId),
+                        row.get(LIBRARIES.name),
+                        row.get(SCAN_RUNS.rootId),
+                        row.get(LIBRARY_ROOTS.path),
+                        row.get(SCAN_RUNS.status),
+                        row.get(SCAN_RUNS.startedAt),
+                        value(row.get(SCAN_RUNS.scannedFileCount)),
+                        value(row.get(SCAN_RUNS.addedCount)),
+                        value(row.get(SCAN_RUNS.unchangedCount)),
+                        value(row.get(SCAN_RUNS.movedCount)),
+                        value(row.get(SCAN_RUNS.modifiedCount)),
+                        value(row.get(SCAN_RUNS.duplicateCount)),
+                        value(row.get(SCAN_RUNS.missingCount)),
+                        value(row.get(SCAN_RUNS.reappearedCount)),
+                        value(row.get(SCAN_RUNS.errorCount))
+                ))
+                .toList();
+    }
+
     List<ScanErrorRecord> errorsForScan(UUID scanRunId) {
         return queryFactory
                 .select(SCAN_ERRORS.id, SCAN_ERRORS.path, SCAN_ERRORS.errorCode, SCAN_ERRORS.message, SCAN_ERRORS.createdAt)
@@ -150,11 +203,12 @@ class ScanRepository {
         return Optional.ofNullable(row).map(this::toAssetFileRecord);
     }
 
-    List<AssetFileRecord> activeFilesForRoot(UUID libraryId, UUID rootId) {
+    List<AssetFileRecord> activeFilesNotSeenInRun(UUID libraryId, UUID rootId, UUID scanRunId) {
         return selectAssetFiles()
                 .where(ASSET_FILES.libraryId.eq(libraryId)
                         .and(ASSET_FILES.rootId.eq(rootId))
-                        .and(ASSET_FILES.status.eq("active")))
+                        .and(ASSET_FILES.status.eq("active"))
+                        .and(ASSET_FILES.lastSeenScanRunId.isNull().or(ASSET_FILES.lastSeenScanRunId.ne(scanRunId))))
                 .fetch()
                 .stream()
                 .map(this::toAssetFileRecord)
@@ -181,6 +235,14 @@ class ScanRepository {
                 .set(ASSETS.lastObservedAt, now)
                 .execute();
         return id;
+    }
+
+    void updateAssetContentHash(UUID assetId, String contentHash, OffsetDateTime now) {
+        queryFactory.update(ASSETS)
+                .set(ASSETS.contentHash, contentHash)
+                .set(ASSETS.lastObservedAt, now)
+                .where(ASSETS.id.eq(assetId))
+                .execute();
     }
 
     void touchAsset(UUID assetId, OffsetDateTime now) {
@@ -222,6 +284,13 @@ class ScanRepository {
                 .execute();
         recomputeAssetAvailability(assetId);
         return id;
+    }
+
+    void updateAssetFileContentHash(UUID assetFileId, String contentHash) {
+        queryFactory.update(ASSET_FILES)
+                .set(ASSET_FILES.contentHash, contentHash)
+                .where(ASSET_FILES.id.eq(assetFileId))
+                .execute();
     }
 
     void updateActiveFileSeen(
@@ -309,6 +378,25 @@ class ScanRepository {
                 .set(FILE_OBSERVATIONS.contentHash, contentHash)
                 .set(FILE_OBSERVATIONS.result, result)
                 .execute();
+    }
+
+    void createObservations(List<ObservationInsert> observations) {
+        for (ObservationInsert observation : observations) {
+            createObservation(
+                    observation.scanRunId(),
+                    observation.libraryId(),
+                    observation.rootId(),
+                    observation.assetId(),
+                    observation.assetFileId(),
+                    observation.path(),
+                    observation.normalizedPath(),
+                    observation.sizeBytes(),
+                    observation.modifiedAt(),
+                    observation.partialHash(),
+                    observation.contentHash(),
+                    observation.result()
+            );
+        }
     }
 
     void createError(UUID scanRunId, UUID libraryId, UUID rootId, String path, String errorCode, String message) {
@@ -413,6 +501,22 @@ class ScanRepository {
         return value == null ? 0 : value;
     }
 
+    record ObservationInsert(
+            UUID scanRunId,
+            UUID libraryId,
+            UUID rootId,
+            UUID assetId,
+            UUID assetFileId,
+            String path,
+            String normalizedPath,
+            Long sizeBytes,
+            OffsetDateTime modifiedAt,
+            String partialHash,
+            String contentHash,
+            String result
+    ) {
+    }
+
     record AssetFileRecord(
             UUID id,
             UUID assetId,
@@ -435,6 +539,26 @@ class ScanRepository {
             String status,
             OffsetDateTime startedAt,
             OffsetDateTime completedAt,
+            int scannedFileCount,
+            int addedCount,
+            int unchangedCount,
+            int movedCount,
+            int modifiedCount,
+            int duplicateCount,
+            int missingCount,
+            int reappearedCount,
+            int errorCount
+    ) {
+    }
+
+    record ActiveScanRecord(
+            UUID id,
+            UUID libraryId,
+            String libraryName,
+            UUID rootId,
+            String rootPath,
+            String status,
+            OffsetDateTime startedAt,
             int scannedFileCount,
             int addedCount,
             int unchangedCount,

@@ -11,6 +11,7 @@ public record AssetSummaryResponse(
         UUID libraryId,
         String libraryName,
         String availability,
+        String identityStatus,
         int duplicateCount,
         OffsetDateTime capturedAt,
         OffsetDateTime observedAt,

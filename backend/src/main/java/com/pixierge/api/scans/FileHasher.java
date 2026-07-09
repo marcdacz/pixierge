@@ -13,24 +13,28 @@ import java.util.HexFormat;
 @Component
 class FileHasher {
 
-    private static final int BUFFER_SIZE = 64 * 1024;
+    static final int BUFFER_SIZE = 64 * 1024;
 
     Hashes hash(Path path) throws IOException {
-        return new Hashes(hash(path, BUFFER_SIZE), hash(path, Long.MAX_VALUE));
-    }
-
-    private String hash(Path path, long maxBytes) throws IOException {
-        MessageDigest digest = sha256();
+        MessageDigest partialDigest = sha256();
+        MessageDigest fullDigest = sha256();
         byte[] buffer = new byte[BUFFER_SIZE];
-        long remaining = maxBytes;
+        long partialRemaining = BUFFER_SIZE;
         try (InputStream inputStream = Files.newInputStream(path)) {
             int read;
-            while (remaining > 0 && (read = inputStream.read(buffer, 0, (int) Math.min(buffer.length, remaining))) > 0) {
-                digest.update(buffer, 0, read);
-                remaining -= read;
+            while ((read = inputStream.read(buffer)) > 0) {
+                if (partialRemaining > 0) {
+                    int partialLength = (int) Math.min(read, partialRemaining);
+                    partialDigest.update(buffer, 0, partialLength);
+                    partialRemaining -= partialLength;
+                }
+                fullDigest.update(buffer, 0, read);
             }
         }
-        return HexFormat.of().formatHex(digest.digest());
+        return new Hashes(
+                HexFormat.of().formatHex(partialDigest.digest()),
+                HexFormat.of().formatHex(fullDigest.digest())
+        );
     }
 
     private MessageDigest sha256() {

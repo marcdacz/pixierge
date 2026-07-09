@@ -6,6 +6,7 @@ import java.util.UUID;
 public record AssetDetailResponse(
         UUID id,
         String contentHash,
+        String identityStatus,
         String mediaType,
         String availability,
         int duplicateCount,

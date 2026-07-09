@@ -22,18 +22,19 @@ const assetFileSvg = `
 
 const assetDetailResponse = {
   id: 'asset-1',
-  contentHash: 'sha256:beach',
+  contentHash: 'provisional:pending',
+  identityStatus: 'pending',
   mediaType: 'image/jpeg',
   availability: 'available',
   duplicateCount: 1,
   metadata: {
-    capturedAt: '2026-07-04T00:00:00Z',
-    width: 640,
-    height: 480,
+    capturedAt: null,
+    width: null,
+    height: null,
     fileExtension: 'jpg',
     mimeType: 'image/jpeg',
-    extractionStatus: 'extracted',
-    extractedAt: '2026-07-04T00:00:00Z',
+    extractionStatus: 'pending',
+    extractedAt: null,
     errorMessage: null
   },
   files: [
@@ -65,13 +66,14 @@ const assetBrowseResponse = {
           libraryId: 'library-1',
           libraryName: 'Family Photos',
           availability: 'available',
+          identityStatus: 'pending',
           duplicateCount: 1,
-          capturedAt: '2026-07-04T00:00:00Z',
+          capturedAt: null,
           observedAt: '2026-07-04T00:00:00Z',
           mediaType: 'image/jpeg',
           mimeType: 'image/jpeg',
-          width: 640,
-          height: 480,
+          width: null,
+          height: null,
           previewable: true
         }
       ]
@@ -134,7 +136,7 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
     librariesNavigation.getByRole('button', { name: /Family Photos\s+0 sources/ })
   ).toBeVisible();
 
-  await expect(page.getByRole('button', { name: 'Browse' })).toBeVisible();
+  await page.getByRole('button', { name: 'Source path Docker guidance' }).hover();
   await expect(page.getByText(/Docker sources must use container paths/)).toBeVisible();
   await page.getByLabel('Source path').fill('/photos/family');
   await page.getByRole('button', { name: 'Add source' }).click();
@@ -171,6 +173,24 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
 
+test('scan activity indicator and pending asset detail @visual', async ({ page }) => {
+  await mockPixiergeApi(page);
+  await completeBrowsableLibrarySetup(page);
+
+  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Scan library' }).click();
+  await expect(page.getByRole('button', { name: 'Scan activity' })).toBeVisible();
+  await page.getByRole('button', { name: 'Scan activity' }).click();
+  await expect(page.getByText('Scan activity', { exact: true })).toBeVisible();
+  await expect(page.getByText('Scanned 3')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'Libraries' }).click();
+  await page.getByRole('button', { name: 'Open beach.jpg' }).click();
+  await expect(page.getByText('Identity').locator('..')).toContainText('pending');
+  await expect(page.getByText('Metadata').locator('..')).toContainText('pending');
+});
+
 test('authenticated shell visual regression @visual', async ({ page }) => {
   await mockPixiergeApi(page);
   await completeBrowsableLibrarySetup(page);
@@ -191,6 +211,7 @@ test('authenticated shell visual regression @visual', async ({ page }) => {
 async function mockPixiergeApi(page: Page) {
   let setupRequired = true;
   let signedIn = false;
+  let scanStatus: 'running' | 'completed' = 'completed';
   const libraries = new Map<string, {
     id: string;
     name: string;
@@ -345,19 +366,36 @@ async function mockPixiergeApi(page: Page) {
 
     const scanLibraryMatch = path.match(/^\/api\/libraries\/([^/]+)\/scans$/);
     if (scanLibraryMatch && request.method() === 'POST') {
+      scanStatus = 'running';
       await route.fulfill({
-        status: 201,
-        json: scanResponse(scanLibraryMatch[1], null)
+        status: 202,
+        json: scanResponse(scanLibraryMatch[1], null, 'running')
       });
       return;
     }
 
     const scanRootMatch = path.match(/^\/api\/libraries\/([^/]+)\/roots\/([^/]+)\/scans$/);
     if (scanRootMatch && request.method() === 'POST') {
+      scanStatus = 'running';
       await route.fulfill({
-        status: 201,
-        json: scanResponse(scanRootMatch[1], scanRootMatch[2])
+        status: 202,
+        json: scanResponse(scanRootMatch[1], scanRootMatch[2], 'running')
       });
+      return;
+    }
+
+    if (path === '/api/scans/active') {
+      await route.fulfill({
+        json: scanStatus === 'running'
+          ? [activeScanResponse('library-1', 'Family Photos', null, 'running')]
+          : []
+      });
+      return;
+    }
+
+    const scanGetMatch = path.match(/^\/api\/scans\/([^/]+)$/);
+    if (scanGetMatch && request.method() === 'GET') {
+      await route.fulfill({ json: scanResponse('library-1', null, scanStatus) });
       return;
     }
 
@@ -430,17 +468,17 @@ function libraryResponses(libraries: Map<string, {
   });
 }
 
-function scanResponse(libraryId: string, rootId: string | null) {
+function scanResponse(libraryId: string, rootId: string | null, status: 'running' | 'completed' = 'completed') {
   return {
     id: 'scan-1',
     libraryId,
     rootId,
-    status: 'completed',
+    status,
     startedAt: '2026-07-04T00:00:00Z',
-    completedAt: '2026-07-04T00:01:00Z',
-    scannedFileCount: 1,
-    addedCount: 1,
-    unchangedCount: 0,
+    completedAt: status === 'running' ? null : '2026-07-04T00:01:00Z',
+    scannedFileCount: status === 'running' ? 3 : 1,
+    addedCount: status === 'running' ? 2 : 1,
+    unchangedCount: status === 'running' ? 1 : 0,
     movedCount: 0,
     modifiedCount: 0,
     duplicateCount: 0,
@@ -448,6 +486,32 @@ function scanResponse(libraryId: string, rootId: string | null) {
     reappearedCount: 0,
     errorCount: 0,
     errors: []
+  };
+}
+
+function activeScanResponse(
+  libraryId: string,
+  libraryName: string,
+  rootPath: string | null,
+  status: 'running' | 'completed'
+) {
+  return {
+    id: 'scan-1',
+    libraryId,
+    libraryName,
+    rootId: null,
+    rootPath,
+    status,
+    startedAt: '2026-07-04T00:00:00Z',
+    scannedFileCount: 3,
+    addedCount: 2,
+    unchangedCount: 1,
+    movedCount: 0,
+    modifiedCount: 0,
+    duplicateCount: 0,
+    missingCount: 0,
+    reappearedCount: 0,
+    errorCount: 0
   };
 }
 

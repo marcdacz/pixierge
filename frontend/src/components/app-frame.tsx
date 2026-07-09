@@ -9,7 +9,7 @@ import {
   UserCircle
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { logout, type AuthResponse, type LibrarySummary } from '@/api';
 import type { AppView } from '@/App';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ import {
   TooltipTrigger
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { ScanActivityButton } from '@/features/scans/scan-activity-button';
 
 type AppFrameProps = {
   auth: AuthResponse;
@@ -37,6 +38,7 @@ type AppFrameProps = {
   libraries: LibrarySummary[];
   onLibrarySearchChange: (value: string) => void;
   onLogout: () => void;
+  onOpenSettings: () => void;
   searchPlaceholder?: string;
   searchValue: string;
   showLibrarySearch?: boolean;
@@ -82,12 +84,33 @@ export function AppFrame({
   libraries,
   onLibrarySearchChange,
   onLogout,
+  onOpenSettings,
   searchPlaceholder = 'Search library...',
   searchValue,
   showLibrarySearch = false,
   onViewChange
 }: AppFrameProps) {
   const [navExpanded, setNavExpanded] = useState(false);
+  const [navAutoCollapsed, setNavAutoCollapsed] = useState(false);
+  const effectiveNavExpanded = navExpanded && !navAutoCollapsed;
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      setNavAutoCollapsed(false);
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const syncAutoCollapse = () => {
+      setNavAutoCollapsed(mediaQuery.matches);
+    };
+
+    syncAutoCollapse();
+    mediaQuery.addEventListener('change', syncAutoCollapse);
+    return () => {
+      mediaQuery.removeEventListener('change', syncAutoCollapse);
+    };
+  }, []);
 
   return (
     <TooltipProvider>
@@ -99,26 +122,31 @@ export function AppFrame({
       >
         <TopBar
           auth={auth}
-          navExpanded={navExpanded}
+          navExpanded={effectiveNavExpanded}
           onLibrarySearchChange={onLibrarySearchChange}
           onLogout={onLogout}
-          onSettings={() => onViewChange('settings')}
+          onOpenSettings={onOpenSettings}
           searchPlaceholder={searchPlaceholder}
           searchValue={searchValue}
           showLibrarySearch={showLibrarySearch}
         />
-        <div className={cn('grid min-h-0', navExpanded ? shellContentColumns.expanded : shellContentColumns.collapsed)}>
+        <div
+          className={cn(
+            'grid min-h-0',
+            effectiveNavExpanded ? shellContentColumns.expanded : shellContentColumns.collapsed
+          )}
+        >
           <aside className="flex min-h-0 flex-col border-r border-border bg-sidebar px-3 py-4">
             <nav aria-label="Primary" className="grid gap-2">
               <LibraryNav
                 active={currentView === 'libraries'}
-                expanded={navExpanded}
+                expanded={effectiveNavExpanded}
                 onSelect={() => onViewChange('libraries')}
               />
               {primaryNav.map((item) => (
                 <NavItem
                   active={currentView === item.view}
-                  expanded={navExpanded}
+                  expanded={effectiveNavExpanded}
                   key={item.view}
                   item={item}
                   onSelect={() => onViewChange(item.view)}
@@ -132,14 +160,14 @@ export function AppFrame({
                 {utilityNav.map((item) => (
                   <NavItem
                     active={currentView === item.view}
-                    expanded={navExpanded}
+                    expanded={effectiveNavExpanded}
                     key={item.view}
                     item={item}
                     onSelect={() => onViewChange(item.view)}
                   />
                 ))}
               </nav>
-              <RailToggle expanded={navExpanded} onToggle={() => setNavExpanded((expanded) => !expanded)} />
+              <RailToggle expanded={effectiveNavExpanded} onToggle={() => setNavExpanded((expanded) => !expanded)} />
             </div>
           </aside>
 
@@ -164,7 +192,7 @@ function TopBar({
   navExpanded,
   onLibrarySearchChange,
   onLogout,
-  onSettings,
+  onOpenSettings,
   searchPlaceholder,
   searchValue,
   showLibrarySearch
@@ -173,7 +201,7 @@ function TopBar({
   navExpanded: boolean;
   onLibrarySearchChange: (value: string) => void;
   onLogout: () => void;
-  onSettings: () => void;
+  onOpenSettings: () => void;
   searchPlaceholder: string;
   searchValue: string;
   showLibrarySearch: boolean;
@@ -207,9 +235,10 @@ function TopBar({
         </label>
       </div>
       <div className="flex items-center gap-2 px-4">
+        <ScanActivityButton onOpenSettings={onOpenSettings} />
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button aria-label="Settings" size="icon" type="button" variant="ghost" onClick={onSettings}>
+            <Button aria-label="Settings" size="icon" type="button" variant="ghost" onClick={onOpenSettings}>
               <Settings className="h-4 w-4" aria-hidden />
             </Button>
           </TooltipTrigger>

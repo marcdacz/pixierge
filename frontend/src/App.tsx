@@ -4,6 +4,7 @@ import { AppFrame } from '@/components/app-frame';
 import { ToastViewport, type ToastMessage } from '@/components/ui/toast';
 import { LoginForm, SetupForm } from '@/features/identity/identity-forms';
 import { LibraryHome } from '@/features/library/library-home';
+import { ScanActivityProvider } from '@/features/scans/scan-activity-context';
 import { SettingsPage } from '@/features/settings/settings-page';
 
 export type AppView = 'libraries' | 'albums' | 'settings';
@@ -162,39 +163,42 @@ export function App() {
 
   return (
     <>
-      <AppFrame
-        auth={appState.auth}
-        contentMode={currentView === 'settings' || currentView === 'libraries' ? 'edge' : 'constrained'}
-        currentView={currentView}
-        libraries={libraries}
-        onLibrarySearchChange={setLibrarySearchInput}
-        onLogout={() => setAppState({ state: 'login' })}
-        searchPlaceholder="Search this folder"
-        searchValue={librarySearchInput}
-        showLibrarySearch={currentView === 'libraries'}
-        onViewChange={setCurrentView}
-      >
-        {currentView === 'libraries' && (
-          <LibraryHome
-            error={librariesError}
-            libraries={libraries}
-            loading={librariesLoading}
-            onConfigureSources={() => setCurrentView('settings')}
-            searchQuery={librarySearchQuery}
-          />
-        )}
-        {currentView === 'albums' && <LibraryHome variant="albums" />}
-        {currentView === 'settings' && (
-          <SettingsPage
-            auth={appState.auth}
-            error={librariesError}
-            libraries={libraries}
-            loading={librariesLoading}
-            onError={showErrorToast}
-            onLibrariesChange={loadLibraries}
-          />
-        )}
-      </AppFrame>
+      <ScanActivityProvider>
+        <AppFrame
+          auth={appState.auth}
+          contentMode={currentView === 'settings' || currentView === 'libraries' ? 'edge' : 'constrained'}
+          currentView={currentView}
+          libraries={libraries}
+          onLibrarySearchChange={setLibrarySearchInput}
+          onLogout={() => setAppState({ state: 'login' })}
+          onOpenSettings={() => setCurrentView('settings')}
+          searchPlaceholder="Search this folder"
+          searchValue={librarySearchInput}
+          showLibrarySearch={currentView === 'libraries'}
+          onViewChange={setCurrentView}
+        >
+          {currentView === 'libraries' && (
+            <LibraryHome
+              error={librariesError}
+              libraries={libraries}
+              loading={librariesLoading}
+              onConfigureSources={() => setCurrentView('settings')}
+              searchQuery={librarySearchQuery}
+            />
+          )}
+          {currentView === 'albums' && <LibraryHome variant="albums" />}
+          {currentView === 'settings' && (
+            <SettingsPage
+              auth={appState.auth}
+              error={librariesError}
+              libraries={libraries}
+              loading={librariesLoading}
+              onError={showErrorToast}
+              onLibrariesChange={loadLibraries}
+            />
+          )}
+        </AppFrame>
+      </ScanActivityProvider>
       <ToastViewport onDismiss={dismissToast} toasts={toasts} />
     </>
   );

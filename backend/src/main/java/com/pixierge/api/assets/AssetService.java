@@ -144,6 +144,7 @@ public class AssetService {
                     row.libraryId(),
                     row.libraryName(),
                     row.availability(),
+                    row.identityStatus(),
                     row.duplicateCount(),
                     row.capturedAt(),
                     row.observedAt(),
@@ -175,6 +176,7 @@ public class AssetService {
         return new AssetDetailResponse(
                 detail.assetId(),
                 detail.contentHash(),
+                detail.identityStatus(),
                 detail.mediaType(),
                 detail.availability(),
                 detail.duplicateCount(),

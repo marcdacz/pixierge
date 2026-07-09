@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 
 const ASSET_AVAILABILITY_MISSING = 'missing';
 const ASSET_DUPLICATE_BASE_COUNT = 1;
+const ASSET_IDENTITY_PENDING = 'pending';
 const ASSET_METADATA_PENDING_LABEL = 'pending';
 const ASSET_STATUS_ACTIVE = 'active';
 const ASSET_FOCUS_DETAIL_COLUMNS_CLASS = 'xl:grid-cols-[minmax(0,1fr)_22rem]';
@@ -113,6 +114,7 @@ function LibraryBrowser({
   libraries: LibrarySummary[];
   searchQuery: string;
 }) {
+  const [isLowResolution, setIsLowResolution] = useState(false);
   const defaultLibraryId = libraries.length === 1 ? libraries[0]?.id : undefined;
   const [tree, setTree] = useState<LibraryTreeNode[]>([]);
   const [libraryRootAssetCounts, setLibraryRootAssetCounts] = useState<Record<string, number>>({});
@@ -143,6 +145,28 @@ function LibraryBrowser({
     () => groupTreeByLibrary(tree, libraries, libraryRootAssetCounts),
     [libraries, libraryRootAssetCounts, tree]
   );
+  const showFloatingTree = isLowResolution && !treeCollapsed;
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      setIsLowResolution(false);
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const syncResolution = () => {
+      setIsLowResolution(mediaQuery.matches);
+      if (mediaQuery.matches) {
+        setTreeCollapsed(true);
+      }
+    };
+
+    syncResolution();
+    mediaQuery.addEventListener('change', syncResolution);
+    return () => {
+      mediaQuery.removeEventListener('change', syncResolution);
+    };
+  }, []);
 
   useEffect(() => {
     setSelectedLibraryId(defaultLibraryId);
@@ -346,16 +370,28 @@ function LibraryBrowser({
   return (
     <div
       className={cn(
-        'grid gap-0 overflow-hidden',
+        'relative grid gap-0 overflow-hidden',
         BROWSE_LAYOUT_HEIGHT_CLASS,
-        'grid-rows-[auto_minmax(0,1fr)]',
-        !treeCollapsed && 'lg:grid-rows-none lg:grid-cols-[auto_minmax(0,1fr)]'
+        'grid-rows-[minmax(0,1fr)]',
+        !isLowResolution && !treeCollapsed && 'lg:grid-cols-[auto_minmax(0,1fr)]'
       )}
     >
+      {showFloatingTree && (
+        <button
+          aria-label="Close folders"
+          className="absolute inset-0 z-10 bg-background/40 backdrop-blur-[1px]"
+          onClick={() => setTreeCollapsed(true)}
+          type="button"
+        />
+      )}
+
       {!treeCollapsed && (
         <aside
           className={cn(
-            'flex min-h-0 w-full flex-col border-b border-border pb-4 lg:w-[var(--browse-tree-width)] lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4',
+            'flex min-h-0 flex-col',
+            isLowResolution
+              ? 'absolute inset-y-0 left-0 z-20 w-[min(20rem,85vw)] border-r border-border bg-background px-3 py-4 shadow-xl'
+              : 'w-full border-b border-border pb-4 lg:w-[var(--browse-tree-width)] lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4',
             BROWSE_TREE_WIDTH_TOKEN
           )}
         >
@@ -368,7 +404,7 @@ function LibraryBrowser({
 
           <nav
             aria-label="Folders"
-            className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
+            className={cn('flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto', isLowResolution ? 'pr-0' : 'pr-1')}
           >
             {loadingTree && <p className="px-2 py-2 text-sm text-muted-foreground">Loading folders...</p>}
             {!loadingTree && tree.length === 0 && (assets?.totalCount ?? 0) === 0 && (
@@ -414,7 +450,7 @@ function LibraryBrowser({
                 <TooltipContent side="right">Show folders</TooltipContent>
               </Tooltip>
             )}
-            <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex min-w-0 flex-1 items-end justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">{selectedLibrary.name}</p>
                 <h2 className="truncate text-2xl font-semibold text-foreground">
@@ -422,7 +458,7 @@ function LibraryBrowser({
                 </h2>
               </div>
               {assets && (
-                <span className="shrink-0 self-end text-sm text-muted-foreground">
+                <span className="shrink-0 text-sm text-muted-foreground">
                   {formatItemCount(assets.totalCount)}
                 </span>
               )}
@@ -503,7 +539,7 @@ function LibraryFolderSection({
         <div className="grid gap-0.5">
           {nodes.map((node) => (
             <FolderTreeNode
-              depth={0}
+              depth={1}
               expandedPaths={expandedPaths}
               key={node.id}
               node={node}
@@ -622,8 +658,9 @@ function FolderTreeRow({
         type="button"
       >
         <RowIcon className="h-4 w-4 shrink-0" aria-hidden />
-        <span className="truncate">{label}</span>
-        <span className="ml-auto text-xs tabular-nums">{count}</span>
+        <span className="min-w-0 flex-1 truncate">
+          {label} <span className="text-xs tabular-nums">({count})</span>
+        </span>
       </button>
     </div>
   );
@@ -681,6 +718,7 @@ function AssetTile({ asset, onOpen }: { asset: AssetSummary; onOpen: () => void 
       <div className="absolute inset-x-0 bottom-0 flex min-h-9 items-end justify-between gap-2 bg-gradient-to-t from-background/85 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
         <span className="truncate text-xs font-medium text-foreground">{asset.fileName}</span>
         <span className="flex shrink-0 gap-1">
+          {asset.identityStatus === ASSET_IDENTITY_PENDING && <Badge variant="secondary">Identity pending</Badge>}
           {asset.availability === ASSET_AVAILABILITY_MISSING && <Badge variant="warning">Missing</Badge>}
           {asset.duplicateCount > ASSET_DUPLICATE_BASE_COUNT && <Badge variant="secondary">{asset.duplicateCount}</Badge>}
         </span>
@@ -734,6 +772,7 @@ function AssetFocus({
               <p className="break-all text-sm text-muted-foreground">{activeFile?.path ?? asset.contentHash}</p>
             </div>
             <dl className="grid gap-3 text-sm">
+              <DetailRow label="Identity" value={asset.identityStatus === ASSET_IDENTITY_PENDING ? 'pending' : 'confirmed'} />
               <DetailRow label="Type" value={asset.metadata.mimeType ?? asset.mediaType} />
               <DetailRow label="Size" value={asset.metadata.width && asset.metadata.height ? `${asset.metadata.width} x ${asset.metadata.height}` : 'Unknown'} />
               <DetailRow label="Captured" value={formatDate(asset.metadata.capturedAt)} />

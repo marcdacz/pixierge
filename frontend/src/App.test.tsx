@@ -132,6 +132,7 @@ const browseAssets = {
           libraryId: 'library-1',
           libraryName: 'Family Photos',
           availability: 'available',
+          identityStatus: 'confirmed',
           duplicateCount: 2,
           capturedAt: '2026-07-04T00:00:00Z',
           observedAt: '2026-07-04T00:00:00Z',
@@ -153,6 +154,7 @@ const browseAssets = {
 const assetDetail = {
   id: 'asset-1',
   contentHash: 'sha256:aaa',
+  identityStatus: 'confirmed',
   mediaType: 'image/jpeg',
   availability: 'available',
   duplicateCount: 2,
@@ -431,8 +433,8 @@ describe('App', () => {
     expect(await screen.findAllByText('0 sources')).not.toHaveLength(0);
 
     await userEvent.type(screen.getByLabelText('Source path'), '/photos/family');
-    expect(screen.getByRole('button', { name: 'Browse' })).toBeInTheDocument();
-    expect(screen.getByText(/Docker sources must use container paths/)).toBeInTheDocument();
+    await userEvent.hover(screen.getByRole('button', { name: 'Source path Docker guidance' }));
+    expect(await screen.findByText(/Docker sources must use container paths/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Add source' }));
     expect(await screen.findByText('/photos/family')).toBeInTheDocument();
@@ -570,6 +572,7 @@ describe('App', () => {
       { status: 201, body: libraryWithCustomExclusion },
       { status: 200, body: [libraryWithCustomExclusion] },
       { status: 202, body: runningScan },
+      { status: 200, body: runningScan },
       { status: 200, body: completedScan }
     ]);
 
@@ -591,6 +594,7 @@ describe('App', () => {
 
     expect(await screen.findByText('Scan running')).toBeInTheDocument();
     expect(await screen.findByText('Scan completed', {}, { timeout: 2_000 })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Scan completed' }));
     expect(screen.getByText('Added 2')).toBeInTheDocument();
     expect(screen.getByText('Unchanged 1')).toBeInTheDocument();
     expect(screen.getByText('Reappeared 0')).toBeInTheDocument();
@@ -710,7 +714,17 @@ function installIntersectionObserverMock() {
 }
 
 function mockFetch(responses: MockResponse[]) {
-  const fetchMock = vi.fn(async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.endsWith('/api/scans/active')) {
+      return {
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        status: 200,
+        json: async () => []
+      };
+    }
+
     const next = responses.shift();
     if (!next) {
       throw new Error('Unexpected fetch call');

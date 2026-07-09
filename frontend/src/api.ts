@@ -92,6 +92,25 @@ export type ScanRun = {
   errors: ScanError[];
 };
 
+export type ActiveScan = {
+  id: string;
+  libraryId: string;
+  libraryName: string;
+  rootId: string | null;
+  rootPath: string | null;
+  status: ScanRun['status'];
+  startedAt: string;
+  scannedFileCount: number;
+  addedCount: number;
+  unchangedCount: number;
+  movedCount: number;
+  modifiedCount: number;
+  duplicateCount: number;
+  missingCount: number;
+  reappearedCount: number;
+  errorCount: number;
+};
+
 export type LibraryTreeNode = {
   id: string;
   libraryId: string;
@@ -116,6 +135,7 @@ export type AssetSummary = {
   libraryId: string;
   libraryName: string;
   availability: 'available' | 'missing';
+  identityStatus: 'pending' | 'confirmed';
   duplicateCount: number;
   capturedAt: string | null;
   observedAt: string;
@@ -166,6 +186,7 @@ export type AssetMetadata = {
 export type AssetDetail = {
   id: string;
   contentHash: string;
+  identityStatus: 'pending' | 'confirmed';
   mediaType: string;
   availability: 'available' | 'missing';
   duplicateCount: number;
@@ -340,6 +361,10 @@ export async function scanLibraryRoot(libraryId: string, rootId: string, csrfTok
 
 export async function fetchScan(scanRunId: string): Promise<ScanRun> {
   return requestJson<ScanRun>(`/api/scans/${scanRunId}`);
+}
+
+export async function fetchActiveScans(): Promise<ActiveScan[]> {
+  return requestJson<ActiveScan[]>('/api/scans/active');
 }
 
 export async function fetchLibraryTree(libraryId?: string): Promise<LibraryTreeResponse> {

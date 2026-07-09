@@ -362,9 +362,105 @@ class LibraryIntegrationTest {
         assertThat(assetDetail.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(assetDetail.getBody()).containsEntry("id", assetId);
         assertThat(assetDetail.getBody()).containsEntry("availability", "available");
+        assertThat(assetDetail.getBody()).containsEntry("identityStatus", "confirmed");
         assertThat(assetFiles(assetDetail)).isNotEmpty();
         assertThat(backfill.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(backfill.getBody()).containsKey("processedCount");
+    }
+
+    @Test
+    void activeScansEndpointShowsRunningManualScan() throws Exception {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String cookie = cookiePair(admin);
+        String csrfToken = csrfToken(admin);
+        Path source = Files.createDirectory(tempDir.resolve("active-scan"));
+        Files.writeString(source.resolve("photo.jpg"), "photo");
+
+        ResponseEntity<Map> createdLibrary = restTemplate.exchange(
+                "/api/libraries",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("name", "Active Scan Library")),
+                Map.class
+        );
+        String libraryId = createdLibrary.getBody().get("id").toString();
+        restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/roots",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("path", source.toString())),
+                Map.class
+        );
+
+        ResponseEntity<Map> startedScan = restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/scans",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        ResponseEntity<List> activeScans = restTemplate.exchange(
+                "/api/scans/active",
+                HttpMethod.GET,
+                withCookie(cookie),
+                List.class
+        );
+        ResponseEntity<Map> completedScan = waitForScan(startedScan, cookie);
+        ResponseEntity<List> activeAfterComplete = restTemplate.exchange(
+                "/api/scans/active",
+                HttpMethod.GET,
+                withCookie(cookie),
+                List.class
+        );
+
+        assertThat(startedScan.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(activeScans.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(activeScans.getBody()).isNotNull();
+        assertThat(completedScan.getBody()).containsEntry("status", "completed");
+        assertThat(activeAfterComplete.getBody()).isEmpty();
+    }
+
+    @Test
+    void repeatScanWithoutChangesLeavesFilesUnchanged() throws Exception {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String cookie = cookiePair(admin);
+        String csrfToken = csrfToken(admin);
+        Path source = Files.createDirectory(tempDir.resolve("repeat-scan"));
+        Files.writeString(source.resolve("one.jpg"), "one");
+        Files.writeString(source.resolve("two.jpg"), "two");
+
+        ResponseEntity<Map> createdLibrary = restTemplate.exchange(
+                "/api/libraries",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("name", "Repeat Scan Library")),
+                Map.class
+        );
+        String libraryId = createdLibrary.getBody().get("id").toString();
+        restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/roots",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("path", source.toString())),
+                Map.class
+        );
+
+        ResponseEntity<Map> firstScanStart = restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/scans",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        ResponseEntity<Map> firstScan = waitForScan(firstScanStart, cookie);
+        ResponseEntity<Map> secondScanStart = restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/scans",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        ResponseEntity<Map> secondScan = waitForScan(secondScanStart, cookie);
+
+        assertThat(firstScan.getBody()).containsEntry("addedCount", 2);
+        assertThat(secondScan.getBody())
+                .containsEntry("status", "completed")
+                .containsEntry("scannedFileCount", 2)
+                .containsEntry("unchangedCount", 2)
+                .containsEntry("addedCount", 0);
     }
 
     @Test

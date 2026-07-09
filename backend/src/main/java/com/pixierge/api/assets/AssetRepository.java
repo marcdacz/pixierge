@@ -467,6 +467,7 @@ class AssetRepository {
             UUID libraryId,
             String libraryName,
             String availability,
+            String identityStatus,
             int duplicateCount,
             OffsetDateTime capturedAt,
             OffsetDateTime observedAt,
@@ -481,6 +482,7 @@ class AssetRepository {
     record AssetDetailRow(
             UUID assetId,
             String contentHash,
+            String identityStatus,
             String mediaType,
             String availability,
             int duplicateCount,
@@ -496,6 +498,7 @@ class AssetRepository {
             return new AssetDetailRow(
                     first.assetId(),
                     first.contentHash(),
+                    AssetIdentity.statusFor(first.contentHash()),
                     first.mediaType(),
                     first.availableFileCount() > 0 ? AVAILABILITY_AVAILABLE : AVAILABILITY_MISSING,
                     active.size(),
@@ -579,6 +582,7 @@ class AssetRepository {
                     display.libraryId(),
                     display.libraryName(),
                     first.availableFileCount() > 0 ? AVAILABILITY_AVAILABLE : AVAILABILITY_MISSING,
+                    AssetIdentity.statusFor(first.contentHash()),
                     active.size(),
                     display.capturedAt(),
                     first.observedAt(),

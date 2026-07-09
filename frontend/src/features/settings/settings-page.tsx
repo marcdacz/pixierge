@@ -2,10 +2,11 @@ import {
   AlertTriangle,
   Archive,
   Blocks,
-  ChevronDown,
+  CircleHelp,
+  ChevronLeft,
   ChevronRight,
+  ChevronDown,
   CheckCircle2,
-  FolderOpen,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -24,7 +25,6 @@ import {
   deleteLibraryExclusionPattern,
   deleteLibraryRoot,
   fetchGlobalExclusionPatterns,
-  fetchScan,
   restoreLibrary,
   scanLibrary,
   scanLibraryRoot,
@@ -36,6 +36,14 @@ import {
   type ScanRun
 } from '@/api';
 import { Alert } from '@/components/ui/alert';
+import { useScanActivity } from '@/features/scans/scan-activity-context';
+import {
+  formatScanDuration,
+  formatScanStatus,
+  formatScanTimestamp,
+  isScanInProgress
+} from '@/features/scans/scan-utils';
+import { ScanStatsGrid } from '@/features/scans/scan-stats-grid';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -49,6 +57,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 type SettingsView = 'configuration' | 'plugins' | 'backups';
@@ -90,10 +99,6 @@ type SettingsPageProps = {
   onLibrariesChange: () => Promise<void>;
 };
 
-type DirectoryPickerWindow = Window & {
-  showDirectoryPicker?: () => Promise<{ name: string }>;
-};
-
 export function SettingsPage({
   auth,
   error = null,
@@ -103,14 +108,67 @@ export function SettingsPage({
   onLibrariesChange
 }: SettingsPageProps) {
   const [currentView, setCurrentView] = useState<SettingsView>('configuration');
+  const [settingsNavCollapsed, setSettingsNavCollapsed] = useState(false);
+  const [settingsNavAutoCollapsed, setSettingsNavAutoCollapsed] = useState(false);
   const currentItem = settingsItems.find((item) => item.view === currentView) ?? settingsItems[0];
+  const effectiveNavCollapsed = settingsNavCollapsed || settingsNavAutoCollapsed;
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      setSettingsNavAutoCollapsed(false);
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const syncAutoCollapse = () => {
+      setSettingsNavAutoCollapsed(mediaQuery.matches);
+    };
+
+    syncAutoCollapse();
+    mediaQuery.addEventListener('change', syncAutoCollapse);
+    return () => {
+      mediaQuery.removeEventListener('change', syncAutoCollapse);
+    };
+  }, []);
 
   return (
-    <div className="grid min-h-full gap-8 lg:grid-cols-[var(--settings-nav-width)_minmax(0,1fr)]">
-      <aside className="border-b border-border pb-4 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
-        <div className="mb-4 grid gap-1">
-          <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
-          <p className="text-sm text-muted-foreground">Configure Pixierge operations.</p>
+    <div
+      className={cn(
+        'grid min-h-full gap-8',
+        effectiveNavCollapsed
+          ? 'grid-cols-[3.5rem_minmax(0,1fr)]'
+          : 'grid-cols-[var(--settings-nav-width)_minmax(0,1fr)]'
+      )}
+    >
+      <aside className="border-r border-border pr-4">
+        <div className="mb-4 grid gap-3">
+          <div className={cn('grid gap-1', effectiveNavCollapsed && 'justify-items-center')}>
+            <h1 className={cn('text-2xl font-semibold text-foreground', effectiveNavCollapsed && 'sr-only')}>Settings</h1>
+            <p className={cn('text-sm text-muted-foreground', effectiveNavCollapsed && 'sr-only')}>
+              Configure Pixierge operations.
+            </p>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                aria-label={effectiveNavCollapsed ? 'Expand settings navigation' : 'Collapse settings navigation'}
+                className={cn(
+                  'flex h-10 items-center rounded-md text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                  effectiveNavCollapsed ? 'w-10 justify-center self-center' : 'w-full justify-start gap-3 px-3'
+                )}
+                onClick={() => setSettingsNavCollapsed((collapsed) => !collapsed)}
+                type="button"
+              >
+                {effectiveNavCollapsed ? (
+                  <ChevronRight className="h-4 w-4" aria-hidden />
+                ) : (
+                  <ChevronLeft className="h-4 w-4" aria-hidden />
+                )}
+                {!effectiveNavCollapsed && <span>Collapse</span>}
+              </button>
+            </TooltipTrigger>
+            {effectiveNavCollapsed && <TooltipContent side="right">Expand settings navigation</TooltipContent>}
+          </Tooltip>
         </div>
 
         <nav aria-label="Settings" className="grid gap-1">
@@ -119,19 +177,25 @@ export function SettingsPage({
             const active = currentView === item.view;
 
             return (
-              <button
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'flex h-10 items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                  active && 'bg-muted text-foreground'
-                )}
-                key={item.view}
-                onClick={() => setCurrentView(item.view)}
-                type="button"
-              >
-                <Icon className="h-4 w-4" aria-hidden />
-                {item.label}
-              </button>
+              <Tooltip key={item.view}>
+                <TooltipTrigger asChild>
+                  <button
+                    aria-current={active ? 'page' : undefined}
+                    aria-label={item.label}
+                    className={cn(
+                      'flex h-10 items-center rounded-md text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                      effectiveNavCollapsed ? 'w-10 justify-center px-0' : 'gap-3 px-3',
+                      active && 'bg-muted text-foreground'
+                    )}
+                    onClick={() => setCurrentView(item.view)}
+                    type="button"
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
+                    {!effectiveNavCollapsed && item.label}
+                  </button>
+                </TooltipTrigger>
+                {effectiveNavCollapsed && <TooltipContent side="right">{item.label}</TooltipContent>}
+              </Tooltip>
             );
           })}
         </nav>
@@ -243,8 +307,8 @@ function SourcesSettings({
     try {
       const created = await createLibrary({ name: libraryName }, auth.csrfToken);
       setLibraryName('');
-      setSelectedLibraryId(created.id);
       await onLibrariesChange();
+      setSelectedLibraryId(created.id);
     } catch (submitError) {
       const message = messageForError(submitError, 'Library could not be created.');
       setFormError(message);
@@ -290,7 +354,7 @@ function SourcesSettings({
         <div className="grid gap-5 xl:grid-cols-[20rem_minmax(0,1fr)]">
           <aside className="grid content-start gap-4">
             <div className="rounded-md border border-border p-4">
-              <form className="grid gap-3" onSubmit={submitLibrary}>
+              <form className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3" onSubmit={submitLibrary}>
                 <div className="grid gap-2">
                   <Label htmlFor="library-name">Library name</Label>
                   <Input
@@ -300,9 +364,13 @@ function SourcesSettings({
                     value={libraryName}
                   />
                 </div>
-                <Button disabled={submitting || libraryName.trim() === ''} type="submit">
+                <Button
+                  aria-label="Create library"
+                  className="h-10 w-10 shrink-0 px-0"
+                  disabled={submitting || libraryName.trim() === ''}
+                  type="submit"
+                >
                   <Plus className="h-4 w-4" aria-hidden />
-                  Create
                 </Button>
               </form>
               {formError && <p className="mt-3 text-sm text-muted-foreground">{formError}</p>}
@@ -509,7 +577,6 @@ function LibrarySourceCard({
 }) {
   const [path, setPath] = useState('');
   const [exclusionPattern, setExclusionPattern] = useState('');
-  const [sourceHint, setSourceHint] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [exclusionSubmitting, setExclusionSubmitting] = useState(false);
@@ -518,51 +585,10 @@ function LibrarySourceCard({
   const [exclusionsOpen, setExclusionsOpen] = useState(false);
   const [scanNeeded, setScanNeeded] = useState(false);
   const [scanRunning, setScanRunning] = useState<string | null>(null);
-  const [scanResult, setScanResult] = useState<ScanRun | null>(null);
-  const [pollingScanId, setPollingScanId] = useState<string | null>(null);
+  const { trackedScan, trackScan } = useScanActivity();
+  const scanResult = trackedScan?.libraryId === library.id ? trackedScan : null;
   const activeScanRunning = scanResult ? isScanInProgress(scanResult) : false;
   const scanDisabled = scanRunning !== null || activeScanRunning || library.status !== 'active';
-
-  useEffect(() => {
-    if (!pollingScanId) {
-      return;
-    }
-
-    const scanId = pollingScanId;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    async function pollScan() {
-      try {
-        const result = await fetchScan(scanId);
-        if (cancelled) {
-          return;
-        }
-        setScanResult(result);
-        if (isScanInProgress(result)) {
-          timer = setTimeout(pollScan, 1_200);
-        } else {
-          setPollingScanId(null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          const message = messageForError(error, 'Scan status could not be refreshed.');
-          setFormError(message);
-          onError('Scan status could not be refreshed', message);
-          setPollingScanId(null);
-        }
-      }
-    }
-
-    timer = setTimeout(pollScan, 800);
-
-    return () => {
-      cancelled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, [onError, pollingScanId]);
 
   async function submitSource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -583,26 +609,6 @@ function LibrarySourceCard({
       onError('Source path could not be added', message);
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function browseLocalFolder() {
-    setFormError(null);
-    const directoryPicker = (window as DirectoryPickerWindow).showDirectoryPicker;
-    if (!directoryPicker) {
-      setSourceHint('This browser cannot expose folder paths. Mount a host folder into Docker and use a /photos/... path.');
-      return;
-    }
-
-    try {
-      const handle = await directoryPicker();
-      setPath('/photos/pictures');
-      setSourceHint(`Selected "${handle.name}". In Docker, mount that folder under /photos, then add its container path.`);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        return;
-      }
-      setSourceHint('Folder selection was cancelled or blocked. You can still enter a /photos/... path manually.');
     }
   }
 
@@ -659,9 +665,8 @@ function LibrarySourceCard({
 
     try {
       const result = await scanLibrary(library.id, auth.csrfToken);
-      setScanResult(result);
+      trackScan(result);
       setScanNeeded(false);
-      setPollingScanId(isScanInProgress(result) ? result.id : null);
     } catch (submitError) {
       const message = messageForError(submitError, 'Library scan could not be started.');
       setFormError(message);
@@ -677,9 +682,8 @@ function LibrarySourceCard({
 
     try {
       const result = await scanLibraryRoot(library.id, source.id, auth.csrfToken);
-      setScanResult(result);
+      trackScan(result);
       setScanNeeded(false);
-      setPollingScanId(isScanInProgress(result) ? result.id : null);
     } catch (submitError) {
       const message = messageForError(submitError, 'Source scan could not be started.');
       setFormError(message);
@@ -796,9 +800,27 @@ function LibrarySourceCard({
           </Alert>
         )}
         {scanResult && <ScanSummary scan={scanResult} />}
-        <form className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]" onSubmit={submitSource}>
+        <form className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]" onSubmit={submitSource}>
           <div className="grid gap-2">
-            <Label htmlFor={`source-path-${library.id}`}>Source path</Label>
+            <div className="flex items-center gap-2">
+              <Label htmlFor={`source-path-${library.id}`}>Source path</Label>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    aria-label="Source path Docker guidance"
+                    className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                    type="button"
+                  >
+                    <CircleHelp className="h-4 w-4" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Docker sources must use container paths. Mount your folders under{' '}
+                  <span className="font-mono">/photos</span>, then add paths like{' '}
+                  <span className="font-mono">/photos/pictures</span> or <span className="font-mono">/photos/archive</span>.
+                </TooltipContent>
+              </Tooltip>
+            </div>
             <Input
               id={`source-path-${library.id}`}
               onChange={(event) => setPath(event.target.value)}
@@ -806,20 +828,12 @@ function LibrarySourceCard({
               value={path}
             />
           </div>
-          <Button className="self-end" onClick={() => void browseLocalFolder()} type="button" variant="secondary">
-            <FolderOpen className="h-4 w-4" aria-hidden />
-            Browse
-          </Button>
           <Button className="self-end" disabled={submitting || path.trim() === ''} type="submit">
             <Plus className="h-4 w-4" aria-hidden />
             Add source
           </Button>
         </form>
         {formError && <p className="text-sm text-muted-foreground">{formError}</p>}
-        {sourceHint && <p className="text-sm text-muted-foreground">{sourceHint}</p>}
-        <p className="text-sm text-muted-foreground">
-          Docker sources must use container paths. Mount your folders under <span className="font-mono">/photos</span>, then add paths like <span className="font-mono">/photos/pictures</span> or <span className="font-mono">/photos/archive</span>.
-        </p>
 
         {library.sources.length === 0 ? (
           <p className="text-sm text-muted-foreground">No source paths have been added to this library.</p>
@@ -997,25 +1011,67 @@ function ArchiveLibraryDialog({
 
 function ScanSummary({ scan }: { scan: ScanRun }) {
   const running = isScanInProgress(scan);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const statusLabel = formatScanStatus(scan.status);
+
   return (
-    <div className="rounded-md border border-border p-4" role="status">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+    <div className="rounded-md border border-border" role="status">
+      <button
+        aria-expanded={detailsOpen}
+        aria-label={statusLabel}
+        className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 px-4 text-left text-sm font-medium text-foreground"
+        onClick={() => setDetailsOpen((open) => !open)}
+        type="button"
+      >
+        <span className="inline-flex items-center gap-2">
+          {detailsOpen ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+          )}
           {running && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />}
-          {formatScanStatus(scan.status)}
-        </p>
+          {statusLabel}
+        </span>
         <Badge variant={scan.errorCount > 0 ? 'warning' : 'success'}>{scan.scannedFileCount} scanned</Badge>
-      </div>
-      <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
-        <span>Added {scan.addedCount}</span>
-        <span>Unchanged {scan.unchangedCount}</span>
-        <span>Moved {scan.movedCount}</span>
-        <span>Modified {scan.modifiedCount}</span>
-        <span>Duplicates {scan.duplicateCount}</span>
-        <span>Missing {scan.missingCount}</span>
-        <span>Reappeared {scan.reappearedCount}</span>
-        <span>Errors {scan.errorCount}</span>
-      </div>
+      </button>
+
+      {detailsOpen && (
+        <div className="grid gap-4 border-t border-border p-4 pt-0">
+          <dl className="grid gap-2 pt-4 text-sm sm:grid-cols-3">
+            <div className="grid gap-0.5">
+              <dt className="text-muted-foreground">Started</dt>
+              <dd className="text-foreground">{formatScanTimestamp(scan.startedAt)}</dd>
+            </div>
+            <div className="grid gap-0.5">
+              <dt className="text-muted-foreground">Finished</dt>
+              <dd className="text-foreground">
+                {scan.completedAt ? formatScanTimestamp(scan.completedAt) : 'In progress'}
+              </dd>
+            </div>
+            <div className="grid gap-0.5">
+              <dt className="text-muted-foreground">Duration</dt>
+              <dd className="text-foreground">{formatScanDuration(scan.startedAt, scan.completedAt)}</dd>
+            </div>
+          </dl>
+          <ScanStatsGrid className="text-sm" scan={scan} />
+          {scan.errors.length > 0 && (
+            <div className="grid gap-2 rounded-md border border-border bg-surface p-3 text-sm">
+              <p className="inline-flex items-center gap-2 font-medium text-foreground">
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden />
+                {scan.errors.length === 1 ? 'Scan error' : `Scan errors (${scan.errors.length})`}
+              </p>
+              <ul className="grid gap-2">
+                {scan.errors.map((error) => (
+                  <li className="grid gap-0.5" key={error.id}>
+                    {error.path && <span className="break-all text-xs text-muted-foreground">{error.path}</span>}
+                    <span className="text-foreground">{error.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1044,20 +1100,6 @@ function formatSourceCount(count: number) {
 
 function formatUnavailableReason(reason: string) {
   return reason.replaceAll('_', ' ');
-}
-
-function formatScanStatus(status: ScanRun['status']) {
-  if (status === 'running' || status === 'queued') {
-    return 'Scan running';
-  }
-  if (status === 'completed_with_errors') {
-    return 'Scan completed with errors';
-  }
-  return `Scan ${status.replaceAll('_', ' ')}`;
-}
-
-function isScanInProgress(scan: ScanRun) {
-  return scan.status === 'running' || scan.status === 'queued';
 }
 
 function messageForError(error: unknown, fallback: string) {
