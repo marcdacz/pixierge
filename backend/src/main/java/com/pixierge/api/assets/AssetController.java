@@ -76,6 +76,46 @@ public class AssetController {
                 .body(file.resource());
     }
 
+    @GetMapping("/api/assets/{assetId}/thumbnail")
+    ResponseEntity<?> thumbnail(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable UUID assetId,
+            @RequestParam(required = false, defaultValue = "grid") String size
+    ) {
+        ThumbnailResponseResource thumbnail = assetService.thumbnail(user, assetId, size);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(thumbnail.contentType()))
+                .contentLength(thumbnail.contentLength())
+                .cacheControl(CacheControl.maxAge(java.time.Duration.ofHours(24)).cachePrivate())
+                .header(HttpHeaders.ETAG, thumbnail.etag())
+                .lastModified(thumbnail.lastModified().toInstant().toEpochMilli())
+                .body(thumbnail.resource());
+    }
+
+    @GetMapping("/api/assets/{assetId}/preview")
+    ResponseEntity<?> preview(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable UUID assetId) {
+        ThumbnailResponseResource preview = assetService.preview(user, assetId);
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(preview.contentType()))
+                .contentLength(preview.contentLength())
+                .cacheControl(CacheControl.maxAge(java.time.Duration.ofHours(24)).cachePrivate())
+                .lastModified(preview.lastModified().toInstant().toEpochMilli());
+        if (preview.etag() != null) {
+            response.header(HttpHeaders.ETAG, preview.etag());
+        }
+        return response.body(preview.resource());
+    }
+
+    @PostMapping("/api/admin/thumbnails/rebuild-missing")
+    ThumbnailAdminActionResponse rebuildMissingThumbnails() {
+        return assetService.rebuildMissingThumbnails();
+    }
+
+    @PostMapping("/api/admin/thumbnails/purge-stale")
+    ThumbnailAdminActionResponse purgeStaleThumbnails() {
+        return assetService.purgeStaleThumbnails();
+    }
+
     @PostMapping("/api/assets/metadata/backfill")
     MetadataBackfillResponse backfillMetadata() {
         return assetService.backfillMetadata();

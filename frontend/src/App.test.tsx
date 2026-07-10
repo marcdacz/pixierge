@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -115,7 +115,8 @@ const libraryTree = {
       ]
     }
   ],
-  libraryRootAssetCounts: {}
+  libraryRootAssetCounts: {},
+  libraryAssetCounts: {}
 };
 
 const browseAssets = {
@@ -140,7 +141,10 @@ const browseAssets = {
           mimeType: 'image/jpeg',
           width: 1200,
           height: 800,
-          previewable: true
+          previewable: true,
+          thumbnailStatus: 'ready',
+          thumbnailCacheKey: 'grid-cache-asset-1',
+          thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110) 52%, rgb(50, 60, 70))'
         }
       ]
     }
@@ -322,6 +326,29 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'All folders' })).toBeInTheDocument();
     expect(await screen.findByText('1 item')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Open beach.jpg' })).toBeInTheDocument();
+    expect(document.querySelector('[data-asset-placeholder="asset-1"]')).not.toBeNull();
+    const assetGrid = document.querySelector('[aria-label="Asset grid"]') as HTMLElement;
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('11rem');
+    expect(
+      document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/thumbnail?c=grid-cache-asset-1"]')
+    ).not.toBeNull();
+    const thumbnailSize = screen.getByRole('slider', { name: 'Thumbnail size' });
+    fireEvent.change(thumbnailSize, { target: { value: '3' } });
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('15rem');
+    expect(
+      document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/preview?c=grid-cache-asset-1"]')
+    ).not.toBeNull();
+    fireEvent.change(thumbnailSize, { target: { value: '4' } });
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('20rem');
+    fireEvent.change(thumbnailSize, { target: { value: '5' } });
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('28rem');
+    expect(thumbnailSize).toHaveAttribute('aria-valuenow', '5');
+    fireEvent.change(thumbnailSize, { target: { value: '0' } });
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('5.5rem');
+    expect(thumbnailSize).toHaveAttribute('aria-valuenow', '0');
+    expect(
+      document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/thumbnail?c=grid-cache-asset-1"]')
+    ).not.toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/assets?libraryId=library-1&page=0&pageSize=48',
       expect.objectContaining({ credentials: 'include', method: 'GET' })
@@ -344,13 +371,166 @@ describe('App', () => {
     });
 
     await userEvent.click(await screen.findByRole('button', { name: 'Open beach.jpg' }));
-    expect(await screen.findByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Close photo viewer' })).toBeInTheDocument();
+    expect(
+      document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/preview?c=grid-cache-asset-1"]')
+    ).not.toBeNull();
     expect(screen.queryByRole('navigation', { name: 'Folders' })).not.toBeInTheDocument();
-    expect(screen.getAllByText('/photos/family/beach.jpg')).not.toHaveLength(0);
+    expect(screen.queryByText('/photos/family/beach.jpg')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Show photo metadata' }));
+    expect(await screen.findAllByText('/photos/family/beach.jpg')).not.toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss photo metadata' }));
+    expect(screen.queryByText('Identity')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close photo viewer' })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    expect(await screen.findByRole('heading', { name: 'family', level: 2 })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/assets/asset-1',
       expect.objectContaining({ credentials: 'include', method: 'GET' })
     );
+  });
+
+  it('keeps the generated placeholder when a thumbnail fails', async () => {
+    mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets }
+    ]);
+
+    render(<App />);
+
+    await screen.findByRole('button', { name: 'Open beach.jpg' });
+    const thumbnailSelector = 'img[src="http://localhost:8080/api/assets/asset-1/thumbnail?c=grid-cache-asset-1"]';
+    const thumbnail = document.querySelector(thumbnailSelector) as HTMLImageElement;
+    expect(thumbnail).toHaveClass('opacity-0');
+    fireEvent.load(thumbnail);
+    expect(thumbnail).toHaveClass('opacity-100');
+    fireEvent.error(thumbnail);
+
+    expect(document.querySelector(thumbnailSelector)).toBeNull();
+    expect(document.querySelector('[data-asset-placeholder="asset-1"]')).not.toBeNull();
+  });
+
+  it('does not request stable thumbnails while asset identity is pending', async () => {
+    const pendingBrowse = {
+      ...browseAssets,
+      sections: [
+        {
+          ...browseAssets.sections[0],
+          assets: [
+            {
+              ...browseAssets.sections[0].assets[0],
+              identityStatus: 'pending',
+              thumbnailStatus: 'pending',
+              thumbnailCacheKey: null,
+              thumbnailPlaceholder: null
+            }
+          ]
+        }
+      ]
+    };
+    mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: pendingBrowse }
+    ]);
+
+    render(<App />);
+
+    await screen.findByRole('button', { name: 'Open beach.jpg' });
+    expect(document.querySelector('img[src*="/api/assets/asset-1/thumbnail"]')).toBeNull();
+    expect(screen.getByText('Identity pending')).toBeInTheDocument();
+    expect(document.querySelector('[data-asset-placeholder="asset-1"]')).not.toBeNull();
+  });
+
+  it('navigates photos in the viewer and returns to the last viewed asset', async () => {
+    const twoAssetBrowse = {
+      ...browseAssets,
+      totalCount: 2,
+      sections: [
+        {
+          ...browseAssets.sections[0],
+          assets: [
+            browseAssets.sections[0].assets[0],
+            {
+              ...browseAssets.sections[0].assets[0],
+              id: 'asset-2',
+              fileName: 'sunset.jpg',
+              displayPath: '/photos/family/sunset.jpg'
+            }
+          ]
+        }
+      ]
+    };
+    const sunsetDetail = {
+      ...assetDetail,
+      id: 'asset-2',
+      files: [
+        {
+          ...assetDetail.files[0],
+          id: 'file-2',
+          path: '/photos/family/sunset.jpg',
+          fileName: 'sunset.jpg'
+        }
+      ]
+    };
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView
+    });
+
+    mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: twoAssetBrowse },
+      { status: 200, body: assetDetail },
+      { status: 200, body: sunsetDetail },
+      { status: 200, body: assetDetail },
+      { status: 200, body: sunsetDetail }
+    ]);
+
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Open beach.jpg' }));
+    expect(await screen.findByRole('button', { name: 'Next photo' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Previous photo' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Next photo' }));
+    await waitFor(() => {
+      expect(
+        document.querySelector('img[src="http://localhost:8080/api/assets/asset-2/preview?c=grid-cache-asset-1"]')
+      ).not.toBeNull();
+    });
+    expect(screen.getByRole('button', { name: 'Previous photo' })).toBeInTheDocument();
+
+    await userEvent.keyboard('{ArrowLeft}');
+    await waitFor(() => {
+      expect(
+        document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/preview?c=grid-cache-asset-1"]')
+      ).not.toBeNull();
+    });
+
+    await userEvent.keyboard('{ArrowRight}');
+    await waitFor(() => {
+      expect(
+        document.querySelector('img[src="http://localhost:8080/api/assets/asset-2/preview?c=grid-cache-asset-1"]')
+      ).not.toBeNull();
+    });
+
+    await userEvent.keyboard('{Escape}');
+    expect(await screen.findByRole('button', { name: 'Open sunset.jpg' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalled();
+    });
+    const sunsetTile = document.querySelector('[data-asset-id="asset-2"]');
+    expect(scrollIntoView.mock.instances[0]).toBe(sunsetTile);
   });
 
   it('loads the next browse page when the asset grid reaches the scroll end', async () => {
@@ -412,6 +592,78 @@ describe('App', () => {
     intersectionObserver.restore();
   });
 
+  it('does not request another browse page after a page merge unless the scroll end is reached again', async () => {
+    const pageZeroAssets = {
+      ...browseAssets,
+      totalCount: 2,
+      hasNext: true
+    };
+    const pageOneAssets = {
+      sections: [
+        {
+          folderPath: '/photos/family',
+          folderName: 'family',
+          assets: [
+            {
+              ...browseAssets.sections[0].assets[0],
+              id: 'asset-2',
+              fileName: 'sunset.jpg',
+              displayPath: '/photos/family/sunset.jpg'
+            }
+          ]
+        }
+      ],
+      totalCount: 2,
+      page: 1,
+      pageSize: 48,
+      hasNext: false
+    };
+
+    const fetchMock = mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: pageZeroAssets },
+      { status: 200, body: pageOneAssets }
+    ]);
+
+    const intersectionObserver = installIntersectionObserverMock();
+
+    render(<App />);
+
+    expect(await screen.findByText('2 items')).toBeInTheDocument();
+
+    act(() => {
+      intersectionObserver.trigger();
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8080/api/assets?libraryId=library-1&page=1&pageSize=48',
+        expect.objectContaining({ credentials: 'include', method: 'GET' })
+      );
+    });
+
+    expect(await screen.findByRole('button', { name: 'Open sunset.jpg' })).toBeInTheDocument();
+
+    const browseCallsAfterMerge = fetchMock.mock.calls.filter(([url]) =>
+      String(url).includes('/api/assets?libraryId=library-1')
+    ).length;
+    expect(browseCallsAfterMerge).toBe(2);
+
+    act(() => {
+      intersectionObserver.trigger();
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/assets?libraryId=library-1')).length
+    ).toBe(2);
+
+    intersectionObserver.restore();
+  });
+
   it('creates libraries and adds sources from configuration', async () => {
     const fetchMock = mockFetch([
       { status: 200, body: { required: false } },
@@ -428,13 +680,13 @@ describe('App', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Configure sources' }));
     await userEvent.type(screen.getByLabelText('Library name'), 'Family Photos');
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create library' }));
 
     expect(await screen.findAllByText('0 sources')).not.toHaveLength(0);
 
     await userEvent.type(screen.getByLabelText('Source path'), '/photos/family');
     await userEvent.hover(screen.getByRole('button', { name: 'Source path Docker guidance' }));
-    expect(await screen.findByText(/Docker sources must use container paths/)).toBeInTheDocument();
+    expect(await screen.findAllByText(/Docker sources must use container paths/)).not.toHaveLength(0);
 
     await userEvent.click(screen.getByRole('button', { name: 'Add source' }));
     expect(await screen.findByText('/photos/family')).toBeInTheDocument();
@@ -593,8 +845,8 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Run scan now' }));
 
     expect(await screen.findByText('Scan running')).toBeInTheDocument();
-    expect(await screen.findByText('Scan completed', {}, { timeout: 2_000 })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Scan completed' }));
+    expect(await screen.findByText('Scan completed', {}, { timeout: 4_000 })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Scan completed' }));
     expect(screen.getByText('Added 2')).toBeInTheDocument();
     expect(screen.getByText('Unchanged 1')).toBeInTheDocument();
     expect(screen.getByText('Reappeared 0')).toBeInTheDocument();

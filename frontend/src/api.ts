@@ -125,6 +125,7 @@ export type LibraryTreeNode = {
 export type LibraryTreeResponse = {
   roots: LibraryTreeNode[];
   libraryRootAssetCounts: Record<string, number>;
+  libraryAssetCounts: Record<string, number>;
 };
 
 export type AssetSummary = {
@@ -144,6 +145,9 @@ export type AssetSummary = {
   width: number | null;
   height: number | null;
   previewable: boolean;
+  thumbnailStatus: 'ready' | 'missing' | 'pending';
+  thumbnailCacheKey: string | null;
+  thumbnailPlaceholder: string | null;
 };
 
 export type AssetSection = {
@@ -430,6 +434,25 @@ export async function backfillAssetMetadata(csrfToken: string): Promise<{ proces
 
 export function assetFileUrl(assetId: string): string {
   return `${apiBaseUrl}/api/assets/${assetId}/file`;
+}
+
+export function assetThumbnailUrl(assetId: string, size: 'tiny' | 'grid' = 'grid', cacheKey?: string | null): string {
+  const params = new URLSearchParams();
+  if (size !== 'grid') {
+    params.set('size', size);
+  }
+  if (cacheKey) {
+    params.set('c', cacheKey);
+  }
+  return `${apiBaseUrl}/api/assets/${assetId}/thumbnail${queryString(params)}`;
+}
+
+export function assetPreviewUrl(assetId: string, cacheKey?: string | null): string {
+  const params = new URLSearchParams();
+  if (cacheKey) {
+    params.set('c', cacheKey);
+  }
+  return `${apiBaseUrl}/api/assets/${assetId}/preview${queryString(params)}`;
 }
 
 async function requestJson<T>(

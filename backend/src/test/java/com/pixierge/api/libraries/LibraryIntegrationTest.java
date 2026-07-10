@@ -11,6 +11,7 @@ import com.pixierge.api.db.QPasswordCredentials;
 import com.pixierge.api.db.QScanErrors;
 import com.pixierge.api.db.QScanRuns;
 import com.pixierge.api.db.QSessions;
+import com.pixierge.api.db.QThumbnails;
 import com.pixierge.api.db.QUserRoles;
 import com.pixierge.api.db.QUsers;
 import com.pixierge.api.identity.UserRepository;
@@ -22,6 +23,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -33,8 +36,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import javax.imageio.ImageIO;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,10 +60,16 @@ class LibraryIntegrationTest {
     private static final String USER_USERNAME = "viewer";
     private static final String USER_PASSWORD = "correct horse battery staple";
     private static final String USER_ROLE = "USER";
+    private static final Path THUMBNAIL_STORAGE_ROOT = createThumbnailStorageRoot();
 
     @Container
     @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+
+    @DynamicPropertySource
+    static void thumbnailStorageProperties(DynamicPropertyRegistry registry) {
+        registry.add("pixierge.storage.root", THUMBNAIL_STORAGE_ROOT::toString);
+    }
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -75,10 +90,12 @@ class LibraryIntegrationTest {
     private Path tempDir;
 
     @BeforeEach
-    void clearData() {
+    void clearData() throws IOException {
+        clearThumbnailStorage();
         transactionTemplate.executeWithoutResult(status -> {
             queryFactory.delete(QFileObservations.fileObservations).execute();
             queryFactory.delete(QScanErrors.scanErrors).execute();
+            queryFactory.delete(QThumbnails.thumbnails).execute();
             queryFactory.delete(QAssetFiles.assetFiles).execute();
             queryFactory.delete(QScanRuns.scanRuns).execute();
             queryFactory.delete(QAssets.assets).execute();
@@ -359,6 +376,7 @@ class LibraryIntegrationTest {
         assertThat(assets.getBody()).containsEntry("totalCount", 1);
         assertThat(firstAsset(assets)).containsEntry("fileName", "beach.jpg");
         assertThat(firstAsset(assets)).containsEntry("duplicateCount", 1);
+        assertThat(firstAsset(assets)).containsEntry("previewable", true);
         assertThat(assetDetail.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(assetDetail.getBody()).containsEntry("id", assetId);
         assertThat(assetDetail.getBody()).containsEntry("availability", "available");
@@ -592,6 +610,205 @@ class LibraryIntegrationTest {
     }
 
     @Test
+    void libraryTreeAssetCountMatchesBrowseTotal() throws Exception {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String cookie = cookiePair(admin);
+        String csrfToken = csrfToken(admin);
+        Path source = Files.createDirectory(tempDir.resolve("duplicate-counts"));
+        Path photos = Files.createDirectories(source.resolve("photos"));
+        Files.writeString(photos.resolve("photo-a.jpg"), "content-a");
+        Files.writeString(photos.resolve("photo-b.jpg"), "content-b");
+        Files.writeString(photos.resolve("photo-b-copy.jpg"), "content-b");
+
+        ResponseEntity<Map> createdLibrary = restTemplate.exchange(
+                "/api/libraries",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("name", "Duplicates")),
+                Map.class
+        );
+        String libraryId = createdLibrary.getBody().get("id").toString();
+        restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/roots",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("path", source.toString())),
+                Map.class
+        );
+        ResponseEntity<Map> scanStart = restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/scans",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        waitForScan(scanStart, cookie);
+
+        ResponseEntity<Map> tree = restTemplate.exchange(
+                "/api/library-tree?libraryId=" + libraryId,
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+        ResponseEntity<Map> assets = restTemplate.exchange(
+                "/api/assets?libraryId=" + libraryId,
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+
+        assertThat(tree.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(assets.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(assets.getBody()).containsEntry("totalCount", 2);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> libraryAssetCounts = (Map<String, Object>) tree.getBody().get("libraryAssetCounts");
+        assertThat(libraryAssetCounts).containsEntry(libraryId, 2);
+
+        Map<String, Object> photosNode = treeRoots(tree).stream()
+                .filter(node -> libraryId.equals(node.get("libraryId")) && "photos".equals(node.get("name")))
+                .findFirst()
+                .orElseThrow();
+        assertThat(photosNode).containsEntry("assetCount", 2);
+    }
+
+    @Test
+    void thumbnailEndpointsGenerateRevalidateRepairAndPurgeCachedFiles() throws Exception {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String cookie = cookiePair(admin);
+        String csrfToken = csrfToken(admin);
+        Path source = Files.createDirectory(tempDir.resolve("thumbnail-source"));
+        createJpeg(source.resolve("photo.jpg"));
+
+        ResponseEntity<Map> createdLibrary = restTemplate.exchange(
+                "/api/libraries",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("name", "Thumbnail Library")),
+                Map.class
+        );
+        String libraryId = createdLibrary.getBody().get("id").toString();
+        restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/roots",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("path", source.toString())),
+                Map.class
+        );
+        ResponseEntity<Map> scanStart = restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/scans",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        waitForScan(scanStart, cookie);
+
+        ResponseEntity<Map> assets = restTemplate.exchange(
+                "/api/assets?libraryId=" + libraryId,
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+        String assetId = firstAsset(assets).get("id").toString();
+        assertThat(firstAsset(assets).get("thumbnailCacheKey")).isNotNull();
+
+        ResponseEntity<byte[]> firstThumbnail = restTemplate.exchange(
+                "/api/assets/" + assetId + "/thumbnail",
+                HttpMethod.GET,
+                withCookie(cookie),
+                byte[].class
+        );
+        String etag = firstThumbnail.getHeaders().getETag();
+        assertThat(firstThumbnail.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(firstThumbnail.getHeaders().getContentType().toString()).isEqualTo("image/jpeg");
+        assertThat(firstThumbnail.getHeaders().getCacheControl()).contains("private").contains("max-age=86400");
+        assertThat(firstThumbnail.getHeaders().getLastModified()).isPositive();
+        assertThat(etag).isNotBlank();
+
+        ResponseEntity<byte[]> notModified = restTemplate.exchange(
+                "/api/assets/" + assetId + "/thumbnail",
+                HttpMethod.GET,
+                withCookieAndHeader(cookie, HttpHeaders.IF_NONE_MATCH, etag),
+                byte[].class
+        );
+        assertThat(notModified.getStatusCode()).isEqualTo(HttpStatus.NOT_MODIFIED);
+
+        String relativePath = transactionTemplate.execute(status -> queryFactory
+                .select(QThumbnails.thumbnails.relativePath)
+                .from(QThumbnails.thumbnails)
+                .where(QThumbnails.thumbnails.thumbnailType.eq("grid"))
+                .fetchOne());
+        assertThat(relativePath).isNotBlank();
+        Path generated = THUMBNAIL_STORAGE_ROOT.resolve(relativePath);
+        assertThat(generated).isRegularFile();
+
+        Files.delete(generated);
+        ResponseEntity<byte[]> regenerated = restTemplate.exchange(
+                "/api/assets/" + assetId + "/thumbnail",
+                HttpMethod.GET,
+                withCookie(cookie),
+                byte[].class
+        );
+        assertThat(regenerated.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(regenerated.getHeaders().getETag()).isEqualTo(etag);
+        assertThat(generated).isRegularFile();
+
+        ResponseEntity<Map> missingCsrf = restTemplate.exchange(
+                "/api/admin/thumbnails/rebuild-missing",
+                HttpMethod.POST,
+                withCookie(cookie),
+                Map.class
+        );
+        assertThat(missingCsrf.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+
+        Files.delete(generated);
+        ResponseEntity<Map> rebuild = restTemplate.exchange(
+                "/api/admin/thumbnails/rebuild-missing",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        assertThat(rebuild.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(rebuild.getBody()).containsEntry("processedCount", 1).containsEntry("failedCount", 0);
+        assertThat(generated).isRegularFile();
+
+        ResponseEntity<byte[]> noSession = restTemplate.getForEntity(
+                "/api/assets/" + assetId + "/thumbnail",
+                byte[].class
+        );
+        createStandardUser();
+        ResponseEntity<Map> userLogin = login(USER_USERNAME, USER_PASSWORD);
+        ResponseEntity<byte[]> unauthorizedUser = restTemplate.exchange(
+                "/api/assets/" + assetId + "/thumbnail",
+                HttpMethod.GET,
+                withCookie(cookiePair(userLogin)),
+                byte[].class
+        );
+        assertThat(noSession.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(unauthorizedUser.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+
+        List<String> generatedPaths = transactionTemplate.execute(status -> queryFactory
+                .select(QThumbnails.thumbnails.relativePath)
+                .from(QThumbnails.thumbnails)
+                .fetch());
+        assertThat(generatedPaths).hasSize(3);
+        transactionTemplate.executeWithoutResult(status -> queryFactory
+                .update(QThumbnails.thumbnails)
+                .set(QThumbnails.thumbnails.generatorVersion, "legacy-generator")
+                .execute());
+
+        ResponseEntity<Map> purge = restTemplate.exchange(
+                "/api/admin/thumbnails/purge-stale",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        assertThat(purge.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(purge.getBody()).containsEntry("processedCount", 3).containsEntry("failedCount", 0);
+        assertThat(generatedPaths).allSatisfy(path -> assertThat(THUMBNAIL_STORAGE_ROOT.resolve(path)).doesNotExist());
+        Long remainingRows = transactionTemplate.execute(status -> queryFactory
+                .select(QThumbnails.thumbnails.id.count())
+                .from(QThumbnails.thumbnails)
+                .fetchOne());
+        assertThat(remainingRows).isZero();
+    }
+
+    @Test
     void libraryEndpointsRequireSessionCsrfAndLibraryAdminPermission() {
         ResponseEntity<Map> noSession = restTemplate.getForEntity("/api/libraries", Map.class);
         ResponseEntity<Map> admin = createFirstAdmin();
@@ -626,6 +843,45 @@ class LibraryIntegrationTest {
         assertThat(userMutation.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
+
+    private static Path createThumbnailStorageRoot() {
+        try {
+            return Files.createTempDirectory("pixierge-thumbnail-integration-");
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not create thumbnail integration storage", exception);
+        }
+    }
+
+    private void clearThumbnailStorage() throws IOException {
+        if (!Files.exists(THUMBNAIL_STORAGE_ROOT)) {
+            Files.createDirectories(THUMBNAIL_STORAGE_ROOT);
+            return;
+        }
+        try (var paths = Files.walk(THUMBNAIL_STORAGE_ROOT)) {
+            paths.sorted(Comparator.reverseOrder())
+                    .filter(path -> !path.equals(THUMBNAIL_STORAGE_ROOT))
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException exception) {
+                            throw new IllegalStateException("Could not clear thumbnail integration storage", exception);
+                        }
+                    });
+        }
+    }
+
+    private void createJpeg(Path path) throws IOException {
+        System.setProperty("java.awt.headless", "true");
+        BufferedImage image = new BufferedImage(640, 480, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setColor(Color.ORANGE);
+        graphics.fillRect(0, 0, image.getWidth(), image.getHeight());
+        graphics.dispose();
+        if (!ImageIO.write(image, "jpg", path.toFile())) {
+            throw new IOException("JPEG writer is unavailable");
+        }
+    }
+
     private ResponseEntity<Map> createFirstAdmin() {
         return restTemplate.postForEntity("/api/setup/admin", Map.of(
                 "username", ADMIN_USERNAME,
@@ -650,6 +906,13 @@ class LibraryIntegrationTest {
     private HttpEntity<Void> withCookie(String cookie) {
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.COOKIE, cookie);
+        return new HttpEntity<>(headers);
+    }
+
+    private HttpEntity<Void> withCookieAndHeader(String cookie, String headerName, String headerValue) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.COOKIE, cookie);
+        headers.add(headerName, headerValue);
         return new HttpEntity<>(headers);
     }
 

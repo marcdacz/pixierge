@@ -22,8 +22,11 @@ services:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/pixierge}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-pixierge}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-pixierge}
+      PIXIERGE_STORAGE_ROOT: /var/lib/pixierge
     ports:
       - "8080:8080"
+    volumes:
+      - pixierge-storage:/var/lib/pixierge
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,6 +36,7 @@ services:
       context: ./frontend
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+      VITE_PROXY_TARGET: ${VITE_PROXY_TARGET:-http://api:8080}
     ports:
       - "5173:5173"
     depends_on:
@@ -40,3 +44,4 @@ services:
 
 volumes:
   postgres-data:
+  pixierge-storage:

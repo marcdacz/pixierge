@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record LibraryTreeResponse(
         List<LibraryTreeNodeResponse> roots,
-        Map<UUID, Integer> libraryRootAssetCounts
+        Map<UUID, Integer> libraryRootAssetCounts,
+        Map<UUID, Integer> libraryAssetCounts
 ) {
 }

@@ -17,6 +17,9 @@ Pixierge is a Spring Boot API plus React TypeScript web app.
 - Frontend dependencies: `cd frontend && npm install`
 - Frontend tests: `cd frontend && npm test`
 - Frontend build: `cd frontend && npm run build`
+- Frontend E2E tests: `cd frontend && npm run test:e2e`
+- Frontend visual tests: `cd frontend && npm run test:vr`
+- Validate Compose example wiring: `docker compose --env-file .env.example config`
 
 If Maven cannot write to the default local cache, use:
 
@@ -37,3 +40,5 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean test
 - Keep frontend code minimal: add abstractions only when they remove real duplication or match an established local pattern.
 - Avoid frontend layout magic numbers; use named constants, CSS variables, or theme tokens for repeated structural dimensions.
 - For UI-facing acceptance criteria, include unit tests, Playwright E2E tests, and Playwright visual regression tests.
+- When `.plans/` defines an active slice, treat its test gate as required; skipped environment-dependent tests are unverified, not passed.
+- For generated filesystem caches, enforce storage-root containment and use atomic, concurrency-safe writes and database upserts.

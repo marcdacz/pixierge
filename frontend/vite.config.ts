@@ -10,9 +10,26 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: process.env.VITE_PROXY_TARGET ?? 'http://localhost:8080',
+        changeOrigin: true
+      },
+      '/actuator': {
+        target: process.env.VITE_PROXY_TARGET ?? 'http://localhost:8080',
+        changeOrigin: true
+      }
+    }
+  },
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
-    setupFiles: './src/test/setup.ts'
+    setupFiles: './src/test/setup.ts',
+    env: {
+      VITE_API_BASE_URL: 'http://localhost:8080'
+    }
   }
 });

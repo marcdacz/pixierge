@@ -1,8 +1,16 @@
+# Copy to docker-compose.override.yml and replace the host paths below.
+# Docker Compose loads this file automatically with:
+#   docker compose up --build
 services:
   api:
+    # Optional: auto-create a local admin account on startup.
+    # environment:
+    #   PIXIERGE_TEST_SEED_ENABLED: "true"
+    #   PIXIERGE_TEST_SEED_ADMIN_USERNAME: admin
+    #   PIXIERGE_TEST_SEED_ADMIN_PASSWORD: change-me
     volumes:
-      # Copy this file to docker-compose.override.yml and replace these
-      # host paths with folders on your machine.
+      # Photo sources must use container paths. Mount host folders here,
+      # then add matching paths like /photos/pictures in Pixierge settings.
       - /Users/your-name/Pictures:/photos/pictures:ro
       - /Volumes/ArchiveDrive/Photos:/photos/archive:ro
       - /Users/your-name/Scans:/photos/scans:ro

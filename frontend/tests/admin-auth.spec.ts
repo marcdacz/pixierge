@@ -1,7 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const apiBaseUrl = 'http://localhost:8080';
-
 const authBody = {
   csrfToken: 'csrf-token',
   user: {
@@ -22,8 +20,8 @@ const assetFileSvg = `
 
 const assetDetailResponse = {
   id: 'asset-1',
-  contentHash: 'provisional:pending',
-  identityStatus: 'pending',
+  contentHash: 'confirmed-content-hash',
+  identityStatus: 'confirmed',
   mediaType: 'image/jpeg',
   availability: 'available',
   duplicateCount: 1,
@@ -66,7 +64,7 @@ const assetBrowseResponse = {
           libraryId: 'library-1',
           libraryName: 'Family Photos',
           availability: 'available',
-          identityStatus: 'pending',
+          identityStatus: 'confirmed',
           duplicateCount: 1,
           capturedAt: null,
           observedAt: '2026-07-04T00:00:00Z',
@@ -74,7 +72,10 @@ const assetBrowseResponse = {
           mimeType: 'image/jpeg',
           width: null,
           height: null,
-          previewable: true
+          previewable: true,
+          thumbnailStatus: 'ready',
+          thumbnailCacheKey: 'e2e-thumbnail-v1',
+          thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110))'
         }
       ]
     }
@@ -109,7 +110,8 @@ const libraryTreeResponse = {
       ]
     }
   ],
-  libraryRootAssetCounts: {}
+  libraryRootAssetCounts: {},
+  libraryAssetCounts: {}
 };
 
 test('admin setup, empty library, settings, and profile logout', async ({ page }) => {
@@ -138,7 +140,7 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
 
   await page.getByRole('button', { name: 'Source path Docker guidance' }).hover();
   await expect(page.getByText(/Docker sources must use container paths/)).toBeVisible();
-  await page.getByLabel('Source path').fill('/photos/family');
+  await page.getByRole('textbox', { name: 'Source path' }).fill('/photos/family');
   await page.getByRole('button', { name: 'Add source' }).click();
   await expect(page.getByText('/photos/family')).toBeVisible();
   await expect(
@@ -158,9 +160,11 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   await page.getByLabel('Search').fill('beach');
   await expect(page.getByRole('button', { name: 'Open beach.jpg' })).toBeVisible();
   await page.getByRole('button', { name: 'Open beach.jpg' }).click();
-  await expect(page.getByRole('button', { name: 'Close' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close photo viewer' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show photo metadata' }).click();
   await expect(page.getByText('/photos/family/beach.jpg').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Dismiss photo metadata' }).click();
+  await page.getByRole('button', { name: 'Close photo viewer' }).click();
 
   await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
   await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Plugins' }).click();
@@ -173,7 +177,7 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
 
-test('scan activity indicator and pending asset detail @visual', async ({ page }) => {
+test('scan activity indicator and confirmed asset detail @visual', async ({ page }) => {
   await mockPixiergeApi(page);
   await completeBrowsableLibrarySetup(page);
 
@@ -187,7 +191,8 @@ test('scan activity indicator and pending asset detail @visual', async ({ page }
 
   await page.getByRole('button', { name: 'Libraries' }).click();
   await page.getByRole('button', { name: 'Open beach.jpg' }).click();
-  await expect(page.getByText('Identity').locator('..')).toContainText('pending');
+  await page.getByRole('button', { name: 'Show photo metadata' }).click();
+  await expect(page.getByText('Identity').locator('..')).toContainText('confirmed');
   await expect(page.getByText('Metadata').locator('..')).toContainText('pending');
 });
 
@@ -197,6 +202,7 @@ test('authenticated shell visual regression @visual', async ({ page }) => {
 
   await expect(page.getByRole('navigation', { name: 'Folders' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open beach.jpg' })).toBeVisible();
+  await expect(page.locator('img[src="/api/assets/asset-1/thumbnail?c=e2e-thumbnail-v1"]')).toHaveClass(/opacity-100/);
   await expect(page).toHaveScreenshot('browse-library.png', {
     fullPage: true
   });
@@ -230,7 +236,7 @@ async function mockPixiergeApi(page: Page) {
     }[];
   }>();
 
-  await page.route(`${apiBaseUrl}/api/**`, async (route) => {
+  await page.route('**/api/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
 
@@ -281,6 +287,14 @@ async function mockPixiergeApi(page: Page) {
       return;
     }
 
+    if (path === '/api/assets/asset-1/thumbnail' || path === '/api/assets/asset-1/preview') {
+      await route.fulfill({
+        body: assetFileSvg,
+        contentType: 'image/svg+xml'
+      });
+      return;
+    }
+
     if (path === '/api/assets/asset-1') {
       await route.fulfill({ json: assetDetailResponse });
       return;
@@ -288,6 +302,11 @@ async function mockPixiergeApi(page: Page) {
 
     if (path === '/api/assets') {
       await route.fulfill({ json: assetBrowseResponse });
+      return;
+    }
+
+    if (path === '/api/settings/global-exclusion-patterns' && request.method() === 'GET') {
+      await route.fulfill({ json: [] });
       return;
     }
 
@@ -531,7 +550,7 @@ async function completeBrowsableLibrarySetup(page: Page) {
   await page.getByRole('button', { name: 'Configure sources' }).click();
   await page.getByLabel('Library name').fill('Family Photos');
   await page.getByRole('button', { name: 'Create' }).click();
-  await page.getByLabel('Source path').fill('/photos/family');
+  await page.getByRole('textbox', { name: 'Source path' }).fill('/photos/family');
   await page.getByRole('button', { name: 'Add source' }).click();
   await page.getByRole('button', { name: 'Libraries' }).click();
   await expect(page.getByRole('heading', { name: 'All folders' })).toBeVisible();

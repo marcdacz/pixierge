@@ -201,6 +201,14 @@ class AssetRepository {
                 .toList();
     }
 
+    List<UUID> listConfirmedAssetIds() {
+        return queryFactory
+                .select(ASSETS.id)
+                .from(ASSETS)
+                .where(ASSETS.contentHash.isNotNull(), ASSETS.contentHash.startsWith("provisional:").not())
+                .fetch();
+    }
+
     void upsertMetadata(MetadataUpdate update) {
         long updated = queryFactory.update(ASSET_METADATA)
                 .set(ASSET_METADATA.capturedAt, update.capturedAt())
@@ -408,6 +416,17 @@ class AssetRepository {
         return value == null ? 0 : value;
     }
 
+    private static boolean isImageMedia(String mimeType, String mediaType) {
+        if (mimeType != null && mimeType.startsWith(IMAGE_MIME_PREFIX)) {
+            return true;
+        }
+        if (mediaType == null || mediaType.isBlank()) {
+            return false;
+        }
+        String normalized = mediaType.toLowerCase(Locale.ROOT);
+        return normalized.equals("image") || normalized.startsWith(IMAGE_MIME_PREFIX);
+    }
+
     record AssetSearchCriteria(
             UUID libraryId,
             String folder,
@@ -475,6 +494,7 @@ class AssetRepository {
             String mimeType,
             Integer width,
             Integer height,
+            String contentHash,
             boolean previewable
     ) {
     }
@@ -590,14 +610,13 @@ class AssetRepository {
                     display.mimeType(),
                     display.width(),
                     display.height(),
+                    first.contentHash(),
                     isPreviewable(display)
             );
         }
 
         private boolean isPreviewable(AssetFileRow row) {
-            return FILE_STATUS_ACTIVE.equals(row.status())
-                    && (row.mimeType() != null && row.mimeType().startsWith(IMAGE_MIME_PREFIX)
-                    || row.mediaType() != null && row.mediaType().startsWith(IMAGE_MIME_PREFIX));
+            return FILE_STATUS_ACTIVE.equals(row.status()) && isImageMedia(row.mimeType(), row.mediaType());
         }
     }
 }

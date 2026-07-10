@@ -4,6 +4,7 @@ import com.pixierge.api.identity.AuthenticatedUser;
 import org.springframework.core.io.PathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -17,9 +18,11 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.pixierge.api.assets.AssetConstants.DEFAULT_PAGE_SIZE;
@@ -27,6 +30,7 @@ import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_EXTRACTED
 import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_FAILED;
 import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_UNSUPPORTED;
 import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_ACTIVE;
+import static com.pixierge.api.assets.AssetConstants.IDENTITY_STATUS_PENDING;
 import static com.pixierge.api.assets.AssetConstants.IMAGE_MIME_PREFIX;
 import static com.pixierge.api.assets.AssetConstants.MAX_PAGE_SIZE;
 import static com.pixierge.api.assets.AssetConstants.METADATA_BACKFILL_BATCH_SIZE;
@@ -38,9 +42,11 @@ public class AssetService {
     private static final String METADATA_SOURCE_VERSION = "file-basic-v1";
 
     private final AssetRepository assetRepository;
+    private final ThumbnailService thumbnailService;
 
-    public AssetService(AssetRepository assetRepository) {
+    public AssetService(AssetRepository assetRepository, ThumbnailService thumbnailService) {
         this.assetRepository = assetRepository;
+        this.thumbnailService = thumbnailService;
     }
 
     @Transactional(readOnly = true)
@@ -53,9 +59,12 @@ public class AssetService {
         }
 
         Map<String, MutableTreeNode> nodes = new LinkedHashMap<>();
-        Map<UUID, Integer> rootAssetCounts = new LinkedHashMap<>();
+        Map<UUID, Set<UUID>> rootAssetIdsByLibrary = new LinkedHashMap<>();
+        Map<UUID, Set<UUID>> libraryAssetIds = new LinkedHashMap<>();
 
         for (AssetRepository.FolderRow row : assetRepository.listFolders(user.id(), admin, libraryId)) {
+            libraryAssetIds.computeIfAbsent(row.libraryId(), ignored -> new LinkedHashSet<>()).add(row.assetId());
+
             List<String> roots = rootsByLibrary.getOrDefault(row.libraryId(), List.of());
             String root = matchingRoot(row.folderPath(), roots);
             List<String> parts;
@@ -71,7 +80,8 @@ public class AssetService {
 
             if (parts.isEmpty()) {
                 if (root != null) {
-                    rootAssetCounts.merge(row.libraryId(), 1, Integer::sum);
+                    rootAssetIdsByLibrary.computeIfAbsent(row.libraryId(), ignored -> new LinkedHashSet<>())
+                            .add(row.assetId());
                 }
                 continue;
             }
@@ -103,7 +113,11 @@ public class AssetService {
                 .sorted(Comparator.comparing(MutableTreeNode::name, String.CASE_INSENSITIVE_ORDER))
                 .map(MutableTreeNode::toResponse)
                 .toList();
-        return new LibraryTreeResponse(roots, rootAssetCounts);
+        return new LibraryTreeResponse(
+                roots,
+                toAssetCountMap(rootAssetIdsByLibrary),
+                toAssetCountMap(libraryAssetIds)
+        );
     }
 
     @Transactional(readOnly = true)
@@ -133,9 +147,13 @@ public class AssetService {
                 normalizedPageSize
         );
         AssetRepository.BrowseRows rows = assetRepository.browse(user.id(), canAdminLibraries(user), criteria);
+        Map<String, ThumbnailService.ThumbnailBrowseSummary> thumbnailSummaries = thumbnailService.browseSummaries(rows.assets().stream()
+                .map(AssetRepository.AssetSummaryRow::contentHash)
+                .toList());
         Map<String, List<AssetSummaryResponse>> byFolder = new LinkedHashMap<>();
 
         for (AssetRepository.AssetSummaryRow row : rows.assets()) {
+            ThumbnailService.ThumbnailBrowseSummary thumbnail = thumbnailSummary(row, thumbnailSummaries);
             AssetSummaryResponse response = new AssetSummaryResponse(
                     row.assetId(),
                     row.fileName(),
@@ -152,7 +170,10 @@ public class AssetService {
                     row.mimeType(),
                     row.width(),
                     row.height(),
-                    row.previewable()
+                    row.previewable(),
+                    thumbnail.status(),
+                    thumbnail.cacheKey(),
+                    thumbnail.placeholder()
             );
             byFolder.computeIfAbsent(row.folderPath(), ignored -> new ArrayList<>()).add(response);
         }
@@ -167,6 +188,19 @@ public class AssetService {
                 normalizedPageSize,
                 (normalizedPage + 1) * normalizedPageSize < rows.totalCount()
         );
+    }
+
+    private ThumbnailService.ThumbnailBrowseSummary thumbnailSummary(
+            AssetRepository.AssetSummaryRow row,
+            Map<String, ThumbnailService.ThumbnailBrowseSummary> thumbnailSummaries
+    ) {
+        if (!row.previewable()) {
+            return ThumbnailService.ThumbnailBrowseSummary.missing();
+        }
+        if (IDENTITY_STATUS_PENDING.equals(row.identityStatus())) {
+            return new ThumbnailService.ThumbnailBrowseSummary("pending", null, null);
+        }
+        return thumbnailSummaries.getOrDefault(row.contentHash(), ThumbnailService.ThumbnailBrowseSummary.missing());
     }
 
     @Transactional(readOnly = true)
@@ -207,6 +241,57 @@ public class AssetService {
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset file is unavailable");
         }
+    }
+
+    @Transactional
+    public ThumbnailResponseResource thumbnail(AuthenticatedUser user, UUID assetId, String size) {
+        AssetDetailResponse asset = getAsset(user, assetId);
+        return switch (size == null ? "grid" : size) {
+            case "tiny" -> thumbnailService.tinyThumbnail(asset);
+            case "grid" -> thumbnailService.gridThumbnail(asset);
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported thumbnail size");
+        };
+    }
+
+    @Transactional(noRollbackFor = ResponseStatusException.class, propagation = Propagation.REQUIRED)
+    public ThumbnailResponseResource preview(AuthenticatedUser user, UUID assetId) {
+        AssetDetailResponse asset = getAsset(user, assetId);
+        try {
+            return thumbnailService.previewThumbnail(asset);
+        } catch (ResponseStatusException exception) {
+            if (exception.getStatusCode() != HttpStatus.NOT_FOUND) {
+                throw exception;
+            }
+            return toPreviewFromOriginal(asset);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    List<AssetDetailResponse> listConfirmedAssets() {
+        return assetRepository.listConfirmedAssetIds().stream()
+                .map(id -> assetRepository.findAsset(null, true, id)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found")))
+                .map(detail -> new AssetDetailResponse(
+                        detail.assetId(),
+                        detail.contentHash(),
+                        detail.identityStatus(),
+                        detail.mediaType(),
+                        detail.availability(),
+                        detail.duplicateCount(),
+                        detail.metadata(),
+                        detail.files()
+                ))
+                .toList();
+    }
+
+    @Transactional
+    public ThumbnailAdminActionResponse rebuildMissingThumbnails() {
+        return thumbnailService.rebuildMissing(this);
+    }
+
+    @Transactional
+    public ThumbnailAdminActionResponse purgeStaleThumbnails() {
+        return thumbnailService.purgeStale();
     }
 
     @Transactional
@@ -341,6 +426,14 @@ public class AssetService {
         return value == null || value.isBlank() ? null : value;
     }
 
+    private static Map<UUID, Integer> toAssetCountMap(Map<UUID, Set<UUID>> assetIdsByLibrary) {
+        Map<UUID, Integer> counts = new LinkedHashMap<>();
+        for (Map.Entry<UUID, Set<UUID>> entry : assetIdsByLibrary.entrySet()) {
+            counts.put(entry.getKey(), entry.getValue().size());
+        }
+        return counts;
+    }
+
     private String folderName(String path) {
         int lastSlash = path.lastIndexOf('/');
         if (lastSlash < 0 || lastSlash == path.length() - 1) {
@@ -355,6 +448,35 @@ public class AssetService {
             return null;
         }
         return fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private ThumbnailResponseResource toPreviewFromOriginal(AssetDetailResponse asset) {
+        AssetFileOccurrenceResponse activeFile = asset.files().stream()
+                .filter(file -> FILE_STATUS_ACTIVE.equals(file.status()))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active asset file not found"));
+        Path path = Path.of(activeFile.path()).toAbsolutePath().normalize();
+        if (!Files.isRegularFile(path) || !Files.isReadable(path)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset file is unavailable");
+        }
+        String contentType;
+        long size;
+        try {
+            contentType = Files.probeContentType(path);
+            if (contentType == null || !contentType.startsWith(IMAGE_MIME_PREFIX)) {
+                throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Asset file cannot be previewed");
+            }
+            size = Files.size(path);
+        } catch (IOException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset file is unavailable");
+        }
+        return new ThumbnailResponseResource(
+                new PathResource(path),
+                size,
+                contentType,
+                null,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
     }
 
     private record MetadataResult(
@@ -374,7 +496,7 @@ public class AssetService {
         private final String path;
         private final String name;
         private final Map<String, MutableTreeNode> children = new LinkedHashMap<>();
-        private final List<UUID> assetIds = new ArrayList<>();
+        private final Set<UUID> assetIds = new LinkedHashSet<>();
 
         private MutableTreeNode(String id, UUID libraryId, String libraryName, String path, String name) {
             this.id = id;
@@ -388,21 +510,26 @@ public class AssetService {
             return name;
         }
 
+        private Set<UUID> subtreeAssetIds() {
+            Set<UUID> ids = new LinkedHashSet<>(assetIds);
+            for (MutableTreeNode child : children.values()) {
+                ids.addAll(child.subtreeAssetIds());
+            }
+            return ids;
+        }
+
         private LibraryTreeNodeResponse toResponse() {
             List<LibraryTreeNodeResponse> childResponses = children.values().stream()
                     .sorted(Comparator.comparing(MutableTreeNode::name, String.CASE_INSENSITIVE_ORDER))
                     .map(MutableTreeNode::toResponse)
                     .toList();
-            int childAssetCount = childResponses.stream()
-                    .mapToInt(LibraryTreeNodeResponse::assetCount)
-                    .sum();
             return new LibraryTreeNodeResponse(
                     id,
                     libraryId,
                     libraryName,
                     path,
                     name,
-                    assetIds.size() + childAssetCount,
+                    subtreeAssetIds().size(),
                     childResponses.size(),
                     childResponses
             );

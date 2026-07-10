@@ -19,6 +19,9 @@ public record AssetSummaryResponse(
         String mimeType,
         Integer width,
         Integer height,
-        boolean previewable
+        boolean previewable,
+        String thumbnailStatus,
+        String thumbnailCacheKey,
+        String thumbnailPlaceholder
 ) {
 }
