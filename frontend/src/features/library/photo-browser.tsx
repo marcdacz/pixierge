@@ -1,4 +1,4 @@
-import { FileImage } from 'lucide-react';
+import { FileImage, Hash, Heart, HeartOff, Images } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import {
   addAlbumItems,
@@ -386,10 +386,20 @@ export function PhotoBrowser({
   const selectionIsFavourited = selectedAssets.length > 0 && selectedAssets.every((asset) => asset.favourited);
   const contextMenuActions: AssetContextMenuAction[] = [
     selectionIsFavourited
-      ? { id: 'remove-favourites', label: 'Remove from favourites', onSelect: () => void removeFromFavourites() }
-      : { id: 'favourites', label: 'Add to favourites', onSelect: () => void addToFavourites() },
-    { id: 'albums', label: 'Add to albums…', onSelect: () => void openPicker('albums') },
-    { id: 'tags', label: 'Add tags…', onSelect: () => void openPicker('tags') },
+      ? {
+          id: 'remove-favourites',
+          icon: HeartOff,
+          label: 'Remove from favourites',
+          onSelect: () => void removeFromFavourites()
+        }
+      : {
+          id: 'favourites',
+          icon: Heart,
+          label: 'Add to favourites',
+          onSelect: () => void addToFavourites()
+        },
+    { id: 'albums', icon: Images, label: 'Add to albums…', onSelect: () => void openPicker('albums') },
+    { id: 'tags', icon: Hash, label: 'Add tags…', onSelect: () => void openPicker('tags') },
     ...(typeof extraContextActions === 'function'
       ? extraContextActions({
           selectedIds: selection.selectedIds,

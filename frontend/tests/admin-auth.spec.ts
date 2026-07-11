@@ -171,6 +171,13 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   await page.getByRole('button', { name: 'Close photo viewer' }).click();
 
   await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Scheduler details' }).click();
+  await expect(page.getByRole('heading', { name: 'Scheduler details' })).toBeVisible();
+  await expect(page.getByText('Metadata scan')).toBeVisible();
+  await page.getByRole('button', { name: 'Run now · Metadata scan' }).click();
+  const metadataSchedulerRow = page.getByRole('row').filter({ hasText: 'Metadata scan' });
+  await expect(metadataSchedulerRow.getByText(/^Last: (?!—$).+/)).toBeVisible();
+  await expect(metadataSchedulerRow.getByText('succeeded')).toBeVisible();
   await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Plugins' }).click();
   await expect(page.getByRole('heading', { name: 'Plugins' })).toBeVisible();
   await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Backups' }).click();
@@ -268,6 +275,18 @@ test('selects photos and assigns albums and tags', async ({ page }) => {
   await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
 });
 
+test('scheduler details visual regression @visual', async ({ page }) => {
+  await mockPixiergeApi(page);
+  await completeBrowsableLibrarySetup(page);
+  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Scheduler details' }).click();
+  await expect(page.getByRole('heading', { name: 'Scheduler details' })).toBeVisible();
+  await expect(page.getByText('Metadata scan')).toBeVisible();
+  await expect(page).toHaveScreenshot('settings-scheduler-details.png', {
+    fullPage: true
+  });
+});
+
 test('favourites organizer visual regression @visual', async ({ page }) => {
   await mockPixiergeApi(page);
   await completeBrowsableLibrarySetup(page);
@@ -302,6 +321,49 @@ async function mockPixiergeApi(page: Page) {
   let setupRequired = true;
   let signedIn = false;
   let scanStatus: 'running' | 'completed' = 'completed';
+  let schedulerJobs = [
+    {
+      id: 'job-metadata',
+      jobKey: 'core.metadata-scan',
+      displayName: 'Metadata scan',
+      description: 'Extracts metadata for assets that still need extraction.',
+      ownerType: 'core',
+      enabled: true,
+      cronExpression: '0 30 2 * * *',
+      timezone: 'UTC',
+      nextRunAt: '2026-07-12T02:30:00Z',
+      lastRunAt: null as string | null,
+      lastStatus: null as string | null,
+      timeoutSeconds: 7200,
+      concurrencyKey: 'core:metadata-scan'
+    },
+    {
+      id: 'job-library',
+      jobKey: 'core.library-scan',
+      displayName: 'Library scan',
+      description: 'Scans all active libraries.',
+      ownerType: 'core',
+      enabled: true,
+      cronExpression: '0 0 2 * * *',
+      timezone: 'UTC',
+      nextRunAt: '2026-07-12T02:00:00Z',
+      lastRunAt: null as string | null,
+      lastStatus: null as string | null,
+      timeoutSeconds: 21600,
+      concurrencyKey: 'core:library-scan'
+    }
+  ];
+  let schedulerRuns: Array<{
+    id: string;
+    jobId: string;
+    triggerSource: 'manual' | 'scheduled';
+    status: string;
+    startedAt: string;
+    finishedAt: string | null;
+    durationMs: number | null;
+    summaryJson: string | null;
+    errorMessage: string | null;
+  }> = [];
   const albums: Array<{
     id: string;
     name: string;
@@ -557,6 +619,58 @@ async function mockPixiergeApi(page: Page) {
           }
         ]
       });
+      return;
+    }
+
+    if (path === '/api/admin/scheduler/jobs' && request.method() === 'GET') {
+      await route.fulfill({ json: schedulerJobs });
+      return;
+    }
+
+    const schedulerRunMatch = path.match(/^\/api\/admin\/scheduler\/jobs\/([^/]+)\/run$/);
+    if (schedulerRunMatch && request.method() === 'POST') {
+      const jobId = schedulerRunMatch[1];
+      const run = {
+        id: `run-${schedulerRuns.length + 1}`,
+        jobId,
+        triggerSource: 'manual' as const,
+        status: 'succeeded',
+        startedAt: '2026-07-11T08:00:00Z',
+        finishedAt: '2026-07-11T08:00:01Z',
+        durationMs: 1000,
+        summaryJson: '{"processedCount":0,"failedCount":0}',
+        errorMessage: null
+      };
+      schedulerRuns = [run, ...schedulerRuns];
+      schedulerJobs = schedulerJobs.map((job) =>
+        job.id === jobId
+          ? { ...job, lastRunAt: run.finishedAt, lastStatus: 'succeeded' }
+          : job
+      );
+      await route.fulfill({ status: 202, json: run });
+      return;
+    }
+
+    const schedulerJobMatch = path.match(/^\/api\/admin\/scheduler\/jobs\/([^/]+)$/);
+    if (schedulerJobMatch && request.method() === 'PATCH') {
+      const jobId = schedulerJobMatch[1];
+      const body = request.postDataJSON() as {
+        enabled?: boolean;
+        cronExpression?: string;
+        timezone?: string;
+      };
+      schedulerJobs = schedulerJobs.map((job) =>
+        job.id === jobId
+          ? {
+              ...job,
+              enabled: body.enabled ?? job.enabled,
+              cronExpression: body.cronExpression ?? job.cronExpression,
+              timezone: body.timezone ?? job.timezone,
+              nextRunAt: (body.enabled ?? job.enabled) ? job.nextRunAt : null
+            }
+          : job
+      );
+      await route.fulfill({ json: schedulerJobs.find((job) => job.id === jobId) });
       return;
     }
 

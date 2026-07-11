@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 
 export type AssetContextMenuAction = {
   id: string;
   label: string;
+  icon?: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
   onSelect: () => void;
 };
 
@@ -84,20 +85,24 @@ export function AssetContextMenu({ open, x, y, actions, onClose }: AssetContextM
       role="menu"
       style={{ left: position.left, top: position.top }}
     >
-      {actions.map((action) => (
-        <button
-          className="flex w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
-          key={action.id}
-          onClick={() => {
-            action.onSelect();
-            onClose();
-          }}
-          role="menuitem"
-          type="button"
-        >
-          {action.label}
-        </button>
-      ))}
+      {actions.map((action) => {
+        const Icon = action.icon;
+        return (
+          <button
+            className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
+            key={action.id}
+            onClick={() => {
+              action.onSelect();
+              onClose();
+            }}
+            role="menuitem"
+            type="button"
+          >
+            {Icon ? <Icon aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" /> : null}
+            <span>{action.label}</span>
+          </button>
+        );
+      })}
     </div>,
     document.body
   );

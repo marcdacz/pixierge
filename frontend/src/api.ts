@@ -214,6 +214,34 @@ export type AlbumSummary = {
   updatedAt: string;
 };
 
+export type SchedulerJob = {
+  id: string;
+  jobKey: string;
+  displayName: string;
+  description: string;
+  ownerType: string;
+  enabled: boolean;
+  cronExpression: string;
+  timezone: string;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  timeoutSeconds: number;
+  concurrencyKey: string;
+};
+
+export type SchedulerJobRun = {
+  id: string;
+  jobId: string;
+  triggerSource: 'scheduled' | 'manual';
+  status: string;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  summaryJson: string | null;
+  errorMessage: string | null;
+};
+
 export type TagSummary = {
   id: string;
   name: string;
@@ -514,6 +542,29 @@ export async function removeAlbumItems(albumId: string, assetIds: string[], csrf
 
 export async function fetchFavourites(): Promise<AlbumSummary> {
   return requestJson<AlbumSummary>('/api/favourites');
+}
+
+export async function fetchSchedulerJobs(): Promise<SchedulerJob[]> {
+  return requestJson<SchedulerJob[]>('/api/admin/scheduler/jobs');
+}
+
+export async function updateSchedulerJob(
+  jobId: string,
+  input: { enabled?: boolean; cronExpression?: string; timezone?: string },
+  csrfToken: string
+): Promise<SchedulerJob> {
+  return requestJson<SchedulerJob>(`/api/admin/scheduler/jobs/${jobId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export async function runSchedulerJob(jobId: string, csrfToken: string): Promise<SchedulerJobRun> {
+  return requestJson<SchedulerJobRun>(`/api/admin/scheduler/jobs/${jobId}/run`, {
+    method: 'POST',
+    csrfToken
+  });
 }
 
 export async function fetchFavouritesAssets(page = 0, pageSize = 48): Promise<AssetBrowseResponse> {

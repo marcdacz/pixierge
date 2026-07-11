@@ -450,10 +450,10 @@ describe('App', () => {
     const thumbnail = document.querySelector(thumbnailSelector) as HTMLImageElement;
     expect(thumbnail).toHaveClass('opacity-0');
     fireEvent.load(thumbnail);
-    expect(thumbnail).toHaveClass('opacity-100');
+    await waitFor(() => expect(thumbnail).toHaveClass('opacity-100'));
     fireEvent.error(thumbnail);
 
-    expect(document.querySelector(thumbnailSelector)).toBeNull();
+    await waitFor(() => expect(document.querySelector(thumbnailSelector)).toBeNull());
     expect(document.querySelector('[data-asset-placeholder="asset-1"]')).not.toBeNull();
   });
 

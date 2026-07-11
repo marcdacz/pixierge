@@ -47,6 +47,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/libraries/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)
                         .requestMatchers("/api/settings/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)
                         .requestMatchers("/api/admin/thumbnails/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)
+                        .requestMatchers("/api/admin/scheduler/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)
                         .requestMatchers("/api/admin/**").hasAuthority(IdentityConstants.PERMISSION_IDENTITY_ADMIN)
                         .anyRequest().authenticated())
                 .addFilterBefore(sessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

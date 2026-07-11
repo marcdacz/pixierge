@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Images } from 'lucide-react';
+import { FolderMinus, Images, Star } from 'lucide-react';
 import {
   addAlbumItems,
   assetThumbnailUrl,
@@ -231,6 +231,7 @@ export function AlbumsHome({ auth }: { auth: AuthResponse }) {
                 ? [
                     {
                       id: 'set-key-photo',
+                      icon: Star,
                       label: 'Set as key photo',
                       onSelect: () => {
                         void (async () => {
@@ -242,6 +243,7 @@ export function AlbumsHome({ auth }: { auth: AuthResponse }) {
                 : []),
               {
                 id: 'remove-album',
+                icon: FolderMinus,
                 label: 'Remove from album',
                 onSelect: () => {
                   void (async () => {

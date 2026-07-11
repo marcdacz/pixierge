@@ -3,10 +3,12 @@ import {
   Archive,
   Blocks,
   CircleHelp,
-  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   ChevronRight,
   ChevronDown,
   CheckCircle2,
+  CalendarClock,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -44,6 +46,7 @@ import {
   isScanInProgress
 } from '@/features/scans/scan-utils';
 import { ScanStatsGrid } from '@/features/scans/scan-stats-grid';
+import { SchedulerDetails } from '@/features/settings/scheduler-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,7 +63,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-type SettingsView = 'configuration' | 'plugins' | 'backups';
+type SettingsView = 'configuration' | 'scheduler' | 'plugins' | 'backups';
 
 type SettingsItem = {
   description: string;
@@ -75,6 +78,12 @@ const settingsItems: SettingsItem[] = [
     icon: SlidersHorizontal,
     label: 'Configuration',
     view: 'configuration'
+  },
+  {
+    description: 'View and run registered recurring jobs and their cron schedules.',
+    icon: CalendarClock,
+    label: 'Scheduler details',
+    view: 'scheduler'
   },
   {
     description: 'Plugin installation and lifecycle controls will live here.',
@@ -142,33 +151,39 @@ export function SettingsPage({
     >
       <aside className="border-r border-border pr-4">
         <div className="mb-4 grid gap-3">
-          <div className={cn('grid gap-1', effectiveNavCollapsed && 'justify-items-center')}>
-            <h1 className={cn('text-2xl font-semibold text-foreground', effectiveNavCollapsed && 'sr-only')}>Settings</h1>
-            <p className={cn('text-sm text-muted-foreground', effectiveNavCollapsed && 'sr-only')}>
-              Configure Pixierge operations.
-            </p>
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                aria-label={effectiveNavCollapsed ? 'Expand settings navigation' : 'Collapse settings navigation'}
-                className={cn(
-                  'flex h-10 items-center rounded-md text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                  effectiveNavCollapsed ? 'w-10 justify-center self-center' : 'w-full justify-start gap-3 px-3'
-                )}
-                onClick={() => setSettingsNavCollapsed((collapsed) => !collapsed)}
+          {effectiveNavCollapsed ? (
+            <>
+              <h1 className="sr-only">Settings</h1>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label="Expand settings navigation"
+                    className="self-center"
+                    onClick={() => setSettingsNavCollapsed(false)}
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <ChevronsRight className="h-4 w-4" aria-hidden />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Expand settings navigation</TooltipContent>
+              </Tooltip>
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
+              <Button
+                aria-label="Collapse settings navigation"
+                onClick={() => setSettingsNavCollapsed(true)}
+                size="icon"
                 type="button"
+                variant="ghost"
               >
-                {effectiveNavCollapsed ? (
-                  <ChevronRight className="h-4 w-4" aria-hidden />
-                ) : (
-                  <ChevronLeft className="h-4 w-4" aria-hidden />
-                )}
-                {!effectiveNavCollapsed && <span>Collapse</span>}
-              </button>
-            </TooltipTrigger>
-            {effectiveNavCollapsed && <TooltipContent side="right">Expand settings navigation</TooltipContent>}
-          </Tooltip>
+                <ChevronsLeft className="h-4 w-4" aria-hidden />
+              </Button>
+            </div>
+          )}
         </div>
 
         <nav aria-label="Settings" className="grid gap-1">
@@ -246,6 +261,8 @@ function SettingsContent({
           onError={onError}
           onLibrariesChange={onLibrariesChange}
         />
+      ) : item.view === 'scheduler' ? (
+        <SchedulerDetails auth={auth} onError={onError} />
       ) : (
         <EmptySettingsPage label={item.label} />
       )}
