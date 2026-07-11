@@ -11,6 +11,7 @@ services:
     volumes:
       # Photo sources must use container paths. Mount host folders here,
       # then add matching paths like /photos/pictures in Pixierge settings.
-      - /Users/your-name/Pictures:/photos/pictures:ro
-      - /Volumes/ArchiveDrive/Photos:/photos/archive:ro
-      - /Users/your-name/Scans:/photos/scans:ro
+      # Use read-write mounts so folder rename can update the filesystem.
+      - /Users/your-name/Pictures:/photos/pictures
+      - /Volumes/ArchiveDrive/Photos:/photos/archive
+      - /Users/your-name/Scans:/photos/scans

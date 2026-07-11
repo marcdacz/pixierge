@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchLibraries, fetchSession, fetchSetupStatus, type AuthResponse, type LibrarySummary } from '@/api';
+import { fetchLibraries, fetchSession, fetchSetupStatus, updateLibrary, type AuthResponse, type LibrarySummary } from '@/api';
 import { AppFrame } from '@/components/app-frame';
 import { ToastViewport, type ToastMessage } from '@/components/ui/toast';
 import { LoginForm, SetupForm } from '@/features/identity/identity-forms';
 import { LibraryHome } from '@/features/library/library-home';
+import { AlbumsHome } from '@/features/albums/albums-home';
 import { ScanActivityProvider } from '@/features/scans/scan-activity-context';
 import { SettingsPage } from '@/features/settings/settings-page';
+import { TagsHome } from '@/features/tags/tags-home';
 
-export type AppView = 'libraries' | 'albums' | 'settings';
+export type AppView = 'libraries' | 'albums' | 'tags' | 'settings';
 
 type AppState =
   | { state: 'loading' }
@@ -166,7 +168,7 @@ export function App() {
       <ScanActivityProvider>
         <AppFrame
           auth={appState.auth}
-          contentMode={currentView === 'settings' || currentView === 'libraries' ? 'edge' : 'constrained'}
+          contentMode={currentView === 'settings' || currentView === 'libraries' || currentView === 'albums' || currentView === 'tags' ? 'edge' : 'constrained'}
           currentView={currentView}
           libraries={libraries}
           onLibrarySearchChange={setLibrarySearchInput}
@@ -180,13 +182,20 @@ export function App() {
           {currentView === 'libraries' && (
             <LibraryHome
               error={librariesError}
+              auth={appState.auth}
               libraries={libraries}
               loading={librariesLoading}
               onConfigureSources={() => setCurrentView('settings')}
+              onError={showErrorToast}
+              onRenameLibrary={async (libraryId, name) => {
+                const updated = await updateLibrary(libraryId, { name }, appState.auth.csrfToken);
+                setLibraries((current) => current.map((library) => (library.id === updated.id ? updated : library)));
+              }}
               searchQuery={librarySearchQuery}
             />
           )}
-          {currentView === 'albums' && <LibraryHome variant="albums" />}
+          {currentView === 'albums' && <AlbumsHome auth={appState.auth} />}
+          {currentView === 'tags' && <TagsHome auth={appState.auth} />}
           {currentView === 'settings' && (
             <SettingsPage
               auth={appState.auth}

@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -17,6 +18,7 @@ import java.util.UUID;
 public class LibraryService {
 
     private static final int MAX_LIBRARY_NAME_LENGTH = 80;
+    private static final int MAX_FOLDER_NAME_LENGTH = 255;
     private static final int MAX_PATH_LENGTH = 1_024;
     private static final int MAX_EXCLUSION_PATTERN_LENGTH = 256;
 
@@ -43,6 +45,28 @@ public class LibraryService {
         UUID libraryId;
         try {
             libraryId = libraryRepository.createLibrary(name, creatorId);
+        } catch (DataIntegrityViolationException exception) {
+            if (libraryRepository.isDuplicateKey(exception)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Library name already exists", exception);
+            }
+            throw exception;
+        }
+
+        return findLibrary(libraryId);
+    }
+
+    @Transactional
+    public LibraryResponse updateLibrary(UUID libraryId, UpdateLibraryRequest request) {
+        findLibraryRecord(libraryId);
+        String name = validateLibraryName(request.name());
+        if (libraryRepository.libraryNameExistsExcluding(name, libraryId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Library name already exists");
+        }
+
+        try {
+            if (!libraryRepository.updateLibraryName(libraryId, name)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Library not found");
+            }
         } catch (DataIntegrityViolationException exception) {
             if (libraryRepository.isDuplicateKey(exception)) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Library name already exists", exception);
@@ -118,6 +142,73 @@ public class LibraryService {
         if (!libraryRepository.deleteRoot(libraryId, rootId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Source path not found");
         }
+    }
+
+    @Transactional
+    public RenameFolderResponse renameFolder(UUID libraryId, RenameFolderRequest request) {
+        LibraryRepository.LibraryRecord library = findLibraryRecord(libraryId);
+        String oldPath = normalizeAbsolutePath(request.path());
+        String newName = validateFolderName(request.name());
+
+        LibraryRepository.LibraryRootRecord matchingRoot = matchingRoot(library.roots(), oldPath);
+        if (matchingRoot == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folder is not under a library source");
+        }
+        if (oldPath.equals(normalizeAbsolutePath(matchingRoot.normalizedPath()))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Library source roots cannot be renamed here");
+        }
+
+        Path source = Path.of(oldPath);
+        Path target = source.getParent() == null ? Path.of(newName) : source.getParent().resolve(newName);
+        String newPath = normalizeAbsolutePath(target.toString());
+        if (newPath.equals(oldPath)) {
+            return new RenameFolderResponse(newPath, newName);
+        }
+        if (Files.exists(target)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A folder with that name already exists");
+        }
+        if (libraryRepository.rootPathExists(newPath)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A library source already uses that path");
+        }
+        if (!Files.exists(source) || !Files.isDirectory(source)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folder does not exist on disk");
+        }
+
+        try {
+            Files.move(source, target);
+        } catch (IOException exception) {
+            throw folderRenameFailure(exception);
+        }
+
+        try {
+            libraryRepository.rewriteAssetFilePathPrefix(oldPath, newPath);
+            libraryRepository.rewriteRootPathPrefix(oldPath, newPath);
+        } catch (RuntimeException exception) {
+            try {
+                Files.move(target, source);
+            } catch (IOException ignored) {
+                // Best-effort rollback of the filesystem move.
+            }
+            throw exception;
+        }
+
+        return new RenameFolderResponse(newPath, newName);
+    }
+
+    private ResponseStatusException folderRenameFailure(IOException exception) {
+        if (exception instanceof AccessDeniedException || isReadOnlyFileSystem(exception)) {
+            return new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Folder could not be renamed because the source path is not writable. Mount the library source as read-write and try again.",
+                    exception
+            );
+        }
+        return new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Folder could not be renamed", exception);
+    }
+
+    private boolean isReadOnlyFileSystem(IOException exception) {
+        String message = exception.getMessage();
+        return message != null && message.toLowerCase().contains("read-only");
     }
 
     @Transactional
@@ -245,6 +336,57 @@ public class LibraryService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Library name is too long");
         }
         return name;
+    }
+
+    private String validateFolderName(String rawName) {
+        String name = rawName == null ? "" : rawName.trim();
+        if (name.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folder name is required");
+        }
+        if (name.length() > MAX_FOLDER_NAME_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folder name is too long");
+        }
+        if (name.contains("/") || name.contains("\\") || name.contains("..") || name.equals(".") || name.contains("\0")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folder name is invalid");
+        }
+        return name;
+    }
+
+    private String normalizeAbsolutePath(String rawPath) {
+        String input = rawPath == null ? "" : rawPath.trim();
+        if (input.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folder path is required");
+        }
+        if (input.length() > MAX_PATH_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folder path is too long");
+        }
+        try {
+            Path path = Path.of(input).toAbsolutePath().normalize();
+            if (!path.isAbsolute()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folder path must be absolute");
+            }
+            return path.toString();
+        } catch (InvalidPathException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Folder path is invalid", exception);
+        }
+    }
+
+    private LibraryRepository.LibraryRootRecord matchingRoot(
+            List<LibraryRepository.LibraryRootRecord> roots,
+            String folderPath
+    ) {
+        LibraryRepository.LibraryRootRecord match = null;
+        int matchLength = -1;
+        for (LibraryRepository.LibraryRootRecord root : roots) {
+            String normalizedRoot = normalizeAbsolutePath(root.normalizedPath());
+            if (folderPath.equals(normalizedRoot) || folderPath.startsWith(normalizedRoot + "/")) {
+                if (normalizedRoot.length() > matchLength) {
+                    match = root;
+                    matchLength = normalizedRoot.length();
+                }
+            }
+        }
+        return match;
     }
 
     private String validateExclusionPattern(String rawPattern) {

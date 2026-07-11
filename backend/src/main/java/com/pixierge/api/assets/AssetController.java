@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 import static com.pixierge.api.assets.AssetConstants.DEFAULT_PAGE_SIZE_PARAM;
@@ -43,6 +44,7 @@ public class AssetController {
             @RequestParam(required = false) String availability,
             @RequestParam(required = false) String fileType,
             @RequestParam(required = false) Boolean duplicatesOnly,
+            @RequestParam(required = false) List<UUID> tag,
             @RequestParam(required = false, defaultValue = "0") Integer page,
             @RequestParam(required = false, defaultValue = DEFAULT_PAGE_SIZE_PARAM) Integer pageSize
     ) {
@@ -55,6 +57,7 @@ public class AssetController {
                 availability,
                 fileType,
                 duplicatesOnly,
+                tag,
                 page,
                 pageSize
         );

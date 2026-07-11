@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -34,6 +35,16 @@ public class LibraryController {
     @ResponseStatus(HttpStatus.CREATED)
     LibraryResponse createLibrary(@RequestBody CreateLibraryRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
         return libraryService.createLibrary(request, user.id());
+    }
+
+    @PatchMapping("/{libraryId}")
+    LibraryResponse updateLibrary(@PathVariable UUID libraryId, @RequestBody UpdateLibraryRequest request) {
+        return libraryService.updateLibrary(libraryId, request);
+    }
+
+    @PostMapping("/{libraryId}/folders/rename")
+    RenameFolderResponse renameFolder(@PathVariable UUID libraryId, @RequestBody RenameFolderRequest request) {
+        return libraryService.renameFolder(libraryId, request);
     }
 
     @PostMapping("/{libraryId}/roots")

@@ -7,6 +7,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
@@ -23,11 +26,13 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.HexFormat;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
 
 import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_ACTIVE;
 import static com.pixierge.api.assets.AssetConstants.IDENTITY_STATUS_PENDING;
@@ -47,12 +52,16 @@ class ThumbnailService {
     private static final int PREVIEW_WIDTH = 1600;
     private static final int PREVIEW_HEIGHT = 1200;
     private static final int GENERATION_LOCK_STRIPES = 256;
+    private static final int MAX_CONCURRENT_GENERATIONS = 2;
+    /** Soft cap on decoded pixels before the final downscale (~8MP). */
+    private static final long MAX_DECODE_PIXELS = 8_000_000L;
     private static final String THUMBNAIL_STATUS_MISSING = "missing";
     private static final String THUMBNAIL_STATUS_READY = "ready";
 
     private final ThumbnailRepository thumbnailRepository;
     private final StorageProperties storageProperties;
     private final Object[] generationLocks = new Object[GENERATION_LOCK_STRIPES];
+    private final Semaphore generationPermits = new Semaphore(MAX_CONCURRENT_GENERATIONS);
 
     ThumbnailService(ThumbnailRepository thumbnailRepository, StorageProperties storageProperties) {
         this.thumbnailRepository = thumbnailRepository;
@@ -246,53 +255,109 @@ class ThumbnailService {
     }
 
     private GeneratedThumbnail generateThumbnail(Path source, Path destination, int maxWidth, int maxHeight, boolean includePlaceholder) {
-        BufferedImage original;
         try {
-            original = ImageIO.read(source.toFile());
-            if (original == null) {
+            generationPermits.acquire();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Thumbnail generation interrupted");
+        }
+        try {
+            BufferedImage original = readScaledImage(source, maxWidth, maxHeight);
+            double scale = Math.min((double) maxWidth / original.getWidth(), (double) maxHeight / original.getHeight());
+            scale = Math.min(scale, 1.0d);
+            int targetWidth = Math.max(1, (int) Math.round(original.getWidth() * scale));
+            int targetHeight = Math.max(1, (int) Math.round(original.getHeight() * scale));
+            BufferedImage resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
+            Graphics2D graphics = resized.createGraphics();
+            try {
+                graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                graphics.drawImage(original, 0, 0, targetWidth, targetHeight, null);
+            } finally {
+                graphics.dispose();
+            }
+
+            Path temporary = null;
+            try {
+                Files.createDirectories(destination.getParent());
+                Path relative = storageRoot().relativize(destination);
+                resolveCachePath(relative);
+                temporary = Files.createTempFile(destination.getParent(), destination.getFileName().toString(), ".tmp");
+                if (!ImageIO.write(resized, FORMAT, temporary.toFile())) {
+                    throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Thumbnail generation failed");
+                }
+                moveAtomically(temporary, destination);
+                temporary = null;
+                return new GeneratedThumbnail(includePlaceholder ? placeholderFor(resized) : null);
+            } catch (IOException exception) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Thumbnail generation failed");
+            } finally {
+                if (temporary != null) {
+                    try {
+                        Files.deleteIfExists(temporary);
+                    } catch (IOException ignored) {
+                    }
+                }
+            }
+        } finally {
+            generationPermits.release();
+        }
+    }
+
+    /**
+     * Decodes only as much of the source as needed for the target size, using ImageReader
+     * source subsampling so large camera JPEGs do not fully expand into heap.
+     */
+    private BufferedImage readScaledImage(Path source, int maxWidth, int maxHeight) {
+        try (ImageInputStream input = ImageIO.createImageInputStream(source.toFile())) {
+            if (input == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset file is unavailable");
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) {
                 throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Asset file cannot be previewed");
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                int sourceWidth = reader.getWidth(0);
+                int sourceHeight = reader.getHeight(0);
+                if (sourceWidth <= 0 || sourceHeight <= 0) {
+                    throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Asset file cannot be previewed");
+                }
+                int subsample = sourceSubsample(sourceWidth, sourceHeight, maxWidth, maxHeight);
+                ImageReadParam param = reader.getDefaultReadParam();
+                if (subsample > 1) {
+                    param.setSourceSubsampling(subsample, subsample, 0, 0);
+                }
+                BufferedImage image = reader.read(0, param);
+                if (image == null) {
+                    throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Asset file cannot be previewed");
+                }
+                return image;
+            } finally {
+                reader.dispose();
             }
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset file is unavailable");
         }
+    }
 
-        double scale = Math.min((double) maxWidth / original.getWidth(), (double) maxHeight / original.getHeight());
-        scale = Math.min(scale, 1.0d);
-        int targetWidth = Math.max(1, (int) Math.round(original.getWidth() * scale));
-        int targetHeight = Math.max(1, (int) Math.round(original.getHeight() * scale));
-        BufferedImage resized = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
-        Graphics2D graphics = resized.createGraphics();
-        try {
-            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            graphics.drawImage(original, 0, 0, targetWidth, targetHeight, null);
-        } finally {
-            graphics.dispose();
+    static int sourceSubsample(int sourceWidth, int sourceHeight, int maxWidth, int maxHeight) {
+        int decodeWidth = Math.max(1, maxWidth * 2);
+        int decodeHeight = Math.max(1, maxHeight * 2);
+        int subsample = Math.max(
+                1,
+                Math.max(
+                        (int) Math.ceil((double) sourceWidth / decodeWidth),
+                        (int) Math.ceil((double) sourceHeight / decodeHeight)
+                )
+        );
+        while ((long) (sourceWidth / subsample) * (sourceHeight / subsample) > MAX_DECODE_PIXELS) {
+            subsample++;
         }
-
-        Path temporary = null;
-        try {
-            Files.createDirectories(destination.getParent());
-            Path relative = storageRoot().relativize(destination);
-            resolveCachePath(relative);
-            temporary = Files.createTempFile(destination.getParent(), destination.getFileName().toString(), ".tmp");
-            if (!ImageIO.write(resized, FORMAT, temporary.toFile())) {
-                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Thumbnail generation failed");
-            }
-            moveAtomically(temporary, destination);
-            temporary = null;
-            return new GeneratedThumbnail(includePlaceholder ? placeholderFor(resized) : null);
-        } catch (IOException exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Thumbnail generation failed");
-        } finally {
-            if (temporary != null) {
-                try {
-                    Files.deleteIfExists(temporary);
-                } catch (IOException ignored) {
-                }
-            }
-        }
+        return subsample;
     }
 
     private void moveAtomically(Path source, Path destination) throws IOException {

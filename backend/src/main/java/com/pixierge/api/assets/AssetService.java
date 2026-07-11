@@ -1,6 +1,7 @@
 package com.pixierge.api.assets;
 
 import com.pixierge.api.identity.AuthenticatedUser;
+import com.pixierge.api.tags.TagRepository;
 import org.springframework.core.io.PathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -9,7 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,6 +19,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -43,10 +46,12 @@ public class AssetService {
 
     private final AssetRepository assetRepository;
     private final ThumbnailService thumbnailService;
+    private final TagRepository tagRepository;
 
-    public AssetService(AssetRepository assetRepository, ThumbnailService thumbnailService) {
+    public AssetService(AssetRepository assetRepository, ThumbnailService thumbnailService, TagRepository tagRepository) {
         this.assetRepository = assetRepository;
         this.thumbnailService = thumbnailService;
+        this.tagRepository = tagRepository;
     }
 
     @Transactional(readOnly = true)
@@ -130,6 +135,7 @@ public class AssetService {
             String availability,
             String fileType,
             Boolean duplicatesOnly,
+            List<UUID> tagIds,
             Integer page,
             Integer pageSize
     ) {
@@ -143,10 +149,47 @@ public class AssetService {
                 blankToNull(availability),
                 blankToNull(fileType),
                 duplicatesOnly,
+                tagIds,
+                user.id(),
                 normalizedPage,
                 normalizedPageSize
         );
         AssetRepository.BrowseRows rows = assetRepository.browse(user.id(), canAdminLibraries(user), criteria);
+        return toBrowseResponse(rows, normalizedPage, normalizedPageSize);
+    }
+
+    @Transactional(readOnly = true)
+    public AssetBrowseResponse browseAlbumAssets(AuthenticatedUser user, UUID albumId, Integer page, Integer pageSize) {
+        int normalizedPage = normalizePage(page);
+        int normalizedPageSize = normalizePageSize(pageSize);
+        return toBrowseResponse(assetRepository.browseAlbumAssets(user.id(), canAdminLibraries(user), albumId,
+                normalizedPage, normalizedPageSize), normalizedPage, normalizedPageSize);
+    }
+
+    @Transactional(readOnly = true)
+    public AssetBrowseResponse browseTagAssets(AuthenticatedUser user, UUID tagId, Integer page, Integer pageSize) {
+        int normalizedPage = normalizePage(page);
+        int normalizedPageSize = normalizePageSize(pageSize);
+        return toBrowseResponse(assetRepository.browseTagAssets(user.id(), canAdminLibraries(user), tagId,
+                normalizedPage, normalizedPageSize), normalizedPage, normalizedPageSize);
+    }
+
+    @Transactional(readOnly = true)
+    public void requireReadableAssetInLibrary(AuthenticatedUser user, UUID assetId, UUID libraryId) {
+        if (!assetRepository.canReadAsset(user.id(), canAdminLibraries(user), assetId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Asset not found");
+        }
+        if (!assetRepository.canReadAssetInLibrary(user.id(), canAdminLibraries(user), assetId, libraryId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Asset is not readable in the source library");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public boolean canReadAsset(AuthenticatedUser user, UUID assetId) {
+        return assetRepository.canReadAsset(user.id(), canAdminLibraries(user), assetId);
+    }
+
+    private AssetBrowseResponse toBrowseResponse(AssetRepository.BrowseRows rows, int normalizedPage, int normalizedPageSize) {
         Map<String, ThumbnailService.ThumbnailBrowseSummary> thumbnailSummaries = thumbnailService.browseSummaries(rows.assets().stream()
                 .map(AssetRepository.AssetSummaryRow::contentHash)
                 .toList());
@@ -215,7 +258,8 @@ public class AssetService {
                 detail.availability(),
                 detail.duplicateCount(),
                 detail.metadata(),
-                detail.files()
+                detail.files(),
+                tagRepository.listAssetTags(assetId, user.id())
         );
     }
 
@@ -279,7 +323,8 @@ public class AssetService {
                         detail.availability(),
                         detail.duplicateCount(),
                         detail.metadata(),
-                        detail.files()
+                        detail.files(),
+                        List.of()
                 ))
                 .toList();
     }
@@ -335,18 +380,34 @@ public class AssetService {
         String mimeType = null;
         try {
             mimeType = Files.probeContentType(path);
-            BufferedImage image = ImageIO.read(path.toFile());
-            if (image == null) {
-                return new MetadataResult(candidate.modifiedAt(), null, null, mimeType, EXTRACTION_STATUS_UNSUPPORTED, null);
+            try (ImageInputStream input = ImageIO.createImageInputStream(path.toFile())) {
+                if (input == null) {
+                    return new MetadataResult(candidate.modifiedAt(), null, null, mimeType, EXTRACTION_STATUS_UNSUPPORTED, null);
+                }
+                Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+                if (!readers.hasNext()) {
+                    return new MetadataResult(candidate.modifiedAt(), null, null, mimeType, EXTRACTION_STATUS_UNSUPPORTED, null);
+                }
+                ImageReader reader = readers.next();
+                try {
+                    reader.setInput(input, true, true);
+                    int width = reader.getWidth(0);
+                    int height = reader.getHeight(0);
+                    if (width <= 0 || height <= 0) {
+                        return new MetadataResult(candidate.modifiedAt(), null, null, mimeType, EXTRACTION_STATUS_UNSUPPORTED, null);
+                    }
+                    return new MetadataResult(
+                            candidate.modifiedAt(),
+                            width,
+                            height,
+                            mimeType,
+                            EXTRACTION_STATUS_EXTRACTED,
+                            null
+                    );
+                } finally {
+                    reader.dispose();
+                }
             }
-            return new MetadataResult(
-                    candidate.modifiedAt(),
-                    image.getWidth(),
-                    image.getHeight(),
-                    mimeType,
-                    EXTRACTION_STATUS_EXTRACTED,
-                    null
-            );
         } catch (IOException | SecurityException exception) {
             return new MetadataResult(candidate.modifiedAt(), null, null, mimeType, EXTRACTION_STATUS_FAILED, exception.getMessage());
         }
@@ -354,6 +415,14 @@ public class AssetService {
 
     private boolean canAdminLibraries(AuthenticatedUser user) {
         return user.permissions().contains(PERMISSION_LIBRARY_ADMIN);
+    }
+
+    private int normalizePage(Integer page) {
+        return Math.max(0, page == null ? 0 : page);
+    }
+
+    private int normalizePageSize(Integer pageSize) {
+        return Math.min(MAX_PAGE_SIZE, Math.max(1, pageSize == null ? DEFAULT_PAGE_SIZE : pageSize));
     }
 
     private boolean hasParent(MutableTreeNode node, Map<String, MutableTreeNode> nodes) {

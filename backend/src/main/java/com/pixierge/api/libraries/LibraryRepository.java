@@ -1,5 +1,6 @@
 package com.pixierge.api.libraries;
 
+import com.pixierge.api.db.QAssetFiles;
 import com.pixierge.api.db.QGlobalExclusionPatterns;
 import com.pixierge.api.db.QLibraries;
 import com.pixierge.api.db.QLibraryExclusionPatterns;
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class LibraryRepository {
 
     private static final QLibraries LIBRARIES = QLibraries.libraries;
+    private static final QAssetFiles ASSET_FILES = QAssetFiles.assetFiles;
     private static final QGlobalExclusionPatterns GLOBAL_EXCLUSION_PATTERNS =
             QGlobalExclusionPatterns.globalExclusionPatterns;
     private static final QLibraryExclusionPatterns LIBRARY_EXCLUSION_PATTERNS =
@@ -269,6 +271,26 @@ public class LibraryRepository {
     }
 
     @Transactional(readOnly = true)
+    public boolean libraryNameExistsExcluding(String name, UUID excludeLibraryId) {
+        Integer exists = queryFactory
+                .selectOne()
+                .from(LIBRARIES)
+                .where(LIBRARIES.name.lower().eq(name.toLowerCase(Locale.ROOT))
+                        .and(LIBRARIES.id.ne(excludeLibraryId)))
+                .fetchFirst();
+        return exists != null;
+    }
+
+    public boolean updateLibraryName(UUID libraryId, String name) {
+        long updated = queryFactory.update(LIBRARIES)
+                .set(LIBRARIES.name, name)
+                .set(LIBRARIES.updatedAt, OffsetDateTime.now())
+                .where(LIBRARIES.id.eq(libraryId))
+                .execute();
+        return updated > 0;
+    }
+
+    @Transactional(readOnly = true)
     public boolean rootPathExists(String normalizedPath) {
         Integer exists = queryFactory
                 .selectOne()
@@ -276,6 +298,59 @@ public class LibraryRepository {
                 .where(LIBRARY_ROOTS.normalizedPath.eq(normalizedPath))
                 .fetchFirst();
         return exists != null;
+    }
+
+    public void rewriteAssetFilePathPrefix(String oldPrefix, String newPrefix) {
+        List<Tuple> rows = queryFactory
+                .select(ASSET_FILES.id, ASSET_FILES.path, ASSET_FILES.normalizedPath)
+                .from(ASSET_FILES)
+                .where(ASSET_FILES.normalizedPath.eq(oldPrefix)
+                        .or(ASSET_FILES.normalizedPath.startsWith(oldPrefix + "/")))
+                .fetch();
+
+        for (Tuple row : rows) {
+            UUID fileId = row.get(ASSET_FILES.id);
+            String path = rewritePrefix(row.get(ASSET_FILES.path), oldPrefix, newPrefix);
+            String normalizedPath = rewritePrefix(row.get(ASSET_FILES.normalizedPath), oldPrefix, newPrefix);
+            queryFactory.update(ASSET_FILES)
+                    .set(ASSET_FILES.path, path)
+                    .set(ASSET_FILES.normalizedPath, normalizedPath)
+                    .where(ASSET_FILES.id.eq(fileId))
+                    .execute();
+        }
+    }
+
+    public void rewriteRootPathPrefix(String oldPrefix, String newPrefix) {
+        List<Tuple> rows = queryFactory
+                .select(LIBRARY_ROOTS.id, LIBRARY_ROOTS.path, LIBRARY_ROOTS.normalizedPath)
+                .from(LIBRARY_ROOTS)
+                .where(LIBRARY_ROOTS.normalizedPath.eq(oldPrefix)
+                        .or(LIBRARY_ROOTS.normalizedPath.startsWith(oldPrefix + "/")))
+                .fetch();
+
+        for (Tuple row : rows) {
+            UUID rootId = row.get(LIBRARY_ROOTS.id);
+            String path = rewritePrefix(row.get(LIBRARY_ROOTS.path), oldPrefix, newPrefix);
+            String normalizedPath = rewritePrefix(row.get(LIBRARY_ROOTS.normalizedPath), oldPrefix, newPrefix);
+            queryFactory.update(LIBRARY_ROOTS)
+                    .set(LIBRARY_ROOTS.path, path)
+                    .set(LIBRARY_ROOTS.normalizedPath, normalizedPath)
+                    .where(LIBRARY_ROOTS.id.eq(rootId))
+                    .execute();
+        }
+    }
+
+    private static String rewritePrefix(String value, String oldPrefix, String newPrefix) {
+        if (value == null) {
+            return null;
+        }
+        if (value.equals(oldPrefix)) {
+            return newPrefix;
+        }
+        if (value.startsWith(oldPrefix + "/")) {
+            return newPrefix + value.substring(oldPrefix.length());
+        }
+        return value;
     }
 
     boolean isDuplicateKey(DataIntegrityViolationException exception) {

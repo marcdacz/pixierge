@@ -11,6 +11,7 @@ public record AssetDetailResponse(
         String availability,
         int duplicateCount,
         AssetMetadataResponse metadata,
-        List<AssetFileOccurrenceResponse> files
+        List<AssetFileOccurrenceResponse> files,
+        List<AssetTagResponse> tags
 ) {
 }

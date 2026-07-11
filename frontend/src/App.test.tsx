@@ -184,17 +184,20 @@ const assetDetail = {
       modifiedAt: '2026-07-04T00:00:00Z',
       status: 'active'
     }
-  ]
+  ],
+  tags: []
 };
 
 describe('App', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    window.localStorage.clear();
   });
 
   it('shows first-admin setup when no users exist', async () => {
@@ -324,8 +327,8 @@ describe('App', () => {
 
     expect(await screen.findByRole('navigation', { name: 'Folders' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'All folders' })).toBeInTheDocument();
-    expect(await screen.findByText('1 item')).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: 'Open beach.jpg' })).toBeInTheDocument();
+    expect(await screen.findAllByText('1 item')).not.toHaveLength(0);
+    expect(await screen.findByRole('button', { name: 'Select beach.jpg' })).toBeInTheDocument();
     expect(document.querySelector('[data-asset-placeholder="asset-1"]')).not.toBeNull();
     const assetGrid = document.querySelector('[aria-label="Asset grid"]') as HTMLElement;
     expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('11rem');
@@ -343,9 +346,11 @@ describe('App', () => {
     fireEvent.change(thumbnailSize, { target: { value: '5' } });
     expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('28rem');
     expect(thumbnailSize).toHaveAttribute('aria-valuenow', '5');
+    expect(window.localStorage.getItem('pixierge.assetTileSizeIndex')).toBe('5');
     fireEvent.change(thumbnailSize, { target: { value: '0' } });
     expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('5.5rem');
     expect(thumbnailSize).toHaveAttribute('aria-valuenow', '0');
+    expect(window.localStorage.getItem('pixierge.assetTileSizeIndex')).toBe('0');
     expect(
       document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/thumbnail?c=grid-cache-asset-1"]')
     ).not.toBeNull();
@@ -355,7 +360,7 @@ describe('App', () => {
     );
 
     await userEvent.click(screen.getByRole('button', { name: /^family/ }));
-    expect(await screen.findByRole('heading', { name: 'family', level: 2 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'family' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Hide folders' }));
     expect(screen.queryByRole('navigation', { name: 'Folders' })).not.toBeInTheDocument();
@@ -370,7 +375,7 @@ describe('App', () => {
       );
     });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Open beach.jpg' }));
+    await userEvent.dblClick(await screen.findByRole('button', { name: 'Select beach.jpg' }));
     expect(await screen.findByRole('button', { name: 'Close photo viewer' })).toBeInTheDocument();
     expect(
       document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/preview?c=grid-cache-asset-1"]')
@@ -383,7 +388,7 @@ describe('App', () => {
     expect(screen.queryByText('Identity')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close photo viewer' })).toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
-    expect(await screen.findByRole('heading', { name: 'family', level: 2 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'family' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/assets/asset-1',
       expect.objectContaining({ credentials: 'include', method: 'GET' })
@@ -401,7 +406,7 @@ describe('App', () => {
 
     render(<App />);
 
-    await screen.findByRole('button', { name: 'Open beach.jpg' });
+    await screen.findByRole('button', { name: 'Select beach.jpg' });
     const thumbnailSelector = 'img[src="http://localhost:8080/api/assets/asset-1/thumbnail?c=grid-cache-asset-1"]';
     const thumbnail = document.querySelector(thumbnailSelector) as HTMLImageElement;
     expect(thumbnail).toHaveClass('opacity-0');
@@ -441,7 +446,7 @@ describe('App', () => {
 
     render(<App />);
 
-    await screen.findByRole('button', { name: 'Open beach.jpg' });
+    await screen.findByRole('button', { name: 'Select beach.jpg' });
     expect(document.querySelector('img[src*="/api/assets/asset-1/thumbnail"]')).toBeNull();
     expect(screen.getByText('Identity pending')).toBeInTheDocument();
     expect(document.querySelector('[data-asset-placeholder="asset-1"]')).not.toBeNull();
@@ -498,7 +503,7 @@ describe('App', () => {
 
     render(<App />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Open beach.jpg' }));
+    await userEvent.dblClick(await screen.findByRole('button', { name: 'Select beach.jpg' }));
     expect(await screen.findByRole('button', { name: 'Next photo' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Previous photo' })).not.toBeInTheDocument();
 
@@ -525,7 +530,7 @@ describe('App', () => {
     });
 
     await userEvent.keyboard('{Escape}');
-    expect(await screen.findByRole('button', { name: 'Open sunset.jpg' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Select sunset.jpg' })).toBeInTheDocument();
     await waitFor(() => {
       expect(scrollIntoView).toHaveBeenCalled();
     });
@@ -574,8 +579,8 @@ describe('App', () => {
     render(<App />);
 
     expect(await screen.findByText('2 items')).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: 'Open beach.jpg' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Open sunset.jpg' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Select beach.jpg' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Select sunset.jpg' })).not.toBeInTheDocument();
 
     act(() => {
       intersectionObserver.trigger();
@@ -588,7 +593,7 @@ describe('App', () => {
       );
     });
 
-    expect(await screen.findByRole('button', { name: 'Open sunset.jpg' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Select sunset.jpg' })).toBeInTheDocument();
     intersectionObserver.restore();
   });
 
@@ -645,7 +650,7 @@ describe('App', () => {
       );
     });
 
-    expect(await screen.findByRole('button', { name: 'Open sunset.jpg' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Select sunset.jpg' })).toBeInTheDocument();
 
     const browseCallsAfterMerge = fetchMock.mock.calls.filter(([url]) =>
       String(url).includes('/api/assets?libraryId=library-1')

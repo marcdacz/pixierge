@@ -47,7 +47,8 @@ const assetDetailResponse = {
       modifiedAt: '2026-07-04T00:00:00Z',
       status: 'active'
     }
-  ]
+  ],
+  tags: []
 };
 
 const assetBrowseResponse = {
@@ -153,13 +154,15 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   await page.getByRole('button', { name: 'Libraries' }).click();
   await expect(page.getByRole('navigation', { name: 'Folders' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'All folders' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open beach.jpg' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Select beach.jpg' })).toBeVisible();
 
   await page.getByRole('button', { name: /^family/ }).click();
   await expect(page.getByRole('heading', { name: 'family' })).toBeVisible();
   await page.getByLabel('Search').fill('beach');
-  await expect(page.getByRole('button', { name: 'Open beach.jpg' })).toBeVisible();
-  await page.getByRole('button', { name: 'Open beach.jpg' }).click();
+  await expect(page.getByRole('button', { name: 'Select beach.jpg' })).toBeVisible();
+  await page.getByRole('button', { name: 'Select beach.jpg' }).click();
+  await expect(page.locator('[data-asset-id="asset-1"]')).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: 'Select beach.jpg' }).dblclick();
   await expect(page.getByRole('button', { name: 'Close photo viewer' })).toBeVisible();
   await page.getByRole('button', { name: 'Show photo metadata' }).click();
   await expect(page.getByText('/photos/family/beach.jpg').first()).toBeVisible();
@@ -190,7 +193,7 @@ test('scan activity indicator and confirmed asset detail @visual', async ({ page
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Libraries' }).click();
-  await page.getByRole('button', { name: 'Open beach.jpg' }).click();
+  await page.getByRole('button', { name: 'Select beach.jpg' }).dblclick();
   await page.getByRole('button', { name: 'Show photo metadata' }).click();
   await expect(page.getByText('Identity').locator('..')).toContainText('confirmed');
   await expect(page.getByText('Metadata').locator('..')).toContainText('pending');
@@ -201,8 +204,10 @@ test('authenticated shell visual regression @visual', async ({ page }) => {
   await completeBrowsableLibrarySetup(page);
 
   await expect(page.getByRole('navigation', { name: 'Folders' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open beach.jpg' })).toBeVisible();
-  await expect(page.locator('img[src="/api/assets/asset-1/thumbnail?c=e2e-thumbnail-v1"]')).toHaveClass(/opacity-100/);
+  await expect(page.getByRole('button', { name: 'Select beach.jpg' })).toBeVisible();
+  await expect(page.locator('img[src$="/api/assets/asset-1/thumbnail?c=e2e-thumbnail-v1"]')).toHaveClass(/opacity-100/, {
+    timeout: 10_000
+  });
   await expect(page).toHaveScreenshot('browse-library.png', {
     fullPage: true
   });
@@ -214,10 +219,81 @@ test('authenticated shell visual regression @visual', async ({ page }) => {
   });
 });
 
+test('selects photos and assigns albums and tags', async ({ page }) => {
+  await mockPixiergeApi(page);
+  await completeBrowsableLibrarySetup(page);
+
+  const tile = page.locator('[data-asset-id="asset-1"]');
+  await tile.click({ button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Asset actions' })).toBeVisible();
+  await expect(tile).toHaveAttribute('aria-selected', 'true');
+
+  await page.getByRole('menuitem', { name: 'Add to albums…' }).click();
+  await page.getByLabel('Search add to albums').fill('Best of 2026');
+  await page.getByRole('option', { name: 'Create album “Best of 2026”' }).click();
+  await expect(page.getByRole('button', { name: 'Remove Best of 2026' })).toBeVisible();
+  await page.getByLabel('Search add to albums').press('Enter');
+  await expect(page.getByRole('dialog')).toBeHidden();
+
+  await tile.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Add tags…' }).click();
+  await page.getByLabel('Search add tags').fill('Favourite');
+  await page.getByRole('option', { name: 'Create tag “Favourite”' }).click();
+  await expect(page.getByRole('button', { name: 'Remove Favourite' })).toBeVisible();
+  await page.getByLabel('Search add tags').press('Enter');
+  await expect(page.getByRole('dialog')).toBeHidden();
+
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Albums' }).click();
+  const albumsNav = page.getByRole('navigation', { name: 'Albums' });
+  await expect(albumsNav).toBeVisible();
+  await expect(albumsNav.getByRole('button', { name: /^Best of 2026/ })).toBeVisible();
+  await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
+
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Tags' }).click();
+  const tagsNav = page.getByRole('navigation', { name: 'Tags' });
+  await expect(tagsNav).toBeVisible();
+  await expect(tagsNav.getByRole('button', { name: /^Favourite/ })).toBeVisible();
+  await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
+});
+
+test('albums organizer visual regression @visual', async ({ page }) => {
+  await mockPixiergeApi(page);
+  await completeBrowsableLibrarySetup(page);
+  await page.locator('[data-asset-id="asset-1"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Add to albums…' }).click();
+  await page.getByLabel('Search add to albums').fill('Summer');
+  await page.getByRole('option', { name: 'Create album “Summer”' }).click();
+  await expect(page.getByRole('button', { name: 'Remove Summer' })).toBeVisible();
+  await page.getByLabel('Search add to albums').press('Enter');
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Albums' }).click();
+  await expect(page.getByRole('navigation', { name: 'Albums' })).toBeVisible();
+  await expect(page).toHaveScreenshot('browse-albums.png', {
+    fullPage: true
+  });
+});
+
 async function mockPixiergeApi(page: Page) {
   let setupRequired = true;
   let signedIn = false;
   let scanStatus: 'running' | 'completed' = 'completed';
+  const albums: Array<{
+    id: string;
+    name: string;
+    coverAssetId: string | null;
+    coverFileName: string | null;
+    itemCount: number;
+    sourceLibraryCount: number;
+    createdAt: string;
+    updatedAt: string;
+  }> = [];
+  const tags: Array<{
+    id: string;
+    name: string;
+    assetCount: number;
+    createdAt: string;
+    updatedAt: string;
+  }> = [];
   const libraries = new Map<string, {
     id: string;
     name: string;
@@ -444,6 +520,113 @@ async function mockPixiergeApi(page: Page) {
           }
         ]
       });
+      return;
+    }
+
+    if (path === '/api/albums' && request.method() === 'GET') {
+      await route.fulfill({ json: albums });
+      return;
+    }
+
+    if (path === '/api/albums' && request.method() === 'POST') {
+      const body = await request.postDataJSON();
+      const album = {
+        id: `album-${albums.length + 1}`,
+        name: body.name,
+        coverAssetId: null,
+        coverFileName: null,
+        itemCount: 0,
+        sourceLibraryCount: 0,
+        createdAt: '2026-07-04T00:00:00Z',
+        updatedAt: '2026-07-04T00:00:00Z'
+      };
+      albums.push(album);
+      await route.fulfill({ status: 201, json: album });
+      return;
+    }
+
+    const albumMatch = path.match(/^\/api\/albums\/([^/]+)$/);
+    if (albumMatch && request.method() === 'PATCH') {
+      const body = await request.postDataJSON();
+      const album = albums.find((item) => item.id === albumMatch[1]);
+      if (!album) {
+        await route.fulfill({ status: 404, json: {} });
+        return;
+      }
+      if (body.name) {
+        album.name = body.name;
+      }
+      if (body.coverAssetId) {
+        album.coverAssetId = body.coverAssetId;
+        album.coverFileName = assetDetailResponse.files[0].fileName;
+      }
+      await route.fulfill({ json: album });
+      return;
+    }
+
+    const albumAssetsMatch = path.match(/^\/api\/albums\/([^/]+)\/assets$/);
+    if (albumAssetsMatch && request.method() === 'GET') {
+      const album = albums.find((item) => item.id === albumAssetsMatch[1]);
+      await route.fulfill({
+        json: album && album.itemCount > 0
+          ? assetBrowseResponse
+          : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
+      });
+      return;
+    }
+
+    if (path === '/api/album-items' && request.method() === 'POST') {
+      const body = await request.postDataJSON();
+      for (const albumId of body.albumIds ?? []) {
+        const album = albums.find((item) => item.id === albumId);
+        if (album) {
+          album.itemCount += (body.items ?? []).length;
+          album.sourceLibraryCount = Math.max(album.sourceLibraryCount, 1);
+        }
+      }
+      await route.fulfill({ status: 204, body: '' });
+      return;
+    }
+
+    if (path === '/api/tags' && request.method() === 'GET') {
+      await route.fulfill({ json: tags });
+      return;
+    }
+
+    if (path === '/api/tags' && request.method() === 'POST') {
+      const body = await request.postDataJSON();
+      const tag = {
+        id: `tag-${tags.length + 1}`,
+        name: body.name,
+        assetCount: 0,
+        createdAt: '2026-07-04T00:00:00Z',
+        updatedAt: '2026-07-04T00:00:00Z'
+      };
+      tags.push(tag);
+      await route.fulfill({ status: 201, json: tag });
+      return;
+    }
+
+    const tagAssetsMatch = path.match(/^\/api\/tags\/([^/]+)\/assets$/);
+    if (tagAssetsMatch && request.method() === 'GET') {
+      const tag = tags.find((item) => item.id === tagAssetsMatch[1]);
+      await route.fulfill({
+        json: tag && tag.assetCount > 0
+          ? assetBrowseResponse
+          : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
+      });
+      return;
+    }
+
+    if (path === '/api/asset-tags' && request.method() === 'POST') {
+      const body = await request.postDataJSON();
+      for (const tagId of body.tagIds ?? []) {
+        const tag = tags.find((item) => item.id === tagId);
+        if (tag) {
+          tag.assetCount += (body.items ?? []).length;
+        }
+      }
+      await route.fulfill({ status: 204, body: '' });
       return;
     }
 

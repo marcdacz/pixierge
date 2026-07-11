@@ -6,6 +6,7 @@ import {
   LogOut,
   Search,
   Settings,
+  Tags,
   UserCircle
 } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
@@ -46,7 +47,8 @@ type AppFrameProps = {
 };
 
 const primaryNav: NavItemDefinition[] = [
-  { icon: Images, label: 'Albums', view: 'albums' }
+  { icon: Images, label: 'Albums', view: 'albums' },
+  { icon: Tags, label: 'Tags', view: 'tags' }
 ];
 
 const utilityNav: NavItemDefinition[] = [

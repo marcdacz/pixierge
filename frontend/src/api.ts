@@ -196,7 +196,31 @@ export type AssetDetail = {
   duplicateCount: number;
   metadata: AssetMetadata;
   files: AssetFileOccurrence[];
+  tags: AssetTag[];
 };
+
+export type AssetTag = { id: string; name: string };
+
+export type AlbumSummary = {
+  id: string;
+  name: string;
+  coverAssetId: string | null;
+  coverFileName: string | null;
+  itemCount: number;
+  sourceLibraryCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TagSummary = {
+  id: string;
+  name: string;
+  assetCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AssetAssignmentItem = { assetId: string; sourceLibraryId: string };
 
 export class ApiError extends Error {
   readonly status: number;
@@ -269,6 +293,35 @@ export async function fetchGlobalExclusionPatterns(): Promise<GlobalExclusionPat
 
 export async function createLibrary(input: { name: string }, csrfToken: string): Promise<LibrarySummary> {
   return requestJson<LibrarySummary>('/api/libraries', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export async function updateLibrary(
+  libraryId: string,
+  input: { name: string },
+  csrfToken: string
+): Promise<LibrarySummary> {
+  return requestJson<LibrarySummary>(`/api/libraries/${libraryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export type RenameFolderResponse = {
+  path: string;
+  name: string;
+};
+
+export async function renameLibraryFolder(
+  libraryId: string,
+  input: { path: string; name: string },
+  csrfToken: string
+): Promise<RenameFolderResponse> {
+  return requestJson<RenameFolderResponse>(`/api/libraries/${libraryId}/folders/rename`, {
     method: 'POST',
     body: JSON.stringify(input),
     csrfToken
@@ -425,6 +478,62 @@ export async function fetchAsset(assetId: string): Promise<AssetDetail> {
   return requestJson<AssetDetail>(`/api/assets/${assetId}`);
 }
 
+export async function fetchAlbums(): Promise<AlbumSummary[]> {
+  return requestJson<AlbumSummary[]>('/api/albums');
+}
+
+export async function createAlbum(input: { name: string }, csrfToken: string): Promise<AlbumSummary> {
+  return requestJson<AlbumSummary>('/api/albums', { method: 'POST', body: JSON.stringify(input), csrfToken });
+}
+
+export async function updateAlbum(
+  albumId: string,
+  input: Partial<Pick<AlbumSummary, 'name' | 'coverAssetId'>>,
+  csrfToken: string
+): Promise<AlbumSummary> {
+  return requestJson<AlbumSummary>(`/api/albums/${albumId}`, { method: 'PATCH', body: JSON.stringify(input), csrfToken });
+}
+
+export async function deleteAlbum(albumId: string, csrfToken: string): Promise<void> {
+  await requestWithoutBody(`/api/albums/${albumId}`, { method: 'DELETE', csrfToken });
+}
+
+export async function fetchAlbumAssets(albumId: string, page = 0, pageSize = 48): Promise<AssetBrowseResponse> {
+  return requestJson<AssetBrowseResponse>(`/api/albums/${albumId}/assets?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function addAlbumItems(albumIds: string[], items: AssetAssignmentItem[], csrfToken: string): Promise<void> {
+  await requestWithoutBodyWithJson('/api/album-items', { method: 'POST', body: JSON.stringify({ albumIds, items }), csrfToken });
+}
+
+export async function removeAlbumItems(albumId: string, assetIds: string[], csrfToken: string): Promise<void> {
+  await requestWithoutBodyWithJson(`/api/albums/${albumId}/items`, { method: 'DELETE', body: JSON.stringify({ assetIds }), csrfToken });
+}
+
+export async function fetchTags(): Promise<TagSummary[]> {
+  return requestJson<TagSummary[]>('/api/tags');
+}
+
+export async function createTag(input: { name: string }, csrfToken: string): Promise<TagSummary> {
+  return requestJson<TagSummary>('/api/tags', { method: 'POST', body: JSON.stringify(input), csrfToken });
+}
+
+export async function updateTag(tagId: string, input: { name: string }, csrfToken: string): Promise<TagSummary> {
+  return requestJson<TagSummary>(`/api/tags/${tagId}`, { method: 'PATCH', body: JSON.stringify(input), csrfToken });
+}
+
+export async function deleteTag(tagId: string, csrfToken: string): Promise<void> {
+  await requestWithoutBody(`/api/tags/${tagId}`, { method: 'DELETE', csrfToken });
+}
+
+export async function fetchTagAssets(tagId: string, page = 0, pageSize = 48): Promise<AssetBrowseResponse> {
+  return requestJson<AssetBrowseResponse>(`/api/tags/${tagId}/assets?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function addAssetTags(tagIds: string[], items: AssetAssignmentItem[], csrfToken: string): Promise<void> {
+  await requestWithoutBodyWithJson('/api/asset-tags', { method: 'POST', body: JSON.stringify({ tagIds, items }), csrfToken });
+}
+
 export async function backfillAssetMetadata(csrfToken: string): Promise<{ processedCount: number; failedCount: number }> {
   return requestJson<{ processedCount: number; failedCount: number }>('/api/assets/metadata/backfill', {
     method: 'POST',
@@ -483,6 +592,21 @@ async function requestWithoutBody(
     headers: requestHeaders(options)
   });
 
+  if (!response.ok) {
+    throw new ApiError(response.status, await responseErrorMessage(response));
+  }
+}
+
+async function requestWithoutBodyWithJson(
+  path: string,
+  options: { method: string; body: string; csrfToken?: string }
+): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: options.method,
+    credentials: 'include',
+    headers: requestHeaders(options),
+    body: options.body
+  });
   if (!response.ok) {
     throw new ApiError(response.status, await responseErrorMessage(response));
   }

@@ -2,11 +2,14 @@ package com.pixierge.api.assets;
 
 import com.pixierge.api.db.QAssetFiles;
 import com.pixierge.api.db.QAssetMetadata;
+import com.pixierge.api.db.QAlbumItems;
+import com.pixierge.api.db.QAssetTags;
 import com.pixierge.api.db.QAssets;
 import com.pixierge.api.db.QLibraries;
 import com.pixierge.api.db.QLibraryMembers;
 import com.pixierge.api.db.QLibraryRoots;
 import com.pixierge.api.db.QSearchDocuments;
+import com.pixierge.api.db.QTags;
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.Tuple;
 import com.querydsl.sql.SQLQuery;
@@ -35,6 +38,8 @@ class AssetRepository {
     private static final QAssetFiles ASSET_FILES = QAssetFiles.assetFiles;
     private static final QAssets ASSETS = QAssets.assets;
     private static final QAssetMetadata ASSET_METADATA = QAssetMetadata.assetMetadata;
+    private static final QAlbumItems ALBUM_ITEMS = QAlbumItems.albumItems;
+    private static final QAssetTags ASSET_TAGS = QAssetTags.assetTags;
     private static final QLibraries LIBRARIES = QLibraries.libraries;
     private static final QLibraryMembers LIBRARY_MEMBERS = QLibraryMembers.libraryMembers;
     private static final QLibraryRoots LIBRARY_ROOTS = QLibraryRoots.libraryRoots;
@@ -150,6 +155,91 @@ class AssetRepository {
                 .map(AssetGroup::toSummary)
                 .toList();
         return new BrowseRows(summaries, totalCount);
+    }
+
+    boolean canReadAssetInLibrary(UUID userId, boolean admin, UUID assetId, UUID libraryId) {
+        Integer result = queryFactory.selectOne()
+                .from(ASSET_FILES)
+                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+                .where(ASSET_FILES.assetId.eq(assetId)
+                        .and(ASSET_FILES.libraryId.eq(libraryId))
+                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(readableWhere(userId, admin, libraryId)))
+                .fetchFirst();
+        return result != null;
+    }
+
+    boolean canReadAsset(UUID userId, boolean admin, UUID assetId) {
+        Integer result = queryFactory.selectOne()
+                .from(ASSET_FILES)
+                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+                .where(ASSET_FILES.assetId.eq(assetId)
+                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(readableWhere(userId, admin, null)))
+                .fetchFirst();
+        return result != null;
+    }
+
+    BrowseRows browseAlbumAssets(UUID userId, boolean admin, UUID albumId, int page, int pageSize) {
+        Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
+        queryFactory.select(ALBUM_ITEMS.assetId, ALBUM_ITEMS.sourceLibraryId)
+                .from(ALBUM_ITEMS)
+                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ALBUM_ITEMS.assetId)
+                        .and(ASSET_FILES.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
+                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+                .where(ALBUM_ITEMS.albumId.eq(albumId)
+                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(readableWhere(userId, admin, null)))
+                .groupBy(ALBUM_ITEMS.assetId, ALBUM_ITEMS.sourceLibraryId, ALBUM_ITEMS.position)
+                .orderBy(ALBUM_ITEMS.position.asc())
+                .offset((long) page * pageSize)
+                .limit(pageSize)
+                .fetch()
+                .forEach(row -> assetContexts.put(row.get(ALBUM_ITEMS.assetId), row.get(ALBUM_ITEMS.sourceLibraryId)));
+        Long count = queryFactory.select(ALBUM_ITEMS.assetId.countDistinct())
+                .from(ALBUM_ITEMS)
+                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ALBUM_ITEMS.assetId)
+                        .and(ASSET_FILES.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
+                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+                .where(ALBUM_ITEMS.albumId.eq(albumId)
+                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(readableWhere(userId, admin, null)))
+                .fetchOne();
+        return browseByIds(userId, admin, assetContexts, count);
+    }
+
+    BrowseRows browseTagAssets(UUID userId, boolean admin, UUID tagId, int page, int pageSize) {
+        Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
+        queryFactory.select(ASSET_TAGS.assetId, ASSET_TAGS.sourceLibraryId)
+                .from(ASSET_TAGS)
+                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ASSET_TAGS.assetId)
+                        .and(ASSET_FILES.libraryId.eq(ASSET_TAGS.sourceLibraryId)))
+                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+                .where(ASSET_TAGS.tagId.eq(tagId)
+                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(readableWhere(userId, admin, null)))
+                .groupBy(ASSET_TAGS.assetId, ASSET_TAGS.sourceLibraryId)
+                .orderBy(ASSET_TAGS.assetId.asc())
+                .offset((long) page * pageSize)
+                .limit(pageSize)
+                .fetch()
+                .forEach(row -> assetContexts.put(row.get(ASSET_TAGS.assetId), row.get(ASSET_TAGS.sourceLibraryId)));
+        Long count = queryFactory.select(ASSET_TAGS.assetId.countDistinct())
+                .from(ASSET_TAGS)
+                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ASSET_TAGS.assetId)
+                        .and(ASSET_FILES.libraryId.eq(ASSET_TAGS.sourceLibraryId)))
+                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+                .where(ASSET_TAGS.tagId.eq(tagId)
+                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(readableWhere(userId, admin, null)))
+                .fetchOne();
+        return browseByIds(userId, admin, assetContexts, count);
     }
 
     Optional<AssetDetailRow> findAsset(UUID userId, boolean admin, UUID assetId) {
@@ -374,7 +464,53 @@ class AssetRepository {
                     .or(SEARCH_DOCUMENTS.searchableText.lower().contains(query)));
         }
 
+        if (criteria.tagIds() != null && !criteria.tagIds().isEmpty()) {
+            for (UUID tagId : criteria.tagIds()) {
+                QAssetTags matchingTags = new QAssetTags("matching_tags_" + tagId);
+                QTags matchingTagDefinitions = new QTags("matching_tag_definitions_" + tagId);
+                where.and(com.querydsl.sql.SQLExpressions.selectOne()
+                        .from(matchingTags)
+                        .join(matchingTagDefinitions).on(matchingTagDefinitions.id.eq(matchingTags.tagId))
+                        .where(matchingTags.assetId.eq(ASSETS.id)
+                                .and(matchingTags.tagId.eq(tagId))
+                                .and(matchingTagDefinitions.ownerUserId.eq(criteria.tagOwnerUserId())))
+                        .exists());
+            }
+        }
+
         return where;
+    }
+
+    private BrowseRows browseByIds(UUID userId, boolean admin, List<UUID> assetIds, Long count) {
+        Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
+        for (UUID assetId : assetIds) {
+            assetContexts.put(assetId, null);
+        }
+        return browseByIds(userId, admin, assetContexts, count);
+    }
+
+    private BrowseRows browseByIds(UUID userId, boolean admin, Map<UUID, UUID> assetContexts, Long count) {
+        int totalCount = count == null ? 0 : Math.toIntExact(count);
+        if (assetContexts.isEmpty()) {
+            return new BrowseRows(List.of(), totalCount);
+        }
+        List<UUID> assetIds = List.copyOf(assetContexts.keySet());
+        List<AssetFileRow> rows = baseFileQuery()
+                .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
+                .where(readableWhere(userId, admin, null)
+                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(ASSETS.id.in(assetIds)))
+                .orderBy(ASSET_FILES.status.asc(), ASSET_FILES.normalizedPath.asc())
+                .fetch().stream().map(this::toAssetFileRow).toList();
+        Map<UUID, AssetGroup> groups = new LinkedHashMap<>();
+        for (AssetFileRow row : rows) {
+            groups.computeIfAbsent(row.assetId(), ignored -> new AssetGroup(row)).add(row);
+        }
+        return new BrowseRows(assetIds.stream()
+                .map(groups::get)
+                .filter(java.util.Objects::nonNull)
+                .map(group -> group.toSummary(assetContexts.get(group.assetId())))
+                .toList(), totalCount);
     }
 
     private AssetFileRow toAssetFileRow(Tuple row) {
@@ -435,6 +571,8 @@ class AssetRepository {
             String availability,
             String fileType,
             Boolean duplicatesOnly,
+            List<UUID> tagIds,
+            UUID tagOwnerUserId,
             int page,
             int pageSize
     ) {
@@ -590,10 +728,14 @@ class AssetRepository {
         }
 
         private AssetSummaryRow toSummary() {
+            return toSummary(null);
+        }
+
+        private AssetSummaryRow toSummary(UUID preferredLibraryId) {
             List<AssetFileRow> active = files.stream()
                     .filter(row -> FILE_STATUS_ACTIVE.equals(row.status()))
                     .toList();
-            AssetFileRow display = active.isEmpty() ? first : active.get(0);
+            AssetFileRow display = preferredFile(preferredLibraryId).orElseGet(() -> active.isEmpty() ? first : active.get(0));
             return new AssetSummaryRow(
                     first.assetId(),
                     display.fileName(),
@@ -613,6 +755,23 @@ class AssetRepository {
                     first.contentHash(),
                     isPreviewable(display)
             );
+        }
+
+        private UUID assetId() {
+            return first.assetId();
+        }
+
+        private Optional<AssetFileRow> preferredFile(UUID preferredLibraryId) {
+            if (preferredLibraryId == null) {
+                return Optional.empty();
+            }
+            Optional<AssetFileRow> activePreferred = files.stream()
+                    .filter(row -> preferredLibraryId.equals(row.libraryId()))
+                    .filter(row -> FILE_STATUS_ACTIVE.equals(row.status()))
+                    .findFirst();
+            return activePreferred.isPresent()
+                    ? activePreferred
+                    : files.stream().filter(row -> preferredLibraryId.equals(row.libraryId())).findFirst();
         }
 
         private boolean isPreviewable(AssetFileRow row) {

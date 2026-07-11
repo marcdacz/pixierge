@@ -1,6 +1,9 @@
 package com.pixierge.api.libraries;
 
 import com.pixierge.api.db.QAssetFiles;
+import com.pixierge.api.db.QAlbumItems;
+import com.pixierge.api.db.QAlbums;
+import com.pixierge.api.db.QAssetTags;
 import com.pixierge.api.db.QAssets;
 import com.pixierge.api.db.QFileObservations;
 import com.pixierge.api.db.QLibraries;
@@ -12,6 +15,7 @@ import com.pixierge.api.db.QScanErrors;
 import com.pixierge.api.db.QScanRuns;
 import com.pixierge.api.db.QSessions;
 import com.pixierge.api.db.QThumbnails;
+import com.pixierge.api.db.QTags;
 import com.pixierge.api.db.QUserRoles;
 import com.pixierge.api.db.QUsers;
 import com.pixierge.api.identity.UserRepository;
@@ -97,6 +101,10 @@ class LibraryIntegrationTest {
             queryFactory.delete(QScanErrors.scanErrors).execute();
             queryFactory.delete(QThumbnails.thumbnails).execute();
             queryFactory.delete(QAssetFiles.assetFiles).execute();
+            queryFactory.delete(QAlbumItems.albumItems).execute();
+            queryFactory.delete(QAssetTags.assetTags).execute();
+            queryFactory.delete(QAlbums.albums).execute();
+            queryFactory.delete(QTags.tags).execute();
             queryFactory.delete(QScanRuns.scanRuns).execute();
             queryFactory.delete(QAssets.assets).execute();
             queryFactory.delete(QLibraryExclusionPatterns.libraryExclusionPatterns).execute();
@@ -533,6 +541,83 @@ class LibraryIntegrationTest {
         assertThat(japanChildren).hasSize(1);
         assertThat(japanChildren.get(0)).containsEntry("name", "31 March 2026");
         assertThat(japanChildren.get(0)).containsEntry("assetCount", 1);
+    }
+
+    @Test
+    void renameFolderMovesDirectoryAndRewritesIndexedPaths() throws Exception {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String cookie = cookiePair(admin);
+        String csrfToken = csrfToken(admin);
+        Path source = Files.createDirectory(tempDir.resolve("rename-library"));
+        Path events = Files.createDirectories(source.resolve("Events"));
+        Path nested = Files.createDirectories(events.resolve("2017-09-01"));
+        Files.writeString(nested.resolve("IMG_1.jpeg"), "img-one");
+
+        ResponseEntity<Map> createdLibrary = restTemplate.exchange(
+                "/api/libraries",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("name", "Family Photos")),
+                Map.class
+        );
+        String libraryId = createdLibrary.getBody().get("id").toString();
+        restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/roots",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("path", source.toString())),
+                Map.class
+        );
+        ResponseEntity<Map> scanStart = restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/scans",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, null),
+                Map.class
+        );
+        waitForScan(scanStart, cookie);
+
+        ResponseEntity<Map> treeBefore = restTemplate.exchange(
+                "/api/library-tree?libraryId=" + libraryId,
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+        Map<String, Object> eventsNode = treeRoots(treeBefore).stream()
+                .filter(node -> "Events".equals(node.get("name")))
+                .findFirst()
+                .orElseThrow();
+        String eventsPath = eventsNode.get("path").toString();
+
+        ResponseEntity<Map> renamed = restTemplate.exchange(
+                "/api/libraries/" + libraryId + "/folders/rename",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("path", eventsPath, "name", "Parties")),
+                Map.class
+        );
+
+        assertThat(renamed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(renamed.getBody()).containsEntry("name", "Parties");
+        assertThat(Files.exists(source.resolve("Events"))).isFalse();
+        assertThat(Files.exists(source.resolve("Parties").resolve("2017-09-01").resolve("IMG_1.jpeg"))).isTrue();
+
+        ResponseEntity<Map> treeAfter = restTemplate.exchange(
+                "/api/library-tree?libraryId=" + libraryId,
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+        List<Map<String, Object>> roots = treeRoots(treeAfter);
+        assertThat(roots).extracting(node -> node.get("name")).containsExactly("Parties");
+        Map<String, Object> parties = roots.get(0);
+        assertThat(treeChildren(parties)).extracting(node -> node.get("name")).containsExactly("2017-09-01");
+
+        ResponseEntity<Map> assets = restTemplate.exchange(
+                "/api/assets?libraryId=" + libraryId + "&folder=" + parties.get("path") + "&includeDescendants=true",
+                HttpMethod.GET,
+                withCookie(cookie),
+                Map.class
+        );
+        assertThat(assets.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(assets.getBody()).containsEntry("totalCount", 1);
+        assertThat(firstAsset(assets).get("folderPath").toString()).endsWith("/Parties/2017-09-01");
     }
 
     @Test

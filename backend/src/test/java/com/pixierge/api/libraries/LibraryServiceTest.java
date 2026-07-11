@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class LibraryServiceTest {
 
     private static final UUID LIBRARY_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID ROOT_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
     @TempDir
     private Path tempDir;
@@ -73,10 +74,64 @@ class LibraryServiceTest {
         }
     }
 
+    @Test
+    void renameFolderMovesDirectoryAndRewritesPaths() throws Exception {
+        Path source = Files.createDirectory(tempDir.resolve("library-root"));
+        Path events = Files.createDirectories(source.resolve("Events"));
+        Files.writeString(events.resolve("photo.jpg"), "image");
+        StubLibraryRepository repository = new StubLibraryRepository();
+        repository.root = new LibraryRepository.LibraryRootRecord(
+                ROOT_ID,
+                LIBRARY_ID,
+                source.toString(),
+                source.toAbsolutePath().normalize().toString(),
+                OffsetDateTime.now()
+        );
+        LibraryService service = new LibraryService(repository);
+
+        RenameFolderResponse response = service.renameFolder(
+                LIBRARY_ID,
+                new RenameFolderRequest(events.toAbsolutePath().normalize().toString(), "Parties")
+        );
+
+        assertThat(response.name()).isEqualTo("Parties");
+        assertThat(Files.exists(source.resolve("Events"))).isFalse();
+        assertThat(Files.exists(source.resolve("Parties").resolve("photo.jpg"))).isTrue();
+        assertThat(repository.rewrittenAssetPrefix).containsExactly(
+                events.toAbsolutePath().normalize().toString(),
+                source.resolve("Parties").toAbsolutePath().normalize().toString()
+        );
+        assertThat(repository.rewrittenRootPrefix).containsExactly(
+                events.toAbsolutePath().normalize().toString(),
+                source.resolve("Parties").toAbsolutePath().normalize().toString()
+        );
+    }
+
+    @Test
+    void renameFolderRejectsLibrarySourceRoot() throws Exception {
+        Path source = Files.createDirectory(tempDir.resolve("library-root"));
+        StubLibraryRepository repository = new StubLibraryRepository();
+        String rootPath = source.toAbsolutePath().normalize().toString();
+        repository.root = new LibraryRepository.LibraryRootRecord(
+                ROOT_ID,
+                LIBRARY_ID,
+                rootPath,
+                rootPath,
+                OffsetDateTime.now()
+        );
+        LibraryService service = new LibraryService(repository);
+
+        assertThatThrownBy(() -> service.renameFolder(LIBRARY_ID, new RenameFolderRequest(rootPath, "Renamed")))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
     private static final class StubLibraryRepository extends LibraryRepository {
 
         private String existingRootPath;
         private LibraryRootRecord root;
+        private List<String> rewrittenAssetPrefix;
+        private List<String> rewrittenRootPrefix;
 
         private StubLibraryRepository() {
             super((SQLQueryFactory) null);
@@ -94,9 +149,18 @@ class LibraryServiceTest {
 
         @Override
         public UUID addRoot(UUID libraryId, String path, String normalizedPath) {
-            UUID rootId = UUID.fromString("00000000-0000-0000-0000-000000000002");
-            root = new LibraryRootRecord(rootId, libraryId, path, normalizedPath, OffsetDateTime.now());
-            return rootId;
+            root = new LibraryRootRecord(ROOT_ID, libraryId, path, normalizedPath, OffsetDateTime.now());
+            return ROOT_ID;
+        }
+
+        @Override
+        public void rewriteAssetFilePathPrefix(String oldPrefix, String newPrefix) {
+            rewrittenAssetPrefix = List.of(oldPrefix, newPrefix);
+        }
+
+        @Override
+        public void rewriteRootPathPrefix(String oldPrefix, String newPrefix) {
+            rewrittenRootPrefix = List.of(oldPrefix, newPrefix);
         }
 
         private LibraryRecord library(List<LibraryRootRecord> roots) {

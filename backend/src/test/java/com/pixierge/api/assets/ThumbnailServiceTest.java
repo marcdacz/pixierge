@@ -152,6 +152,28 @@ class ThumbnailServiceTest {
     }
 
     @Test
+    void sourceSubsampleAvoidsFullResolutionDecode() {
+        assertThat(ThumbnailService.sourceSubsample(6000, 4000, 48, 36)).isGreaterThan(1);
+        assertThat(ThumbnailService.sourceSubsample(6000, 4000, 320, 240)).isGreaterThan(1);
+        assertThat(ThumbnailService.sourceSubsample(6000, 4000, 1600, 1200)).isGreaterThan(1);
+        assertThat(ThumbnailService.sourceSubsample(640, 480, 320, 240)).isEqualTo(1);
+    }
+
+    @Test
+    void largeSourceImageProducesBoundedGridThumbnail() throws Exception {
+        Path source = createImage("large-source.jpg", 4000, 3000);
+        AssetDetailResponse asset = asset("large-hash", "confirmed", source, 4000, 3000);
+
+        ThumbnailResponseResource response = service.gridThumbnail(asset);
+
+        assertThat(response.contentType()).isEqualTo("image/jpeg");
+        BufferedImage thumbnail = ImageIO.read(response.resource().getInputStream());
+        assertThat(thumbnail.getWidth()).isLessThanOrEqualTo(320);
+        assertThat(thumbnail.getHeight()).isLessThanOrEqualTo(240);
+        assertThat(repository.upsertCount()).isEqualTo(1);
+    }
+
+    @Test
     void purgeRetainsRowsWhenTheStoredPathIsUnsafe() {
         ThumbnailRepository.ThumbnailCacheInput input = service.cacheInput("stale-hash", "grid", 320, 240);
         ThumbnailRepository.ThumbnailRow stale = row(UUID.randomUUID(), input, Path.of("..", "outside.jpg"));
@@ -165,8 +187,12 @@ class ThumbnailServiceTest {
     }
 
     private Path createImage(String fileName) throws Exception {
+        return createImage(fileName, 640, 480);
+    }
+
+    private Path createImage(String fileName, int width, int height) throws Exception {
         Path path = tempDir.resolve(fileName);
-        BufferedImage image = new BufferedImage(640, 480, BufferedImage.TYPE_INT_RGB);
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = image.createGraphics();
         graphics.setColor(Color.ORANGE);
         graphics.fillRect(0, 0, image.getWidth(), image.getHeight());
@@ -176,6 +202,10 @@ class ThumbnailServiceTest {
     }
 
     private AssetDetailResponse asset(String contentHash, String identityStatus, Path source) {
+        return asset(contentHash, identityStatus, source, 640, 480);
+    }
+
+    private AssetDetailResponse asset(String contentHash, String identityStatus, Path source, int width, int height) {
         UUID assetId = UUID.randomUUID();
         return new AssetDetailResponse(
                 assetId,
@@ -184,7 +214,7 @@ class ThumbnailServiceTest {
                 "image/jpeg",
                 "available",
                 1,
-                new AssetMetadataResponse(null, 640, 480, "jpg", "image/jpeg", "extracted", null, null),
+                new AssetMetadataResponse(null, width, height, "jpg", "image/jpeg", "extracted", null, null),
                 List.of(new AssetFileOccurrenceResponse(
                         UUID.randomUUID(),
                         UUID.randomUUID(),
@@ -195,7 +225,8 @@ class ThumbnailServiceTest {
                         1,
                         OffsetDateTime.now(),
                         "active"
-                ))
+                )),
+                List.of()
         );
     }
 

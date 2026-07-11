@@ -38,9 +38,10 @@ Then edit `docker-compose.override.yml`. Use one mount for one folder, or multip
 services:
   api:
     volumes:
-      - /Users/your-name/Pictures:/photos/pictures:ro
-      - /Volumes/ArchiveDrive/Photos:/photos/archive:ro
-      - /Users/your-name/Scans:/photos/scans:ro
+      # Read-write mounts are required for folder rename.
+      - /Users/your-name/Pictures:/photos/pictures
+      - /Volumes/ArchiveDrive/Photos:/photos/archive
+      - /Users/your-name/Scans:/photos/scans
 ```
 
 After restarting Docker Compose, add these source paths in Pixierge:
