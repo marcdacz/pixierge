@@ -8,6 +8,7 @@ public record AlbumSummaryResponse(
         String name,
         UUID coverAssetId,
         String coverFileName,
+        String kind,
         int itemCount,
         int sourceLibraryCount,
         OffsetDateTime createdAt,

@@ -21,6 +21,7 @@ public class QAlbums extends RelationalPathBase<QAlbums> {
     public final ComparablePath<UUID> ownerUserId = createComparable("ownerUserId", UUID.class);
     public final StringPath name = createString("name");
     public final ComparablePath<UUID> coverAssetId = createComparable("coverAssetId", UUID.class);
+    public final StringPath kind = createString("kind");
     public final DateTimePath<OffsetDateTime> createdAt = createDateTime("createdAt", OffsetDateTime.class);
     public final DateTimePath<OffsetDateTime> updatedAt = createDateTime("updatedAt", OffsetDateTime.class);
 
@@ -34,8 +35,9 @@ public class QAlbums extends RelationalPathBase<QAlbums> {
         addMetadata(ownerUserId, ColumnMetadata.named("owner_user_id").withIndex(2).ofType(Types.OTHER).notNull());
         addMetadata(name, ColumnMetadata.named("name").withIndex(3).ofType(Types.VARCHAR).notNull());
         addMetadata(coverAssetId, ColumnMetadata.named("cover_asset_id").withIndex(4).ofType(Types.OTHER));
-        addMetadata(createdAt, ColumnMetadata.named("created_at").withIndex(5).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
-        addMetadata(updatedAt, ColumnMetadata.named("updated_at").withIndex(6).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
+        addMetadata(kind, ColumnMetadata.named("kind").withIndex(5).ofType(Types.VARCHAR).notNull());
+        addMetadata(createdAt, ColumnMetadata.named("created_at").withIndex(6).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
+        addMetadata(updatedAt, ColumnMetadata.named("updated_at").withIndex(7).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
     }
 
     @Override

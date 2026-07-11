@@ -148,6 +148,7 @@ export type AssetSummary = {
   thumbnailStatus: 'ready' | 'missing' | 'pending';
   thumbnailCacheKey: string | null;
   thumbnailPlaceholder: string | null;
+  favourited: boolean;
 };
 
 export type AssetSection = {
@@ -206,6 +207,7 @@ export type AlbumSummary = {
   name: string;
   coverAssetId: string | null;
   coverFileName: string | null;
+  kind: 'user' | 'favourites';
   itemCount: number;
   sourceLibraryCount: number;
   createdAt: string;
@@ -508,6 +510,14 @@ export async function addAlbumItems(albumIds: string[], items: AssetAssignmentIt
 
 export async function removeAlbumItems(albumId: string, assetIds: string[], csrfToken: string): Promise<void> {
   await requestWithoutBodyWithJson(`/api/albums/${albumId}/items`, { method: 'DELETE', body: JSON.stringify({ assetIds }), csrfToken });
+}
+
+export async function fetchFavourites(): Promise<AlbumSummary> {
+  return requestJson<AlbumSummary>('/api/favourites');
+}
+
+export async function fetchFavouritesAssets(page = 0, pageSize = 48): Promise<AssetBrowseResponse> {
+  return requestJson<AssetBrowseResponse>(`/api/favourites/assets?page=${page}&pageSize=${pageSize}`);
 }
 
 export async function fetchTags(): Promise<TagSummary[]> {

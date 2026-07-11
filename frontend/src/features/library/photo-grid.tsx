@@ -2,9 +2,11 @@ import {
   ChevronLeft,
   ChevronRight,
   FileImage,
+  Heart,
   Image,
   Info,
   Minus,
+  MoreHorizontal,
   Plus,
   X
 } from 'lucide-react';
@@ -51,13 +53,24 @@ function clampAssetFocusZoom(value: number) {
   return Math.min(ASSET_FOCUS_MAX_ZOOM, Math.max(ASSET_FOCUS_MIN_ZOOM, Math.round(value * 100) / 100));
 }
 const THUMBNAIL_SIZE_SLIDER_WIDTH_CLASS = 'w-28';
+/** Matches Tailwind `gap-1`; used by column-count tile sizes below. */
+export const ASSET_GRID_GAP = '0.25rem';
 export const ASSET_TILE_SIZE_OPTIONS = [
   { key: 'tiny', minWidth: '5.5rem', imageSource: 'grid' },
   { key: 'compact', minWidth: '7rem', imageSource: 'grid' },
   { key: 'comfortable', minWidth: '11rem', imageSource: 'grid' },
-  { key: 'large', minWidth: '15rem', imageSource: 'preview' },
-  { key: 'xlarge', minWidth: '20rem', imageSource: 'preview' },
-  { key: 'huge', minWidth: '28rem', imageSource: 'preview' }
+  // Last three steps target ~3 / ~2 / 1 columns across the browse pane.
+  {
+    key: 'large',
+    minWidth: `calc((100% - 2 * ${ASSET_GRID_GAP}) / 3)`,
+    imageSource: 'preview'
+  },
+  {
+    key: 'xlarge',
+    minWidth: `calc((100% - ${ASSET_GRID_GAP}) / 2)`,
+    imageSource: 'preview'
+  },
+  { key: 'huge', minWidth: '100%', imageSource: 'preview' }
 ] as const;
 export const DEFAULT_ASSET_TILE_SIZE_INDEX = 2;
 export const MAX_ASSET_TILE_SIZE_INDEX = ASSET_TILE_SIZE_OPTIONS.length - 1;
@@ -153,7 +166,7 @@ export function AssetGrid({
     return (
       <div
         aria-label="Asset grid"
-        className="grid gap-1"
+        className="grid"
         onClick={(event) => {
           if (event.target === event.currentTarget) onClearSelection?.();
         }}
@@ -187,7 +200,7 @@ export function AssetGrid({
           </div>
           <div
             aria-label="Asset grid"
-            className="grid gap-1"
+            className="grid"
             onClick={(event) => {
               if (event.target === event.currentTarget) onClearSelection?.();
             }}
@@ -236,8 +249,13 @@ export function ThumbnailSizeControls({
 
 function assetGridStyle(tileSize: AssetTileSize): CSSProperties {
   return {
+    '--asset-grid-gap': ASSET_GRID_GAP,
     '--asset-grid-tile-size': tileSize.minWidth,
-    gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, var(--asset-grid-tile-size)), 1fr))'
+    gap: 'var(--asset-grid-gap)',
+    // Cap tracks at the selected tile size so sparse sections (e.g. one photo) do not stretch.
+    // min(100%, …) still lets tiles shrink on narrow panes.
+    gridTemplateColumns:
+      'repeat(auto-fill, minmax(min(100%, var(--asset-grid-tile-size)), var(--asset-grid-tile-size)))'
   } as CSSProperties;
 }
 
@@ -350,7 +368,15 @@ export function AssetTile({
       {selected && (
         <div aria-hidden className="pointer-events-none absolute inset-0 border-2 border-muted-foreground" />
       )}
-      <div className="absolute inset-x-0 bottom-0 flex min-h-9 items-end justify-between gap-2 bg-gradient-to-t from-background/85 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+      {asset.favourited && (
+        <span
+          aria-label="Favourited"
+          className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] grid h-6 w-6 place-items-center rounded-full bg-background/80 text-foreground shadow-sm"
+        >
+          <Heart aria-hidden className="h-3.5 w-3.5 fill-current" />
+        </span>
+      )}
+      <div className="absolute inset-x-0 bottom-0 z-[2] flex min-h-9 items-end justify-between gap-2 bg-gradient-to-t from-background/85 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
         <span className="truncate text-xs font-medium text-foreground">{asset.fileName}</span>
         <span className="flex shrink-0 gap-1">
           {asset.identityStatus === ASSET_IDENTITY_PENDING && <Badge variant="secondary">Identity pending</Badge>}
@@ -397,20 +423,26 @@ function hashString(value: string): number {
 export function AssetFocus({
   asset,
   cacheKey,
+  favourited = false,
   hasNext,
   hasPrevious,
   loading,
   onClose,
+  onContextMenu,
   onNext,
+  onOpenActions,
   onPrevious
 }: {
   asset: AssetDetail | null;
   cacheKey?: string | null;
+  favourited?: boolean;
   hasNext: boolean;
   hasPrevious: boolean;
   loading: boolean;
   onClose: () => void;
+  onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
   onNext: () => void;
+  onOpenActions?: (anchor: { x: number; y: number }) => void;
   onPrevious: () => void;
 }) {
   const activeFile = asset?.files?.find((file) => file.status === ASSET_STATUS_ACTIVE);
@@ -680,12 +712,35 @@ export function AssetFocus({
             >
               <Info className="h-4 w-4" aria-hidden />
             </Button>
+            {onOpenActions && (
+              <Button
+                aria-label="Photo actions"
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  onOpenActions({ x: rect.left, y: rect.bottom + 4 });
+                  revealControls();
+                }}
+                size="icon"
+                type="button"
+                variant="secondary"
+              >
+                <MoreHorizontal className="h-4 w-4" aria-hidden />
+              </Button>
+            )}
           </div>
           <div
             className={cn(
               'absolute inset-0 overflow-hidden bg-black',
               canPan ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'
             )}
+            onContextMenu={(event) => {
+              if (!onContextMenu) {
+                return;
+              }
+              event.preventDefault();
+              onContextMenu(event);
+              revealControls();
+            }}
             onDoubleClick={handleDoubleClick}
             onPointerCancel={endPan}
             onPointerDown={handlePointerDown}
@@ -711,6 +766,14 @@ export function AssetFocus({
                 <FileImage className="h-10 w-10" aria-hidden />
                 <p>No active file available</p>
               </div>
+            )}
+            {favourited && (
+              <span
+                aria-label="Favourited"
+                className="pointer-events-none absolute bottom-3 left-3 z-10 grid h-8 w-8 place-items-center rounded-full bg-background/80 text-foreground shadow-sm"
+              >
+                <Heart aria-hidden className="h-4 w-4 fill-current" />
+              </span>
             )}
           </div>
           {showMetadata && (

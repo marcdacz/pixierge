@@ -22,6 +22,7 @@ public record AssetSummaryResponse(
         boolean previewable,
         String thumbnailStatus,
         String thumbnailCacheKey,
-        String thumbnailPlaceholder
+        String thumbnailPlaceholder,
+        boolean favourited
 ) {
 }

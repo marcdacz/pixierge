@@ -76,7 +76,8 @@ const assetBrowseResponse = {
           previewable: true,
           thumbnailStatus: 'ready',
           thumbnailCacheKey: 'e2e-thumbnail-v1',
-          thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110))'
+          thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110))',
+          favourited: false
         }
       ]
     }
@@ -228,6 +229,16 @@ test('selects photos and assigns albums and tags', async ({ page }) => {
   await expect(page.getByRole('menu', { name: 'Asset actions' })).toBeVisible();
   await expect(tile).toHaveAttribute('aria-selected', 'true');
 
+  await page.getByRole('menuitem', { name: 'Add to favourites' }).click();
+  await expect(page.getByLabel('Favourited')).toBeVisible();
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Favourites' }).click();
+  await expect(page.getByRole('heading', { name: 'Favourites' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Albums' })).toHaveCount(0);
+  await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
+  await expect(page.getByLabel('Favourited')).toBeVisible();
+
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Libraries' }).click();
+  await tile.click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Add to albums…' }).click();
   await page.getByLabel('Search add to albums').fill('Best of 2026');
   await page.getByRole('option', { name: 'Create album “Best of 2026”' }).click();
@@ -247,6 +258,7 @@ test('selects photos and assigns albums and tags', async ({ page }) => {
   const albumsNav = page.getByRole('navigation', { name: 'Albums' });
   await expect(albumsNav).toBeVisible();
   await expect(albumsNav.getByRole('button', { name: /^Best of 2026/ })).toBeVisible();
+  await expect(albumsNav.getByRole('button', { name: /^Favourites/ })).toHaveCount(0);
   await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
 
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Tags' }).click();
@@ -254,6 +266,19 @@ test('selects photos and assigns albums and tags', async ({ page }) => {
   await expect(tagsNav).toBeVisible();
   await expect(tagsNav.getByRole('button', { name: /^Favourite/ })).toBeVisible();
   await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
+});
+
+test('favourites organizer visual regression @visual', async ({ page }) => {
+  await mockPixiergeApi(page);
+  await completeBrowsableLibrarySetup(page);
+  await page.locator('[data-asset-id="asset-1"]').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Add to favourites' }).click();
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Favourites' }).click();
+  await expect(page.getByRole('heading', { name: 'Favourites' })).toBeVisible();
+  await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
+  await expect(page).toHaveScreenshot('browse-favourites.png', {
+    fullPage: true
+  });
 });
 
 test('albums organizer visual regression @visual', async ({ page }) => {
@@ -282,11 +307,37 @@ async function mockPixiergeApi(page: Page) {
     name: string;
     coverAssetId: string | null;
     coverFileName: string | null;
+    kind: 'user' | 'favourites';
     itemCount: number;
     sourceLibraryCount: number;
     createdAt: string;
     updatedAt: string;
   }> = [];
+  let favourites: {
+    id: string;
+    name: string;
+    coverAssetId: string | null;
+    coverFileName: string | null;
+    kind: 'user' | 'favourites';
+    itemCount: number;
+    sourceLibraryCount: number;
+    createdAt: string;
+    updatedAt: string;
+  } | null = null;
+  const favouritedAssetIds = new Set<string>();
+
+  function browseWithFavourites(response: typeof assetBrowseResponse) {
+    return {
+      ...response,
+      sections: response.sections.map((section) => ({
+        ...section,
+        assets: section.assets.map((asset) => ({
+          ...asset,
+          favourited: favouritedAssetIds.has(asset.id)
+        }))
+      }))
+    };
+  }
   const tags: Array<{
     id: string;
     name: string;
@@ -377,7 +428,7 @@ async function mockPixiergeApi(page: Page) {
     }
 
     if (path === '/api/assets') {
-      await route.fulfill({ json: assetBrowseResponse });
+      await route.fulfill({ json: browseWithFavourites(assetBrowseResponse) });
       return;
     }
 
@@ -528,6 +579,33 @@ async function mockPixiergeApi(page: Page) {
       return;
     }
 
+    if (path === '/api/favourites' && request.method() === 'GET') {
+      if (!favourites) {
+        favourites = {
+          id: 'favourites-1',
+          name: 'Favourites',
+          coverAssetId: null,
+          coverFileName: null,
+          kind: 'favourites',
+          itemCount: 0,
+          sourceLibraryCount: 0,
+          createdAt: '2026-07-04T00:00:00Z',
+          updatedAt: '2026-07-04T00:00:00Z'
+        };
+      }
+      await route.fulfill({ json: favourites });
+      return;
+    }
+
+    if (path === '/api/favourites/assets' && request.method() === 'GET') {
+      await route.fulfill({
+        json: favourites && favourites.itemCount > 0
+          ? browseWithFavourites(assetBrowseResponse)
+          : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
+      });
+      return;
+    }
+
     if (path === '/api/albums' && request.method() === 'POST') {
       const body = await request.postDataJSON();
       const album = {
@@ -535,6 +613,7 @@ async function mockPixiergeApi(page: Page) {
         name: body.name,
         coverAssetId: null,
         coverFileName: null,
+        kind: 'user' as const,
         itemCount: 0,
         sourceLibraryCount: 0,
         createdAt: '2026-07-04T00:00:00Z',
@@ -569,7 +648,7 @@ async function mockPixiergeApi(page: Page) {
       const album = albums.find((item) => item.id === albumAssetsMatch[1]);
       await route.fulfill({
         json: album && album.itemCount > 0
-          ? assetBrowseResponse
+          ? browseWithFavourites(assetBrowseResponse)
           : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
       });
       return;
@@ -578,10 +657,37 @@ async function mockPixiergeApi(page: Page) {
     if (path === '/api/album-items' && request.method() === 'POST') {
       const body = await request.postDataJSON();
       for (const albumId of body.albumIds ?? []) {
+        if (favourites && favourites.id === albumId) {
+          favourites.itemCount += (body.items ?? []).length;
+          favourites.sourceLibraryCount = Math.max(favourites.sourceLibraryCount, 1);
+          for (const item of body.items ?? []) {
+            favouritedAssetIds.add(item.assetId);
+          }
+          continue;
+        }
         const album = albums.find((item) => item.id === albumId);
         if (album) {
           album.itemCount += (body.items ?? []).length;
           album.sourceLibraryCount = Math.max(album.sourceLibraryCount, 1);
+        }
+      }
+      await route.fulfill({ status: 204, body: '' });
+      return;
+    }
+
+    const albumItemsMatch = path.match(/^\/api\/albums\/([^/]+)\/items$/);
+    if (albumItemsMatch && request.method() === 'DELETE') {
+      const body = await request.postDataJSON();
+      const removedCount = (body.assetIds ?? []).length;
+      if (favourites && favourites.id === albumItemsMatch[1]) {
+        favourites.itemCount = Math.max(0, favourites.itemCount - removedCount);
+        for (const assetId of body.assetIds ?? []) {
+          favouritedAssetIds.delete(assetId);
+        }
+      } else {
+        const album = albums.find((item) => item.id === albumItemsMatch[1]);
+        if (album) {
+          album.itemCount = Math.max(0, album.itemCount - removedCount);
         }
       }
       await route.fulfill({ status: 204, body: '' });
@@ -612,7 +718,7 @@ async function mockPixiergeApi(page: Page) {
       const tag = tags.find((item) => item.id === tagAssetsMatch[1]);
       await route.fulfill({
         json: tag && tag.assetCount > 0
-          ? assetBrowseResponse
+          ? browseWithFavourites(assetBrowseResponse)
           : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
       });
       return;

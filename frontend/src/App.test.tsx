@@ -144,7 +144,8 @@ const browseAssets = {
           previewable: true,
           thumbnailStatus: 'ready',
           thumbnailCacheKey: 'grid-cache-asset-1',
-          thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110) 52%, rgb(50, 60, 70))'
+          thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110) 52%, rgb(50, 60, 70))',
+          favourited: false
         }
       ]
     }
@@ -281,6 +282,40 @@ describe('App', () => {
     expect(screen.getByLabelText('Library name')).toBeInTheDocument();
   });
 
+  it('opens the library page when searching from another view', async () => {
+    const fetchMock = mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
+      { status: 200, body: globalExclusionPatterns },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'All folders' })).toBeInTheDocument();
+    const search = screen.getByLabelText('Search');
+    expect(search).toHaveAttribute('placeholder', 'Search');
+
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Utilities' })).getByRole('button', { name: 'Settings' })
+    );
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Search'), 'beach');
+
+    expect(await screen.findByRole('heading', { name: 'All folders' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8080/api/assets?libraryId=library-1&q=beach&page=0&pageSize=48',
+        expect.objectContaining({ credentials: 'include', method: 'GET' })
+      );
+    });
+  });
+
   it('shows library folders in the browse tree and configuration health totals', async () => {
     mockFetch([
       { status: 200, body: { required: false } },
@@ -337,14 +372,18 @@ describe('App', () => {
     ).not.toBeNull();
     const thumbnailSize = screen.getByRole('slider', { name: 'Thumbnail size' });
     fireEvent.change(thumbnailSize, { target: { value: '3' } });
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('15rem');
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe(
+      'calc((100% - 2 * 0.25rem) / 3)'
+    );
     expect(
       document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/preview?c=grid-cache-asset-1"]')
     ).not.toBeNull();
     fireEvent.change(thumbnailSize, { target: { value: '4' } });
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('20rem');
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe(
+      'calc((100% - 0.25rem) / 2)'
+    );
     fireEvent.change(thumbnailSize, { target: { value: '5' } });
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('28rem');
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('100%');
     expect(thumbnailSize).toHaveAttribute('aria-valuenow', '5');
     expect(window.localStorage.getItem('pixierge.assetTileSizeIndex')).toBe('5');
     fireEvent.change(thumbnailSize, { target: { value: '0' } });

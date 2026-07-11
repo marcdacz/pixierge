@@ -3,6 +3,7 @@ package com.pixierge.api.assets;
 import com.pixierge.api.db.QAssetFiles;
 import com.pixierge.api.db.QAssetMetadata;
 import com.pixierge.api.db.QAlbumItems;
+import com.pixierge.api.db.QAlbums;
 import com.pixierge.api.db.QAssetTags;
 import com.pixierge.api.db.QAssets;
 import com.pixierge.api.db.QLibraries;
@@ -10,6 +11,7 @@ import com.pixierge.api.db.QLibraryMembers;
 import com.pixierge.api.db.QLibraryRoots;
 import com.pixierge.api.db.QSearchDocuments;
 import com.pixierge.api.db.QTags;
+import com.pixierge.api.albums.AlbumKind;
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.Tuple;
 import com.querydsl.sql.SQLQuery;
@@ -18,11 +20,14 @@ import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.pixierge.api.assets.AssetConstants.AVAILABILITY_AVAILABLE;
@@ -39,6 +44,7 @@ class AssetRepository {
     private static final QAssets ASSETS = QAssets.assets;
     private static final QAssetMetadata ASSET_METADATA = QAssetMetadata.assetMetadata;
     private static final QAlbumItems ALBUM_ITEMS = QAlbumItems.albumItems;
+    private static final QAlbums ALBUMS = QAlbums.albums;
     private static final QAssetTags ASSET_TAGS = QAssetTags.assetTags;
     private static final QLibraries LIBRARIES = QLibraries.libraries;
     private static final QLibraryMembers LIBRARY_MEMBERS = QLibraryMembers.libraryMembers;
@@ -180,6 +186,19 @@ class AssetRepository {
                         .and(readableWhere(userId, admin, null)))
                 .fetchFirst();
         return result != null;
+    }
+
+    Set<UUID> favouritedAssetIds(UUID userId, Collection<UUID> assetIds) {
+        if (assetIds == null || assetIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(queryFactory.select(ALBUM_ITEMS.assetId)
+                .from(ALBUM_ITEMS)
+                .join(ALBUMS).on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
+                .where(ALBUMS.ownerUserId.eq(userId)
+                        .and(ALBUMS.kind.eq(AlbumKind.FAVOURITES))
+                        .and(ALBUM_ITEMS.assetId.in(assetIds)))
+                .fetch());
     }
 
     BrowseRows browseAlbumAssets(UUID userId, boolean admin, UUID albumId, int page, int pageSize) {

@@ -11,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -32,6 +33,7 @@ public class AlbumService {
     @Transactional
     public AlbumSummaryResponse create(CreateAlbumRequest request, AuthenticatedUser user) {
         String name = validateName(request.name());
+        rejectReservedFavouritesName(name);
         try {
             return get(albumRepository.create(user.id(), name), user);
         } catch (DataIntegrityViolationException exception) {
@@ -45,8 +47,36 @@ public class AlbumService {
     }
 
     @Transactional
+    public AlbumSummaryResponse getOrCreateFavourites(AuthenticatedUser user) {
+        return albumRepository.findByKind(user.id(), AlbumKind.FAVOURITES)
+                .map(this::response)
+                .orElseGet(() -> {
+                    Optional<UUID> created = albumRepository.createFavouritesIfAbsent(user.id());
+                    if (created.isPresent()) {
+                        return get(created.get(), user);
+                    }
+                    return albumRepository.findByKind(user.id(), AlbumKind.FAVOURITES)
+                            .map(this::response)
+                            .orElseThrow(() -> new IllegalStateException("Favourites album missing after create"));
+                });
+    }
+
+    @Transactional
+    public AssetBrowseResponse browseFavouritesAssets(AuthenticatedUser user, Integer page, Integer pageSize) {
+        AlbumSummaryResponse favourites = getOrCreateFavourites(user);
+        return assetService.browseAlbumAssets(user, favourites.id(), page, pageSize);
+    }
+
+    @Transactional
     public AlbumSummaryResponse update(UUID id, UpdateAlbumRequest request, AuthenticatedUser user) {
+        AlbumRepository.AlbumRecord album = albumRepository.find(id, user.id()).orElseThrow(this::notFound);
+        if (AlbumKind.FAVOURITES.equals(album.kind()) && request.name() != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Favourites cannot be renamed");
+        }
         String name = request.name() == null ? null : validateName(request.name());
+        if (name != null) {
+            rejectReservedFavouritesName(name);
+        }
         if (request.coverAssetId() != null) {
             // A cover must be readable in at least one of the caller's libraries.
             // Album membership itself is not required to choose a cover.
@@ -66,6 +96,10 @@ public class AlbumService {
 
     @Transactional
     public void delete(UUID id, AuthenticatedUser user) {
+        AlbumRepository.AlbumRecord album = albumRepository.find(id, user.id()).orElseThrow(this::notFound);
+        if (AlbumKind.FAVOURITES.equals(album.kind())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Favourites cannot be deleted");
+        }
         if (!albumRepository.delete(id, user.id())) {
             throw notFound();
         }
@@ -111,7 +145,7 @@ public class AlbumService {
 
     private AlbumSummaryResponse response(AlbumRepository.AlbumRecord album) {
         return new AlbumSummaryResponse(album.id(), album.name(), album.coverAssetId(), album.coverFileName(),
-                album.itemCount(), album.sourceLibraryCount(), album.createdAt(), album.updatedAt());
+                album.kind(), album.itemCount(), album.sourceLibraryCount(), album.createdAt(), album.updatedAt());
     }
 
     private String validateName(String raw) {
@@ -123,6 +157,12 @@ public class AlbumService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Album name is too long");
         }
         return value;
+    }
+
+    private void rejectReservedFavouritesName(String name) {
+        if (AlbumKind.FAVOURITES_NAME.equalsIgnoreCase(name)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Favourites is a reserved album name");
+        }
     }
 
     private List<UUID> distinct(List<UUID> values) {

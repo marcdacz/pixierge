@@ -155,14 +155,14 @@ public class AssetService {
                 normalizedPageSize
         );
         AssetRepository.BrowseRows rows = assetRepository.browse(user.id(), canAdminLibraries(user), criteria);
-        return toBrowseResponse(rows, normalizedPage, normalizedPageSize);
+        return toBrowseResponse(user, rows, normalizedPage, normalizedPageSize);
     }
 
     @Transactional(readOnly = true)
     public AssetBrowseResponse browseAlbumAssets(AuthenticatedUser user, UUID albumId, Integer page, Integer pageSize) {
         int normalizedPage = normalizePage(page);
         int normalizedPageSize = normalizePageSize(pageSize);
-        return toBrowseResponse(assetRepository.browseAlbumAssets(user.id(), canAdminLibraries(user), albumId,
+        return toBrowseResponse(user, assetRepository.browseAlbumAssets(user.id(), canAdminLibraries(user), albumId,
                 normalizedPage, normalizedPageSize), normalizedPage, normalizedPageSize);
     }
 
@@ -170,7 +170,7 @@ public class AssetService {
     public AssetBrowseResponse browseTagAssets(AuthenticatedUser user, UUID tagId, Integer page, Integer pageSize) {
         int normalizedPage = normalizePage(page);
         int normalizedPageSize = normalizePageSize(pageSize);
-        return toBrowseResponse(assetRepository.browseTagAssets(user.id(), canAdminLibraries(user), tagId,
+        return toBrowseResponse(user, assetRepository.browseTagAssets(user.id(), canAdminLibraries(user), tagId,
                 normalizedPage, normalizedPageSize), normalizedPage, normalizedPageSize);
     }
 
@@ -189,10 +189,19 @@ public class AssetService {
         return assetRepository.canReadAsset(user.id(), canAdminLibraries(user), assetId);
     }
 
-    private AssetBrowseResponse toBrowseResponse(AssetRepository.BrowseRows rows, int normalizedPage, int normalizedPageSize) {
+    private AssetBrowseResponse toBrowseResponse(
+            AuthenticatedUser user,
+            AssetRepository.BrowseRows rows,
+            int normalizedPage,
+            int normalizedPageSize
+    ) {
         Map<String, ThumbnailService.ThumbnailBrowseSummary> thumbnailSummaries = thumbnailService.browseSummaries(rows.assets().stream()
                 .map(AssetRepository.AssetSummaryRow::contentHash)
                 .toList());
+        Set<UUID> favouritedIds = assetRepository.favouritedAssetIds(
+                user.id(),
+                rows.assets().stream().map(AssetRepository.AssetSummaryRow::assetId).toList()
+        );
         Map<String, List<AssetSummaryResponse>> byFolder = new LinkedHashMap<>();
 
         for (AssetRepository.AssetSummaryRow row : rows.assets()) {
@@ -216,7 +225,8 @@ public class AssetService {
                     row.previewable(),
                     thumbnail.status(),
                     thumbnail.cacheKey(),
-                    thumbnail.placeholder()
+                    thumbnail.placeholder(),
+                    favouritedIds.contains(row.assetId())
             );
             byFolder.computeIfAbsent(row.folderPath(), ignored -> new ArrayList<>()).add(response);
         }

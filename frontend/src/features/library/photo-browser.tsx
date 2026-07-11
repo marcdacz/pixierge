@@ -7,7 +7,9 @@ import {
   createTag,
   fetchAlbums,
   fetchAsset,
+  fetchFavourites,
   fetchTags,
+  removeAlbumItems,
   type AssetBrowseResponse,
   type AssetDetail,
   type AssetSummary,
@@ -93,6 +95,7 @@ export function PhotoBrowser({
   const [pickerDestinations, setPickerDestinations] = useState<AssignmentDestination[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; assetId: string } | null>(null);
+  const [favouritedOverrides, setFavouritedOverrides] = useState<Map<string, boolean>>(() => new Map());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const loadMoreRequestedRef = useRef(false);
@@ -103,31 +106,57 @@ export function PhotoBrowser({
   const pendingNextNavigationRef = useRef(false);
 
   const assetTileSize = ASSET_TILE_SIZE_OPTIONS[assetTileSizeIndex];
-  const browseAssetIds = useMemo(() => flattenBrowseAssetIds(assets?.sections ?? []), [assets?.sections]);
+  const displayAssets = useMemo(() => {
+    if (!assets) {
+      return null;
+    }
+    if (favouritedOverrides.size === 0) {
+      return assets;
+    }
+    return {
+      ...assets,
+      sections: assets.sections.map((section) => ({
+        ...section,
+        assets: section.assets.map((asset) => {
+          const override = favouritedOverrides.get(asset.id);
+          return override === undefined || override === asset.favourited
+            ? asset
+            : { ...asset, favourited: override };
+        })
+      }))
+    };
+  }, [assets, favouritedOverrides]);
+  const browseAssetIds = useMemo(() => flattenBrowseAssetIds(displayAssets?.sections ?? []), [displayAssets?.sections]);
   const selection = useAssetSelection(browseContextKey);
   const selectedAssets = useMemo(
     () =>
-      assets?.sections.flatMap((section) => section.assets).filter((asset) => selection.selectedIds.has(asset.id)) ??
+      displayAssets?.sections.flatMap((section) => section.assets).filter((asset) => selection.selectedIds.has(asset.id)) ??
       [],
-    [assets?.sections, selection.selectedIds]
+    [displayAssets?.sections, selection.selectedIds]
   );
   const selectedAssetSummary = useMemo(
-    () => assets?.sections.flatMap((section) => section.assets).find((asset) => asset.id === selectedAssetId),
-    [assets?.sections, selectedAssetId]
+    () => displayAssets?.sections.flatMap((section) => section.assets).find((asset) => asset.id === selectedAssetId),
+    [displayAssets?.sections, selectedAssetId]
   );
   const contextAsset = useMemo(
-    () => assets?.sections.flatMap((section) => section.assets).find((asset) => asset.id === contextMenu?.assetId) ?? null,
-    [assets?.sections, contextMenu?.assetId]
+    () =>
+      displayAssets?.sections.flatMap((section) => section.assets).find((asset) => asset.id === contextMenu?.assetId) ??
+      null,
+    [displayAssets?.sections, contextMenu?.assetId]
   );
   const focusedAssetIndex = selectedAssetId ? browseAssetIds.indexOf(selectedAssetId) : -1;
   const canGoToPreviousAsset = focusedAssetIndex > 0;
   const canGoToNextAsset =
     (focusedAssetIndex >= 0 && focusedAssetIndex < browseAssetIds.length - 1) ||
-    (focusedAssetIndex === browseAssetIds.length - 1 && (assets?.hasNext ?? false));
+    (focusedAssetIndex === browseAssetIds.length - 1 && (displayAssets?.hasNext ?? false));
 
   useEffect(() => {
-    hasNextRef.current = assets?.hasNext ?? false;
-  }, [assets?.hasNext]);
+    setFavouritedOverrides(new Map());
+  }, [browseContextKey]);
+
+  useEffect(() => {
+    hasNextRef.current = displayAssets?.hasNext ?? false;
+  }, [displayAssets?.hasNext]);
 
   useEffect(() => {
     if (!loadingMore) {
@@ -280,12 +309,67 @@ export function PhotoBrowser({
     }
   }
 
+  async function addToFavourites() {
+    if (!auth || selectedAssets.length === 0) {
+      return;
+    }
+    setContextMenu(null);
+    try {
+      const favourites = await fetchFavourites();
+      const items = selectedAssets.map((asset) => ({ assetId: asset.id, sourceLibraryId: asset.libraryId }));
+      await addAlbumItems([favourites.id], items, auth.csrfToken);
+      setFavouritedOverrides((current) => {
+        const next = new Map(current);
+        for (const asset of selectedAssets) {
+          next.set(asset.id, true);
+        }
+        return next;
+      });
+      onAssignmentsChanged?.();
+    } catch {
+      setBrowseError('Could not add to favourites.');
+    }
+  }
+
+  async function removeFromFavourites() {
+    if (!auth || selectedAssets.length === 0) {
+      return;
+    }
+    setContextMenu(null);
+    try {
+      const favourites = await fetchFavourites();
+      await removeAlbumItems(
+        favourites.id,
+        selectedAssets.map((asset) => asset.id),
+        auth.csrfToken
+      );
+      setFavouritedOverrides((current) => {
+        const next = new Map(current);
+        for (const asset of selectedAssets) {
+          next.set(asset.id, false);
+        }
+        return next;
+      });
+      onAssignmentsChanged?.();
+    } catch {
+      setBrowseError('Could not remove from favourites.');
+    }
+  }
+
   function handleTileContextMenu(asset: AssetSummary, event: MouseEvent) {
     event.preventDefault();
     if (!selection.isSelected(asset.id)) {
       selection.selectOnly(asset.id);
     }
     setContextMenu({ x: event.clientX, y: event.clientY, assetId: asset.id });
+  }
+
+  function openFocusedAssetActions(x: number, y: number) {
+    if (!selectedAssetId) {
+      return;
+    }
+    selection.selectOnly(selectedAssetId);
+    setContextMenu({ x, y, assetId: selectedAssetId });
   }
 
   function handleTileDragStart(asset: AssetSummary, event: DragEvent) {
@@ -299,19 +383,81 @@ export function PhotoBrowser({
     });
   }
 
+  const selectionIsFavourited = selectedAssets.length > 0 && selectedAssets.every((asset) => asset.favourited);
+  const contextMenuActions: AssetContextMenuAction[] = [
+    selectionIsFavourited
+      ? { id: 'remove-favourites', label: 'Remove from favourites', onSelect: () => void removeFromFavourites() }
+      : { id: 'favourites', label: 'Add to favourites', onSelect: () => void addToFavourites() },
+    { id: 'albums', label: 'Add to albums…', onSelect: () => void openPicker('albums') },
+    { id: 'tags', label: 'Add tags…', onSelect: () => void openPicker('tags') },
+    ...(typeof extraContextActions === 'function'
+      ? extraContextActions({
+          selectedIds: selection.selectedIds,
+          selectedAssets,
+          contextAsset: contextAsset ?? selectedAssetSummary ?? null,
+          clearSelection: selection.clear
+        })
+      : (extraContextActions ?? []))
+  ];
+
+  const assignmentPicker =
+    pickerKind && auth ? (
+      <AssignmentPicker
+        createVerb={pickerKind === 'albums' ? 'album' : 'tag'}
+        destinations={pickerDestinations}
+        loading={pickerLoading}
+        onApply={async (ids) => {
+          const items = selectedAssets.map((asset) => ({ assetId: asset.id, sourceLibraryId: asset.libraryId }));
+          if (pickerKind === 'albums') {
+            await addAlbumItems(ids, items, auth.csrfToken);
+          } else {
+            await addAssetTags(ids, items, auth.csrfToken);
+          }
+          onAssignmentsChanged?.();
+        }}
+        onClose={() => setPickerKind(null)}
+        onCreate={async (name) => {
+          const result =
+            pickerKind === 'albums'
+              ? await createAlbum({ name }, auth.csrfToken)
+              : await createTag({ name }, auth.csrfToken);
+          const destination = { id: result.id, name: result.name };
+          setPickerDestinations((current) => [...current, destination]);
+          return destination;
+        }}
+        open
+        title={pickerKind === 'albums' ? 'Add to albums' : 'Add tags'}
+      />
+    ) : null;
+
+  const assetActionsMenu = (
+    <AssetContextMenu
+      actions={contextMenuActions}
+      onClose={() => setContextMenu(null)}
+      open={contextMenu !== null}
+      x={contextMenu?.x ?? 0}
+      y={contextMenu?.y ?? 0}
+    />
+  );
+
   if (selectedAssetId) {
     return (
       <div className="h-full min-h-0 min-w-0 flex-1">
         <AssetFocus
           asset={assetDetail}
           cacheKey={selectedAssetSummary?.thumbnailCacheKey}
+          favourited={selectedAssetSummary?.favourited ?? false}
           hasNext={canGoToNextAsset}
           hasPrevious={canGoToPreviousAsset}
           loading={!assetDetail}
           onClose={closeAssetFocus}
+          onContextMenu={(event) => openFocusedAssetActions(event.clientX, event.clientY)}
           onNext={goToNextAsset}
+          onOpenActions={({ x, y }) => openFocusedAssetActions(x, y)}
           onPrevious={goToPreviousAsset}
         />
+        {assetActionsMenu}
+        {assignmentPicker}
       </div>
     );
   }
@@ -326,18 +472,22 @@ export function PhotoBrowser({
               {subtitle}
               <div className="flex min-w-0 flex-wrap items-baseline gap-2">
                 {title}
-                {assets && <span className="shrink-0 text-sm text-muted-foreground">{formatItemCount(assets.totalCount)}</span>}
+                {displayAssets && (
+                  <span className="shrink-0 text-sm text-muted-foreground">{formatItemCount(displayAssets.totalCount)}</span>
+                )}
               </div>
               {description}
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <ThumbnailSizeControls
-                onChange={(value) => {
-                  setAssetTileSizeIndex(value);
-                  writeStoredAssetTileSizeIndex(value);
-                }}
-                value={assetTileSizeIndex}
-              />
+              {displayAssets && displayAssets.sections.length > 0 && (
+                <ThumbnailSizeControls
+                  onChange={(value) => {
+                    setAssetTileSizeIndex(value);
+                    writeStoredAssetTileSizeIndex(value);
+                  }}
+                  value={assetTileSizeIndex}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -346,10 +496,10 @@ export function PhotoBrowser({
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto [overflow-anchor:none]" ref={scrollContainerRef}>
         {(error || browseError) && <Alert>{browseError ?? error}</Alert>}
         {loadingAssets && <p className="text-sm text-muted-foreground">Loading assets...</p>}
-        {!loadingAssets && assets?.sections.length === 0 && (
+        {!loadingAssets && displayAssets?.sections.length === 0 && (
           <EmptyPanel description={emptyDescription} icon={FileImage} title={emptyTitle} />
         )}
-        {assets && assets.sections.length > 0 && (
+        {displayAssets && displayAssets.sections.length > 0 && (
           <AssetGrid
             assetTileSize={assetTileSize}
             onClearSelection={selection.clear}
@@ -360,60 +510,16 @@ export function PhotoBrowser({
             onSelectClick={selection.selectClick}
             orderedIds={browseAssetIds}
             selectedIds={selection.selectedIds}
-            sections={assets.sections}
+            sections={displayAssets.sections}
             showSectionHeaders={showSectionHeaders}
           />
         )}
-        {assets && assets.hasNext && onLoadMore && <div aria-hidden className="h-px shrink-0" ref={loadMoreRef} />}
+        {displayAssets && displayAssets.hasNext && onLoadMore && <div aria-hidden className="h-px shrink-0" ref={loadMoreRef} />}
         {loadingMore && <p className="pb-4 text-sm text-muted-foreground">Loading more...</p>}
       </div>
 
-      <AssetContextMenu
-        actions={[
-          { id: 'albums', label: 'Add to albums…', onSelect: () => void openPicker('albums') },
-          { id: 'tags', label: 'Add tags…', onSelect: () => void openPicker('tags') },
-          ...(typeof extraContextActions === 'function'
-            ? extraContextActions({
-                selectedIds: selection.selectedIds,
-                selectedAssets,
-                contextAsset,
-                clearSelection: selection.clear
-              })
-            : (extraContextActions ?? []))
-        ]}
-        onClose={() => setContextMenu(null)}
-        open={contextMenu !== null}
-        x={contextMenu?.x ?? 0}
-        y={contextMenu?.y ?? 0}
-      />
-      {pickerKind && auth && (
-        <AssignmentPicker
-          createVerb={pickerKind === 'albums' ? 'album' : 'tag'}
-          destinations={pickerDestinations}
-          loading={pickerLoading}
-          onApply={async (ids) => {
-            const items = selectedAssets.map((asset) => ({ assetId: asset.id, sourceLibraryId: asset.libraryId }));
-            if (pickerKind === 'albums') {
-              await addAlbumItems(ids, items, auth.csrfToken);
-            } else {
-              await addAssetTags(ids, items, auth.csrfToken);
-            }
-            onAssignmentsChanged?.();
-          }}
-          onClose={() => setPickerKind(null)}
-          onCreate={async (name) => {
-            const result =
-              pickerKind === 'albums'
-                ? await createAlbum({ name }, auth.csrfToken)
-                : await createTag({ name }, auth.csrfToken);
-            const destination = { id: result.id, name: result.name };
-            setPickerDestinations((current) => [...current, destination]);
-            return destination;
-          }}
-          open
-          title={pickerKind === 'albums' ? 'Add to albums' : 'Add tags'}
-        />
-      )}
+      {assetActionsMenu}
+      {assignmentPicker}
     </section>
   );
 }

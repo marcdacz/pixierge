@@ -141,6 +141,56 @@ class AlbumTagIntegrationTest {
         assertThat(remainingTags).isZero();
     }
 
+    @Test
+    void favouritesAreHiddenFromAlbumListAndSupportAddRemoveBrowse() {
+        ResponseEntity<Map> admin = createAdmin();
+        Fixture fixture = fixture();
+        String cookie = cookie(admin);
+        String csrf = csrf(admin);
+
+        ResponseEntity<Map> first = exchange("/api/favourites", HttpMethod.GET, cookieRequest(cookie), Map.class);
+        ResponseEntity<Map> second = exchange("/api/favourites", HttpMethod.GET, cookieRequest(cookie), Map.class);
+        String favouritesId = first.getBody().get("id").toString();
+
+        ResponseEntity<Map> userAlbum = exchange("/api/albums", HttpMethod.POST, request(cookie, csrf,
+                Map.of("name", "Summer")), Map.class);
+        ResponseEntity<Map> reservedName = exchange("/api/albums", HttpMethod.POST, request(cookie, csrf,
+                Map.of("name", "Favourites")), Map.class);
+        ResponseEntity<Map[]> albums = exchange("/api/albums", HttpMethod.GET, cookieRequest(cookie), Map[].class);
+
+        ResponseEntity<Void> added = exchange("/api/album-items", HttpMethod.POST, request(cookie, csrf, Map.of(
+                "albumIds", List.of(favouritesId),
+                "items", List.of(Map.of("assetId", fixture.firstAsset(), "sourceLibraryId", fixture.firstLibrary())))),
+                Void.class);
+        ResponseEntity<Map> assets = exchange("/api/favourites/assets?pageSize=10", HttpMethod.GET,
+                cookieRequest(cookie), Map.class);
+        ResponseEntity<Void> removed = exchange("/api/albums/" + favouritesId + "/items", HttpMethod.DELETE,
+                request(cookie, csrf, Map.of("assetIds", List.of(fixture.firstAsset()))), Void.class);
+        ResponseEntity<Map> emptyAssets = exchange("/api/favourites/assets?pageSize=10", HttpMethod.GET,
+                cookieRequest(cookie), Map.class);
+        ResponseEntity<Map> rename = exchange("/api/albums/" + favouritesId, HttpMethod.PATCH,
+                request(cookie, csrf, Map.of("name", "Stars")), Map.class);
+        ResponseEntity<Void> delete = exchange("/api/albums/" + favouritesId, HttpMethod.DELETE,
+                request(cookie, csrf, null), Void.class);
+
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(first.getBody()).containsEntry("kind", "favourites").containsEntry("name", "Favourites");
+        assertThat(second.getBody()).containsEntry("id", favouritesId);
+        assertThat(userAlbum.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(reservedName.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(albums.getBody()).hasSize(1);
+        assertThat(albums.getBody()[0]).containsEntry("name", "Summer").containsEntry("kind", "user");
+        assertThat(added.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(assets.getBody()).containsEntry("totalCount", 1);
+        List<Map<String, Object>> sections = (List<Map<String, Object>>) assets.getBody().get("sections");
+        List<Map<String, Object>> sectionAssets = (List<Map<String, Object>>) sections.get(0).get("assets");
+        assertThat(sectionAssets.get(0)).containsEntry("favourited", true);
+        assertThat(removed.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(emptyAssets.getBody()).containsEntry("totalCount", 0);
+        assertThat(rename.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(delete.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
     private Fixture fixture() {
         return transactionTemplate.execute(status -> {
             UUID userId = queryFactory.select(QUsers.users.id).from(QUsers.users).fetchFirst();

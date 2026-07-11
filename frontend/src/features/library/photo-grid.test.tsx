@@ -12,6 +12,7 @@ import {
   ASSET_TILE_SIZE_OPTIONS,
   ASSET_TILE_SIZE_STORAGE_KEY,
   DEFAULT_ASSET_TILE_SIZE_INDEX,
+  MAX_ASSET_TILE_SIZE_INDEX,
   readStoredAssetTileSizeIndex,
   writeStoredAssetTileSizeIndex
 } from './photo-grid';
@@ -39,7 +40,8 @@ const asset: AssetSummary = {
   previewable: true,
   thumbnailStatus: 'ready',
   thumbnailCacheKey: 'grid-cache-asset-1',
-  thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110))'
+  thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110))',
+  favourited: false
 };
 
 const assetDetail: AssetDetail = {
@@ -228,9 +230,136 @@ describe('AssetFocus', () => {
     expect(image).toHaveStyle({ transform: `translate(0px, 0px) scale(${ASSET_FOCUS_MAX_ZOOM})` });
     expect(zoomIn).toBeDisabled();
   });
+
+  it('opens actions from the more button and right-click', async () => {
+    const user = userEvent.setup();
+    const onOpenActions = vi.fn();
+    const onContextMenu = vi.fn();
+    const { container } = renderFocus({ onOpenActions, onContextMenu });
+
+    await user.click(screen.getByRole('button', { name: 'Photo actions' }));
+    expect(onOpenActions).toHaveBeenCalledWith(expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }));
+
+    const surface = container.querySelector('.absolute.inset-0.overflow-hidden.bg-black');
+    expect(surface).not.toBeNull();
+    fireEvent.contextMenu(surface!);
+    expect(onContextMenu).toHaveBeenCalled();
+  });
+
+  it('shows a heart badge when favourited', () => {
+    renderFocus({ favourited: true });
+    expect(screen.getByLabelText('Favourited')).toBeInTheDocument();
+  });
+
+  it('hides the heart badge when not favourited', () => {
+    renderFocus({ favourited: false });
+    expect(screen.queryByLabelText('Favourited')).not.toBeInTheDocument();
+  });
+});
+
+describe('AssetTile favourites', () => {
+  it('shows a heart badge when the asset is favourited', () => {
+    render(
+      <AssetTile
+        asset={{ ...asset, favourited: true }}
+        imageSource="grid"
+        onOpen={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText('Favourited')).toBeInTheDocument();
+  });
+
+  it('hides the heart badge when the asset is not favourited', () => {
+    render(<AssetTile asset={asset} imageSource="grid" onOpen={vi.fn()} />);
+    expect(screen.queryByLabelText('Favourited')).not.toBeInTheDocument();
+  });
 });
 
 describe('AssetGrid', () => {
+  it('keeps tracks at the selected tile size instead of stretching sparse rows', () => {
+    render(
+      <AssetGrid
+        assetTileSize={ASSET_TILE_SIZE_OPTIONS[DEFAULT_ASSET_TILE_SIZE_INDEX]}
+        onOpen={vi.fn()}
+        sections={[
+          {
+            folderPath: '/photos/2017-09-01',
+            folderName: '2017-09-01 edited',
+            assets: [asset]
+          }
+        ]}
+      />
+    );
+
+    const grid = screen.getByLabelText('Asset grid');
+    expect(grid.style.gridTemplateColumns).toContain('auto-fill');
+    expect(grid.style.gridTemplateColumns).toContain('var(--asset-grid-tile-size)');
+    expect(grid.style.gridTemplateColumns).not.toContain('1fr');
+    expect(grid.style.getPropertyValue('--asset-grid-tile-size')).toBe(
+      ASSET_TILE_SIZE_OPTIONS[DEFAULT_ASSET_TILE_SIZE_INDEX].minWidth
+    );
+  });
+
+  it('uses column-count track sizes for the last three slider steps', () => {
+    const { rerender } = render(
+      <AssetGrid
+        assetTileSize={ASSET_TILE_SIZE_OPTIONS[3]}
+        onOpen={vi.fn()}
+        sections={[
+          {
+            folderPath: '/photos/2017-09-01',
+            folderName: '2017-09-01 edited',
+            assets: [asset]
+          }
+        ]}
+      />
+    );
+
+    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-size')).toBe(
+      ASSET_TILE_SIZE_OPTIONS[3].minWidth
+    );
+    expect(ASSET_TILE_SIZE_OPTIONS[3].minWidth).toContain('/ 3)');
+    expect(ASSET_TILE_SIZE_OPTIONS[4].minWidth).toContain('/ 2)');
+    expect(ASSET_TILE_SIZE_OPTIONS[5].minWidth).toBe('100%');
+
+    rerender(
+      <AssetGrid
+        assetTileSize={ASSET_TILE_SIZE_OPTIONS[4]}
+        onOpen={vi.fn()}
+        sections={[
+          {
+            folderPath: '/photos/2017-09-01',
+            folderName: '2017-09-01 edited',
+            assets: [asset]
+          }
+        ]}
+      />
+    );
+    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-size')).toBe(
+      ASSET_TILE_SIZE_OPTIONS[4].minWidth
+    );
+  });
+
+  it('uses a full-width track at the maximum size setting', () => {
+    render(
+      <AssetGrid
+        assetTileSize={ASSET_TILE_SIZE_OPTIONS[MAX_ASSET_TILE_SIZE_INDEX]}
+        onOpen={vi.fn()}
+        sections={[
+          {
+            folderPath: '/photos/2017-09-01',
+            folderName: '2017-09-01 edited',
+            assets: [asset]
+          }
+        ]}
+      />
+    );
+
+    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-size')).toBe(
+      '100%'
+    );
+  });
+
   it('shows an item count beside each section title', () => {
     render(
       <AssetGrid

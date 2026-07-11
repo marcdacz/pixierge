@@ -24,22 +24,32 @@ class AlbumRepository {
     }
 
     List<AlbumRecord> list(UUID userId) {
-        return queryFactory.select(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.createdAt,
+        return queryFactory.select(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt,
                         ALBUMS.updatedAt, ITEMS.assetId.countDistinct(), ITEMS.sourceLibraryId.countDistinct(), FILES.fileName.min())
                 .from(ALBUMS).leftJoin(ITEMS).on(ITEMS.albumId.eq(ALBUMS.id))
                 .leftJoin(FILES).on(FILES.assetId.eq(ALBUMS.coverAssetId))
-                .where(ALBUMS.ownerUserId.eq(userId))
-                .groupBy(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.createdAt, ALBUMS.updatedAt)
+                .where(ALBUMS.ownerUserId.eq(userId).and(ALBUMS.kind.eq(AlbumKind.USER)))
+                .groupBy(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt, ALBUMS.updatedAt)
                 .orderBy(ALBUMS.updatedAt.desc(), ALBUMS.name.lower().asc()).fetch().stream().map(this::record).toList();
     }
 
     Optional<AlbumRecord> find(UUID albumId, UUID userId) {
-        return queryFactory.select(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.createdAt,
+        return queryFactory.select(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt,
                         ALBUMS.updatedAt, ITEMS.assetId.countDistinct(), ITEMS.sourceLibraryId.countDistinct(), FILES.fileName.min())
                 .from(ALBUMS).leftJoin(ITEMS).on(ITEMS.albumId.eq(ALBUMS.id))
                 .leftJoin(FILES).on(FILES.assetId.eq(ALBUMS.coverAssetId))
                 .where(ALBUMS.id.eq(albumId).and(ALBUMS.ownerUserId.eq(userId)))
-                .groupBy(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.createdAt, ALBUMS.updatedAt)
+                .groupBy(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt, ALBUMS.updatedAt)
+                .fetch().stream().findFirst().map(this::record);
+    }
+
+    Optional<AlbumRecord> findByKind(UUID userId, String kind) {
+        return queryFactory.select(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt,
+                        ALBUMS.updatedAt, ITEMS.assetId.countDistinct(), ITEMS.sourceLibraryId.countDistinct(), FILES.fileName.min())
+                .from(ALBUMS).leftJoin(ITEMS).on(ITEMS.albumId.eq(ALBUMS.id))
+                .leftJoin(FILES).on(FILES.assetId.eq(ALBUMS.coverAssetId))
+                .where(ALBUMS.ownerUserId.eq(userId).and(ALBUMS.kind.eq(kind)))
+                .groupBy(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt, ALBUMS.updatedAt)
                 .fetch().stream().findFirst().map(this::record);
     }
 
@@ -50,11 +60,26 @@ class AlbumRepository {
     }
 
     UUID create(UUID userId, String name) {
+        return create(userId, name, AlbumKind.USER);
+    }
+
+    UUID create(UUID userId, String name, String kind) {
         UUID id = UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now();
         queryFactory.insert(ALBUMS).set(ALBUMS.id, id).set(ALBUMS.ownerUserId, userId).set(ALBUMS.name, name)
-                .set(ALBUMS.createdAt, now).set(ALBUMS.updatedAt, now).execute();
+                .set(ALBUMS.kind, kind).set(ALBUMS.createdAt, now).set(ALBUMS.updatedAt, now).execute();
         return id;
+    }
+
+    Optional<UUID> createFavouritesIfAbsent(UUID userId) {
+        UUID id = UUID.randomUUID();
+        OffsetDateTime now = OffsetDateTime.now();
+        boolean inserted = queryFactory.insert(ALBUMS).set(ALBUMS.id, id).set(ALBUMS.ownerUserId, userId)
+                .set(ALBUMS.name, AlbumKind.FAVOURITES_NAME).set(ALBUMS.kind, AlbumKind.FAVOURITES)
+                .set(ALBUMS.createdAt, now).set(ALBUMS.updatedAt, now)
+                .addFlag(QueryFlag.Position.END, " ON CONFLICT (owner_user_id) WHERE (kind = 'favourites') DO NOTHING")
+                .execute() > 0;
+        return inserted ? Optional.of(id) : Optional.empty();
     }
 
     boolean update(UUID id, UUID userId, String name, UUID coverAssetId) {
@@ -100,11 +125,11 @@ class AlbumRepository {
         Long itemCount = row.get(ITEMS.assetId.countDistinct());
         Long libraryCount = row.get(ITEMS.sourceLibraryId.countDistinct());
         return new AlbumRecord(row.get(ALBUMS.id), row.get(ALBUMS.name), row.get(ALBUMS.coverAssetId),
-                row.get(FILES.fileName.min()), Math.toIntExact(itemCount == null ? 0 : itemCount),
+                row.get(FILES.fileName.min()), row.get(ALBUMS.kind), Math.toIntExact(itemCount == null ? 0 : itemCount),
                 Math.toIntExact(libraryCount == null ? 0 : libraryCount), row.get(ALBUMS.createdAt), row.get(ALBUMS.updatedAt));
     }
 
-    record AlbumRecord(UUID id, String name, UUID coverAssetId, String coverFileName,
+    record AlbumRecord(UUID id, String name, UUID coverAssetId, String coverFileName, String kind,
                        int itemCount, int sourceLibraryCount, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
     }
 }

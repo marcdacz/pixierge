@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
+  Heart,
   Images,
   LogOut,
   Search,
@@ -47,6 +48,7 @@ type AppFrameProps = {
 };
 
 const primaryNav: NavItemDefinition[] = [
+  { icon: Heart, label: 'Favourites', view: 'favourites' },
   { icon: Images, label: 'Albums', view: 'albums' },
   { icon: Tags, label: 'Tags', view: 'tags' }
 ];
@@ -87,7 +89,7 @@ export function AppFrame({
   onLibrarySearchChange,
   onLogout,
   onOpenSettings,
-  searchPlaceholder = 'Search library...',
+  searchPlaceholder = 'Search',
   searchValue,
   showLibrarySearch = false,
   onViewChange

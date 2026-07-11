@@ -5,11 +5,12 @@ import { ToastViewport, type ToastMessage } from '@/components/ui/toast';
 import { LoginForm, SetupForm } from '@/features/identity/identity-forms';
 import { LibraryHome } from '@/features/library/library-home';
 import { AlbumsHome } from '@/features/albums/albums-home';
+import { FavouritesHome } from '@/features/favourites/favourites-home';
 import { ScanActivityProvider } from '@/features/scans/scan-activity-context';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { TagsHome } from '@/features/tags/tags-home';
 
-export type AppView = 'libraries' | 'albums' | 'tags' | 'settings';
+export type AppView = 'libraries' | 'favourites' | 'albums' | 'tags' | 'settings';
 
 type AppState =
   | { state: 'loading' }
@@ -168,15 +169,20 @@ export function App() {
       <ScanActivityProvider>
         <AppFrame
           auth={appState.auth}
-          contentMode={currentView === 'settings' || currentView === 'libraries' || currentView === 'albums' || currentView === 'tags' ? 'edge' : 'constrained'}
+          contentMode={currentView === 'settings' || currentView === 'libraries' || currentView === 'favourites' || currentView === 'albums' || currentView === 'tags' ? 'edge' : 'constrained'}
           currentView={currentView}
           libraries={libraries}
-          onLibrarySearchChange={setLibrarySearchInput}
+          onLibrarySearchChange={(value) => {
+            setLibrarySearchInput(value);
+            if (value.trim() && currentView !== 'libraries') {
+              setCurrentView('libraries');
+            }
+          }}
           onLogout={() => setAppState({ state: 'login' })}
           onOpenSettings={() => setCurrentView('settings')}
-          searchPlaceholder="Search this folder"
+          searchPlaceholder="Search"
           searchValue={librarySearchInput}
-          showLibrarySearch={currentView === 'libraries'}
+          showLibrarySearch
           onViewChange={setCurrentView}
         >
           {currentView === 'libraries' && (
@@ -194,6 +200,7 @@ export function App() {
               searchQuery={librarySearchQuery}
             />
           )}
+          {currentView === 'favourites' && <FavouritesHome auth={appState.auth} />}
           {currentView === 'albums' && <AlbumsHome auth={appState.auth} />}
           {currentView === 'tags' && <TagsHome auth={appState.auth} />}
           {currentView === 'settings' && (
