@@ -23,5 +23,7 @@ server:
   port: ${SERVER_PORT:8080}
 
 pixierge:
+  search:
+    time-zone: ${PIXIERGE_TIME_ZONE:UTC}
   storage:
     root: ${PIXIERGE_STORAGE_ROOT:/var/lib/pixierge}

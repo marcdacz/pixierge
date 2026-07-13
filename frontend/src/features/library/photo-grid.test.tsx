@@ -41,7 +41,7 @@ const asset: AssetSummary = {
   thumbnailStatus: 'ready',
   thumbnailCacheKey: 'grid-cache-asset-1',
   thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110))',
-  favourited: false
+  starred: false
 };
 
 const assetDetail: AssetDetail = {
@@ -246,32 +246,43 @@ describe('AssetFocus', () => {
     expect(onContextMenu).toHaveBeenCalled();
   });
 
-  it('shows a heart badge when favourited', () => {
-    renderFocus({ favourited: true });
-    expect(screen.getByLabelText('Favourited')).toBeInTheDocument();
+  it('closes metadata from the panel close button', async () => {
+    const user = userEvent.setup();
+    renderFocus();
+
+    await user.click(screen.getByRole('button', { name: 'Show photo metadata' }));
+    expect(screen.getByRole('complementary')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Close photo metadata' }));
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
-  it('hides the heart badge when not favourited', () => {
-    renderFocus({ favourited: false });
-    expect(screen.queryByLabelText('Favourited')).not.toBeInTheDocument();
+  it('shows a star badge when starred', () => {
+    renderFocus({ starred: true });
+    expect(screen.getByLabelText('Starred')).toBeInTheDocument();
+  });
+
+  it('hides the star badge when not starred', () => {
+    renderFocus({ starred: false });
+    expect(screen.queryByLabelText('Starred')).not.toBeInTheDocument();
   });
 });
 
-describe('AssetTile favourites', () => {
-  it('shows a heart badge when the asset is favourited', () => {
+describe('AssetTile starred', () => {
+  it('shows a star badge when the asset is starred', () => {
     render(
       <AssetTile
-        asset={{ ...asset, favourited: true }}
+        asset={{ ...asset, starred: true }}
         imageSource="grid"
         onOpen={vi.fn()}
       />
     );
-    expect(screen.getByLabelText('Favourited')).toBeInTheDocument();
+    expect(screen.getByLabelText('Starred')).toBeInTheDocument();
   });
 
-  it('hides the heart badge when the asset is not favourited', () => {
+  it('hides the star badge when the asset is not starred', () => {
     render(<AssetTile asset={asset} imageSource="grid" onOpen={vi.fn()} />);
-    expect(screen.queryByLabelText('Favourited')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Starred')).not.toBeInTheDocument();
   });
 });
 

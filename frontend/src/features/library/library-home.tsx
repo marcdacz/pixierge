@@ -1,7 +1,6 @@
 import {
   ChevronDown,
   ChevronRight,
-  ChevronsRight,
   Folder,
   FolderOpen,
   HardDrive,
@@ -21,9 +20,14 @@ import {
 } from '@/api';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { BrowseSidebar, BROWSE_LAYOUT_HEIGHT_CLASS } from '@/features/browse/browse-sidebar';
+import {
+  BrowseSidebar,
+  BrowseSidebarShowControl,
+  BROWSE_LAYOUT_HEIGHT_CLASS,
+  BROWSE_SIDEBAR_COLLAPSED_KEYS,
+  useBrowseSidebarState
+} from '@/features/browse/browse-sidebar';
 import { InlineNameField } from '@/features/browse/inline-name-field';
 import { InlineEditableTitle } from '@/features/library/inline-editable-title';
 import { EmptyPanel, mergeBrowseSections } from '@/features/library/photo-grid';
@@ -45,7 +49,6 @@ type LibraryHomeProps = {
   onConfigureSources?: () => void;
   onError?: (title: string, description?: string) => void;
   onRenameLibrary?: (libraryId: string, name: string) => Promise<void>;
-  searchQuery?: string;
 };
 
 export function LibraryHome({
@@ -55,8 +58,7 @@ export function LibraryHome({
   loading = false,
   onConfigureSources,
   onError,
-  onRenameLibrary,
-  searchQuery = ''
+  onRenameLibrary
 }: LibraryHomeProps) {
   const librariesWithSources = libraries.filter(
     (library) => library.status === LIBRARY_STATUS_ACTIVE && library.sourceCount > 0
@@ -96,7 +98,6 @@ export function LibraryHome({
       libraries={librariesWithSources}
       onError={onError}
       onRenameLibrary={onRenameLibrary}
-      searchQuery={searchQuery}
     />
   );
 }
@@ -106,17 +107,14 @@ function LibraryBrowser({
   error,
   libraries,
   onError,
-  onRenameLibrary,
-  searchQuery
+  onRenameLibrary
 }: {
   auth?: AuthResponse;
   error: string | null;
   libraries: LibrarySummary[];
   onError?: (title: string, description?: string) => void;
   onRenameLibrary?: (libraryId: string, name: string) => Promise<void>;
-  searchQuery: string;
 }) {
-  const [isLowResolution, setIsLowResolution] = useState(false);
   const defaultLibraryId = libraries.length === 1 ? libraries[0]?.id : undefined;
   const [tree, setTree] = useState<LibraryTreeNode[]>([]);
   const [libraryRootAssetCounts, setLibraryRootAssetCounts] = useState<Record<string, number>>({});
@@ -125,8 +123,9 @@ function LibraryBrowser({
   const [selectedLibraryId, setSelectedLibraryId] = useState<string | undefined>(defaultLibraryId);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [expandedLibraries, setExpandedLibraries] = useState<Set<string>>(() => new Set());
-  const [treeCollapsed, setTreeCollapsed] = useState(false);
-  const query = searchQuery.trim();
+  const { collapsed: treeCollapsed, setCollapsed: setTreeCollapsed, isLowResolution } = useBrowseSidebarState(
+    BROWSE_SIDEBAR_COLLAPSED_KEYS.libraries
+  );
   const [page, setPage] = useState(0);
   const [assets, setAssets] = useState<AssetBrowseResponse | null>(null);
   const [loadingTree, setLoadingTree] = useState(false);
@@ -141,31 +140,11 @@ function LibraryBrowser({
     libraries.find((library) => library.id === selectedLibraryId) ??
     libraries.find((library) => library.id === defaultLibraryId) ??
     libraries[0];
-  const browseContextKey = `${selectedLibraryId ?? defaultLibraryId ?? ''}:${selectedFolder ?? ''}:${query}:${assetsRevision}`;
+  const browseContextKey = `${selectedLibraryId ?? defaultLibraryId ?? ''}:${selectedFolder ?? ''}:${assetsRevision}`;
   const librarySections = useMemo(
     () => groupTreeByLibrary(tree, libraries, libraryRootAssetCounts, libraryAssetCounts),
     [libraries, libraryAssetCounts, libraryRootAssetCounts, tree]
   );
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') {
-      setIsLowResolution(false);
-      return;
-    }
-
-    const mediaQuery = window.matchMedia('(max-width: 1023px)');
-    const syncResolution = () => {
-      setIsLowResolution(mediaQuery.matches);
-      if (mediaQuery.matches) {
-        setTreeCollapsed(true);
-      }
-    };
-
-    syncResolution();
-    mediaQuery.addEventListener('change', syncResolution);
-    return () => {
-      mediaQuery.removeEventListener('change', syncResolution);
-    };
-  }, []);
 
   useEffect(() => {
     setSelectedLibraryId(defaultLibraryId);
@@ -238,7 +217,6 @@ function LibraryBrowser({
       libraryId: selectedLibraryId ?? defaultLibraryId,
       folder: selectedFolder ?? undefined,
       includeDescendants: selectedFolder ? true : undefined,
-      q: query,
       page: requestedPage,
       pageSize: PAGE_SIZE
     })
@@ -280,7 +258,7 @@ function LibraryBrowser({
     return () => {
       ignore = true;
     };
-  }, [browseContextKey, defaultLibraryId, page, query, selectedFolder, selectedLibraryId, treeLoaded]);
+  }, [browseContextKey, defaultLibraryId, page, selectedFolder, selectedLibraryId, treeLoaded]);
 
   function toggleLibraryExpanded(libraryId: string) {
     setExpandedLibraries((current) => {
@@ -373,6 +351,10 @@ function LibraryBrowser({
   ) : (
     <p className="text-sm text-muted-foreground">{selectedLibrary.name}</p>
   );
+  const showControl =
+    !assetFocused && treeCollapsed ? (
+      <BrowseSidebarShowControl onShow={() => setTreeCollapsed(false)} title="Folders" />
+    ) : null;
 
   return (
     <div
@@ -433,24 +415,7 @@ function LibraryBrowser({
         emptyDescription="Run a scan from Settings, or adjust the current folder."
         emptyTitle="No assets found"
         error={error || browseError}
-        leadingControls={
-          treeCollapsed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  aria-label="Show folders"
-                  onClick={() => setTreeCollapsed(false)}
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                >
-                  <ChevronsRight className="h-4 w-4" aria-hidden />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Show folders</TooltipContent>
-            </Tooltip>
-          ) : undefined
-        }
+        leadingControls={showControl ?? undefined}
         loadingAssets={loadingAssets}
         loadingMore={loadingMore}
         onFocusChange={setAssetFocused}

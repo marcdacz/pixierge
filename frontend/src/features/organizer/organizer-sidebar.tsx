@@ -1,5 +1,5 @@
 import { Pencil, Plus, type LucideIcon } from 'lucide-react';
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { BrowseSidebar, BROWSE_LAYOUT_HEIGHT_CLASS } from '@/features/browse/browse-sidebar';
 import { InlineNameField } from '@/features/browse/inline-name-field';
@@ -7,7 +7,11 @@ import { readAssetDragData } from '@/features/organizer/drag-types';
 import { cn } from '@/lib/utils';
 
 export { BROWSE_LAYOUT_HEIGHT_CLASS };
-export { BrowseSidebarShowControl } from '@/features/browse/browse-sidebar';
+export {
+  BrowseSidebarShowControl,
+  BROWSE_SIDEBAR_COLLAPSED_KEYS,
+  useBrowseSidebarState
+} from '@/features/browse/browse-sidebar';
 
 export type OrganizerRow = { id: string; label: string; count?: number; imageUrl?: string | null };
 
@@ -30,67 +34,7 @@ type OrganizerSidebarProps = {
   isLowResolution: boolean;
 };
 
-const DRAG_EXPAND_DELAY_MS = 400;
 const ROW_BASE_PADDING_REM = 0.5;
-
-export function useBrowseSidebarState() {
-  const [collapsed, setCollapsed] = useState(false);
-  const [isLowResolution, setIsLowResolution] = useState(false);
-  const expandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const query = window.matchMedia?.('(max-width: 1023px)');
-    if (!query) {
-      return;
-    }
-    const sync = () => {
-      setIsLowResolution(query.matches);
-      if (query.matches) {
-        setCollapsed(true);
-      }
-    };
-    sync();
-    query.addEventListener('change', sync);
-    return () => query.removeEventListener('change', sync);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (expandTimerRef.current) {
-        clearTimeout(expandTimerRef.current);
-      }
-    },
-    []
-  );
-
-  function clearExpandTimer() {
-    if (expandTimerRef.current) {
-      clearTimeout(expandTimerRef.current);
-      expandTimerRef.current = null;
-    }
-  }
-
-  function handleShowControlDragOver(event: DragEvent) {
-    if (isLowResolution) {
-      return;
-    }
-    event.preventDefault();
-    if (!expandTimerRef.current) {
-      expandTimerRef.current = setTimeout(() => {
-        setCollapsed(false);
-        expandTimerRef.current = null;
-      }, DRAG_EXPAND_DELAY_MS);
-    }
-  }
-
-  return {
-    collapsed,
-    setCollapsed,
-    isLowResolution,
-    clearExpandTimer,
-    handleShowControlDragOver
-  };
-}
 
 export function OrganizerSidebar({
   title,

@@ -1,12 +1,111 @@
 import { ChevronsLeft, ChevronsRight } from 'lucide-react';
-import type { DragEvent, ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export const BROWSE_LAYOUT_HEIGHT_CLASS =
   'h-[calc(100vh-var(--shell-header-height)-3rem)] max-h-[calc(100vh-var(--shell-header-height)-3rem)] lg:h-[calc(100vh-var(--shell-header-height)-4rem)] lg:max-h-[calc(100vh-var(--shell-header-height)-4rem)]';
 
 export const BROWSE_TREE_WIDTH_TOKEN = '[--browse-tree-width:16rem]';
+
+export const BROWSE_SIDEBAR_COLLAPSED_KEYS = {
+  libraries: 'pixierge.browseSidebar.libraries.collapsed',
+  albums: 'pixierge.browseSidebar.albums.collapsed',
+  tags: 'pixierge.browseSidebar.tags.collapsed',
+  search: 'pixierge.browseSidebar.search.collapsed'
+} as const;
+
+const DRAG_EXPAND_DELAY_MS = 400;
+
+export function readStoredBrowseSidebarCollapsed(storageKey: string): boolean {
+  try {
+    return window.localStorage.getItem(storageKey) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function writeStoredBrowseSidebarCollapsed(storageKey: string, collapsed: boolean): void {
+  try {
+    window.localStorage.setItem(storageKey, String(collapsed));
+  } catch {
+    // Ignore quota / private-mode failures; in-memory state still applies for the session.
+  }
+}
+
+export function useBrowseSidebarState(storageKey: string) {
+  const [collapsed, setCollapsedState] = useState(() => readStoredBrowseSidebarCollapsed(storageKey));
+  const [isLowResolution, setIsLowResolution] = useState(false);
+  const preferredCollapsedRef = useRef(collapsed);
+  const isLowResolutionRef = useRef(false);
+  const expandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const query = window.matchMedia?.('(max-width: 1023px)');
+    if (!query) {
+      return;
+    }
+    const sync = () => {
+      const low = query.matches;
+      isLowResolutionRef.current = low;
+      setIsLowResolution(low);
+      if (low) {
+        setCollapsedState(true);
+      } else {
+        setCollapsedState(preferredCollapsedRef.current);
+      }
+    };
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (expandTimerRef.current) {
+        clearTimeout(expandTimerRef.current);
+      }
+    },
+    []
+  );
+
+  function setCollapsed(next: boolean) {
+    setCollapsedState(next);
+    if (!isLowResolutionRef.current) {
+      preferredCollapsedRef.current = next;
+      writeStoredBrowseSidebarCollapsed(storageKey, next);
+    }
+  }
+
+  function clearExpandTimer() {
+    if (expandTimerRef.current) {
+      clearTimeout(expandTimerRef.current);
+      expandTimerRef.current = null;
+    }
+  }
+
+  function handleShowControlDragOver(event: DragEvent) {
+    if (isLowResolutionRef.current) {
+      return;
+    }
+    event.preventDefault();
+    if (!expandTimerRef.current) {
+      expandTimerRef.current = setTimeout(() => {
+        setCollapsed(false);
+        expandTimerRef.current = null;
+      }, DRAG_EXPAND_DELAY_MS);
+    }
+  }
+
+  return {
+    collapsed,
+    setCollapsed,
+    isLowResolution,
+    clearExpandTimer,
+    handleShowControlDragOver
+  };
+}
 
 type BrowseSidebarProps = {
   title: string;
@@ -67,17 +166,24 @@ type BrowseSidebarShowControlProps = {
 };
 
 export function BrowseSidebarShowControl({ title, onShow, onDragOver, onDragLeave }: BrowseSidebarShowControlProps) {
+  const label = `Show ${title.toLowerCase()}`;
+
   return (
-    <Button
-      aria-label={`Show ${title.toLowerCase()}`}
-      onClick={onShow}
-      onDragLeave={onDragLeave}
-      onDragOver={onDragOver}
-      size="icon"
-      type="button"
-      variant="ghost"
-    >
-      <ChevronsRight className="h-4 w-4" aria-hidden />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-label={label}
+          onClick={onShow}
+          onDragLeave={onDragLeave}
+          onDragOver={onDragOver}
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
+          <ChevronsRight className="h-4 w-4" aria-hidden />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
   );
 }

@@ -145,7 +145,7 @@ const browseAssets = {
           thumbnailStatus: 'ready',
           thumbnailCacheKey: 'grid-cache-asset-1',
           thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110) 52%, rgb(50, 60, 70))',
-          favourited: false
+          starred: false
         }
       ]
     }
@@ -192,6 +192,7 @@ const assetDetail = {
 describe('App', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    window.history.replaceState(null, '', '/');
     window.localStorage.clear();
   });
 
@@ -282,7 +283,7 @@ describe('App', () => {
     expect(screen.getByLabelText('Library name')).toBeInTheDocument();
   });
 
-  it('opens the library page when searching from another view', async () => {
+  it('opens the search page when searching from another view', async () => {
     const fetchMock = mockFetch([
       { status: 200, body: { required: false } },
       { status: 200, body: authBody },
@@ -290,14 +291,13 @@ describe('App', () => {
       { status: 200, body: libraryTree },
       { status: 200, body: browseAssets },
       { status: 200, body: globalExclusionPatterns },
-      { status: 200, body: libraryTree },
       { status: 200, body: browseAssets }
     ]);
 
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: 'All folders' })).toBeInTheDocument();
-    const search = screen.getByLabelText('Search');
+    const search = screen.getByRole('textbox', { name: 'Search' });
     expect(search).toHaveAttribute('placeholder', 'Search');
 
     await userEvent.click(
@@ -305,17 +305,48 @@ describe('App', () => {
     );
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText('Search'), 'beach');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search' }), 'beach');
 
-    expect(await screen.findByRole('heading', { name: 'All folders' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Search results' })).toBeInTheDocument();
+    expect(await screen.findByRole('navigation', { name: 'Filters' })).toBeInTheDocument();
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        'http://localhost:8080/api/assets?libraryId=library-1&q=beach&page=0&pageSize=48',
+        'http://localhost:8080/api/assets?q=beach&page=0&pageSize=48',
         expect.objectContaining({ credentials: 'include', method: 'GET' })
       );
     });
+    expect(window.location.search).toBe('?q=beach');
   });
 
+  it('clears the search bar when leaving search and restores it on return', async () => {
+    mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
+      { status: 200, body: browseAssets },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
+      { status: 200, body: browseAssets }
+    ]);
+
+    render(<App />);
+
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Search' }), 'beach');
+    expect(await screen.findByRole('heading', { name: 'Search results' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search' })).toHaveValue('beach');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Libraries' }));
+    expect(await screen.findByRole('heading', { name: 'All folders' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search' })).toHaveValue('');
+    expect(window.location.search).toBe('');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    expect(await screen.findByRole('heading', { name: 'Search results' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search' })).toHaveValue('beach');
+    expect(window.location.search).toBe('?q=beach');
+  });
   it('shows library folders in the browse tree and configuration health totals', async () => {
     mockFetch([
       { status: 200, body: { required: false } },
@@ -406,10 +437,11 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Show folders' }));
     expect(await screen.findByRole('navigation', { name: 'Folders' })).toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText('Search'), 'beach');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search' }), 'beach');
+    expect(await screen.findByRole('heading', { name: 'Search results' })).toBeInTheDocument();
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        'http://localhost:8080/api/assets?libraryId=library-1&folder=%2Fphotos%2Ffamily&includeDescendants=true&q=beach&page=0&pageSize=48',
+        'http://localhost:8080/api/assets?q=beach&page=0&pageSize=48',
         expect.objectContaining({ credentials: 'include', method: 'GET' })
       );
     });
@@ -427,7 +459,9 @@ describe('App', () => {
     expect(screen.queryByText('Identity')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close photo viewer' })).toBeInTheDocument();
     await userEvent.keyboard('{Escape}');
-    expect(await screen.findByRole('heading', { name: 'family' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Search results' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close photo viewer' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('navigation', { name: 'Filters' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/assets/asset-1',
       expect.objectContaining({ credentials: 'include', method: 'GET' })
@@ -1013,27 +1047,82 @@ function mockFetch(responses: MockResponse[]) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.endsWith('/api/scans/active')) {
-      return {
-        ok: true,
-        headers: new Headers({ 'Content-Type': 'application/json' }),
-        status: 200,
-        json: async () => []
-      };
+      return jsonResponse(200, []);
+    }
+    if (url.includes('/api/search/parse')) {
+      const query = new URL(url).searchParams.get('q') ?? '';
+      return jsonResponse(200, mockParseResponse(query));
+    }
+    if (url.includes('/api/search/suggestions')) {
+      return jsonResponse(200, []);
+    }
+    if (url.endsWith('/api/albums') || url.includes('/api/albums?')) {
+      return jsonResponse(200, []);
+    }
+    if (url.endsWith('/api/tags') || url.includes('/api/tags?')) {
+      return jsonResponse(200, []);
     }
 
     const next = responses.shift();
     if (!next) {
-      throw new Error('Unexpected fetch call');
+      throw new Error(`Unexpected fetch call: ${url}`);
     }
 
-    return {
-      ok: next.status >= 200 && next.status < 300,
-      headers: new Headers({ 'Content-Type': 'application/json' }),
-      status: next.status,
-      json: async () => next.body
-    };
+    return jsonResponse(next.status, next.body);
   });
 
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
+}
+
+function jsonResponse(status: number, body: unknown) {
+  return {
+    ok: status >= 200 && status < 300,
+    headers: new Headers({ 'Content-Type': 'application/json' }),
+    status,
+    json: async () => body
+  };
+}
+
+function mockParseResponse(query: string) {
+  const tokens = query.trim() ? query.trim().split(/\s+/) : [];
+  const clauses: Array<{
+    field: string;
+    value: string;
+    negated: boolean;
+    start: number;
+    end: number;
+    label: string;
+  }> = [];
+  const freeText: string[] = [];
+  let cursor = 0;
+  for (const token of tokens) {
+    const start = query.indexOf(token, cursor);
+    const end = start + token.length;
+    cursor = end;
+    const negated = token.startsWith('-') && token.includes(':');
+    const candidate = negated ? token.slice(1) : token;
+    const colon = candidate.indexOf(':');
+    if (colon < 0) {
+      freeText.push(token);
+      continue;
+    }
+    const field = candidate.slice(0, colon);
+    const value = candidate.slice(colon + 1).replace(/^"|"$/g, '');
+    clauses.push({
+      field,
+      value,
+      negated,
+      start,
+      end,
+      label: `${negated ? 'Not ' : ''}${field}: ${value}`
+    });
+  }
+  return {
+    query,
+    freeText: freeText.join(' '),
+    clauses,
+    errors: [],
+    valid: true
+  };
 }

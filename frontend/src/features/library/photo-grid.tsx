@@ -2,7 +2,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileImage,
-  Heart,
+  Star,
   Image,
   Info,
   Minus,
@@ -368,12 +368,12 @@ export function AssetTile({
       {selected && (
         <div aria-hidden className="pointer-events-none absolute inset-0 border-2 border-muted-foreground" />
       )}
-      {asset.favourited && (
+      {asset.starred && (
         <span
-          aria-label="Favourited"
+          aria-label="Starred"
           className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] grid h-6 w-6 place-items-center rounded-full bg-background/80 text-foreground shadow-sm"
         >
-          <Heart aria-hidden className="h-3.5 w-3.5 fill-current" />
+          <Star aria-hidden className="h-3.5 w-3.5 fill-current" />
         </span>
       )}
       <div className="absolute inset-x-0 bottom-0 z-[2] flex min-h-9 items-end justify-between gap-2 bg-gradient-to-t from-background/85 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
@@ -423,7 +423,7 @@ function hashString(value: string): number {
 export function AssetFocus({
   asset,
   cacheKey,
-  favourited = false,
+  starred = false,
   hasNext,
   hasPrevious,
   loading,
@@ -435,7 +435,7 @@ export function AssetFocus({
 }: {
   asset: AssetDetail | null;
   cacheKey?: string | null;
-  favourited?: boolean;
+  starred?: boolean;
   hasNext: boolean;
   hasPrevious: boolean;
   loading: boolean;
@@ -767,12 +767,12 @@ export function AssetFocus({
                 <p>No active file available</p>
               </div>
             )}
-            {favourited && (
+            {starred && (
               <span
-                aria-label="Favourited"
+                aria-label="Starred"
                 className="pointer-events-none absolute bottom-3 left-3 z-10 grid h-8 w-8 place-items-center rounded-full bg-background/80 text-foreground shadow-sm"
               >
-                <Heart aria-hidden className="h-4 w-4 fill-current" />
+                <Star aria-hidden className="h-4 w-4 fill-current" />
               </span>
             )}
           </div>
@@ -786,15 +786,23 @@ export function AssetFocus({
               />
               <aside className="absolute inset-y-0 right-0 z-30 w-full max-w-sm overflow-y-auto border-l border-border bg-background/95 p-4 backdrop-blur-sm">
                 <div className="grid content-start gap-5">
-                  <div className="grid gap-1">
-                    <h1 className="break-words text-xl font-semibold text-foreground">{activeFile?.fileName ?? 'Asset'}</h1>
-                    <p className="break-all text-sm text-muted-foreground">{activeFile?.path ?? asset.contentHash}</p>
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1 grid gap-1">
+                      <h1 className="break-words text-xl font-semibold text-foreground">{activeFile?.fileName ?? 'Asset'}</h1>
+                      <p className="break-all text-sm text-muted-foreground">{activeFile?.path ?? asset.contentHash}</p>
+                    </div>
+                    <Button
+                      aria-label="Close photo metadata"
+                      className="-mr-2 -mt-1"
+                      onClick={() => setShowMetadata(false)}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <X className="h-4 w-4" aria-hidden />
+                    </Button>
                   </div>
                   <dl className="grid gap-3 text-sm">
-                    <DetailRow
-                      label="Identity"
-                      value={asset.identityStatus === ASSET_IDENTITY_PENDING ? 'pending' : 'confirmed'}
-                    />
                     <DetailRow label="Type" value={asset.metadata.mimeType ?? asset.mediaType} />
                     <DetailRow
                       label="Size"
@@ -822,22 +830,6 @@ export function AssetFocus({
                       </div>
                     </div>
                   )}
-                  <div className="grid gap-2">
-                    <h2 className="text-sm font-semibold text-foreground">Files</h2>
-                    <div className="grid gap-2">
-                      {asset.files.map((file) => (
-                        <div className="rounded-md border border-border p-3" key={file.id}>
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate text-sm font-medium text-foreground">{file.fileName}</span>
-                            <Badge variant={file.status === ASSET_STATUS_ACTIVE ? 'secondary' : 'warning'}>
-                              {file.status}
-                            </Badge>
-                          </div>
-                          <p className="mt-1 break-all text-xs text-muted-foreground">{file.path}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </aside>
             </>

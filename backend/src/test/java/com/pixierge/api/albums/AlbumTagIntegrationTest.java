@@ -142,40 +142,40 @@ class AlbumTagIntegrationTest {
     }
 
     @Test
-    void favouritesAreHiddenFromAlbumListAndSupportAddRemoveBrowse() {
+    void starredAreHiddenFromAlbumListAndSupportAddRemoveBrowse() {
         ResponseEntity<Map> admin = createAdmin();
         Fixture fixture = fixture();
         String cookie = cookie(admin);
         String csrf = csrf(admin);
 
-        ResponseEntity<Map> first = exchange("/api/favourites", HttpMethod.GET, cookieRequest(cookie), Map.class);
-        ResponseEntity<Map> second = exchange("/api/favourites", HttpMethod.GET, cookieRequest(cookie), Map.class);
-        String favouritesId = first.getBody().get("id").toString();
+        ResponseEntity<Map> first = exchange("/api/starred", HttpMethod.GET, cookieRequest(cookie), Map.class);
+        ResponseEntity<Map> second = exchange("/api/starred", HttpMethod.GET, cookieRequest(cookie), Map.class);
+        String starredId = first.getBody().get("id").toString();
 
         ResponseEntity<Map> userAlbum = exchange("/api/albums", HttpMethod.POST, request(cookie, csrf,
                 Map.of("name", "Summer")), Map.class);
         ResponseEntity<Map> reservedName = exchange("/api/albums", HttpMethod.POST, request(cookie, csrf,
-                Map.of("name", "Favourites")), Map.class);
+                Map.of("name", "Starred")), Map.class);
         ResponseEntity<Map[]> albums = exchange("/api/albums", HttpMethod.GET, cookieRequest(cookie), Map[].class);
 
         ResponseEntity<Void> added = exchange("/api/album-items", HttpMethod.POST, request(cookie, csrf, Map.of(
-                "albumIds", List.of(favouritesId),
+                "albumIds", List.of(starredId),
                 "items", List.of(Map.of("assetId", fixture.firstAsset(), "sourceLibraryId", fixture.firstLibrary())))),
                 Void.class);
-        ResponseEntity<Map> assets = exchange("/api/favourites/assets?pageSize=10", HttpMethod.GET,
+        ResponseEntity<Map> assets = exchange("/api/starred/assets?pageSize=10", HttpMethod.GET,
                 cookieRequest(cookie), Map.class);
-        ResponseEntity<Void> removed = exchange("/api/albums/" + favouritesId + "/items", HttpMethod.DELETE,
+        ResponseEntity<Void> removed = exchange("/api/albums/" + starredId + "/items", HttpMethod.DELETE,
                 request(cookie, csrf, Map.of("assetIds", List.of(fixture.firstAsset()))), Void.class);
-        ResponseEntity<Map> emptyAssets = exchange("/api/favourites/assets?pageSize=10", HttpMethod.GET,
+        ResponseEntity<Map> emptyAssets = exchange("/api/starred/assets?pageSize=10", HttpMethod.GET,
                 cookieRequest(cookie), Map.class);
-        ResponseEntity<Map> rename = exchange("/api/albums/" + favouritesId, HttpMethod.PATCH,
+        ResponseEntity<Map> rename = exchange("/api/albums/" + starredId, HttpMethod.PATCH,
                 request(cookie, csrf, Map.of("name", "Stars")), Map.class);
-        ResponseEntity<Void> delete = exchange("/api/albums/" + favouritesId, HttpMethod.DELETE,
+        ResponseEntity<Void> delete = exchange("/api/albums/" + starredId, HttpMethod.DELETE,
                 request(cookie, csrf, null), Void.class);
 
         assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(first.getBody()).containsEntry("kind", "favourites").containsEntry("name", "Favourites");
-        assertThat(second.getBody()).containsEntry("id", favouritesId);
+        assertThat(first.getBody()).containsEntry("kind", "starred").containsEntry("name", "Starred");
+        assertThat(second.getBody()).containsEntry("id", starredId);
         assertThat(userAlbum.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(reservedName.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(albums.getBody()).hasSize(1);
@@ -184,11 +184,69 @@ class AlbumTagIntegrationTest {
         assertThat(assets.getBody()).containsEntry("totalCount", 1);
         List<Map<String, Object>> sections = (List<Map<String, Object>>) assets.getBody().get("sections");
         List<Map<String, Object>> sectionAssets = (List<Map<String, Object>>) sections.get(0).get("assets");
-        assertThat(sectionAssets.get(0)).containsEntry("favourited", true);
+        assertThat(sectionAssets.get(0)).containsEntry("starred", true);
         assertThat(removed.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         assertThat(emptyAssets.getBody()).containsEntry("totalCount", 0);
         assertThat(rename.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(delete.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void structuredSearchParsesSuggestsAndAppliesAssetLevelRelations() {
+        ResponseEntity<Map> admin = createAdmin();
+        Fixture fixture = fixture();
+        String cookie = cookie(admin);
+        String csrf = csrf(admin);
+        ResponseEntity<Map> album = exchange("/api/albums", HttpMethod.POST, request(cookie, csrf,
+                Map.of("name", "Japan 2025")), Map.class);
+        ResponseEntity<Map> family = exchange("/api/tags", HttpMethod.POST, request(cookie, csrf,
+                Map.of("name", "Family")), Map.class);
+        ResponseEntity<Map> privateTag = exchange("/api/tags", HttpMethod.POST, request(cookie, csrf,
+                Map.of("name", "Private")), Map.class);
+        String albumId = album.getBody().get("id").toString();
+        String familyId = family.getBody().get("id").toString();
+        String privateId = privateTag.getBody().get("id").toString();
+        exchange("/api/album-items", HttpMethod.POST, request(cookie, csrf, Map.of(
+                "albumIds", List.of(albumId),
+                "items", List.of(Map.of("assetId", fixture.firstAsset(), "sourceLibraryId", fixture.firstLibrary())))),
+                Void.class);
+        exchange("/api/asset-tags", HttpMethod.POST, request(cookie, csrf, Map.of(
+                "tagIds", List.of(familyId),
+                "items", List.of(Map.of("assetId", fixture.firstAsset(), "sourceLibraryId", fixture.firstLibrary())))),
+                Void.class);
+        exchange("/api/asset-tags", HttpMethod.POST, request(cookie, csrf, Map.of(
+                "tagIds", List.of(privateId),
+                "items", List.of(Map.of("assetId", fixture.secondAsset(), "sourceLibraryId", fixture.secondLibrary())))),
+                Void.class);
+
+        ResponseEntity<Map> parsed = exchange(
+                "/api/search/parse?q={q}",
+                HttpMethod.GET, cookieRequest(cookie), Map.class,
+                "album:\"Japan 2025\" -tag:Private");
+        ResponseEntity<Map[]> tagSuggestions = exchange(
+                "/api/search/suggestions?field=tag&q=fam&limit=5",
+                HttpMethod.GET, cookieRequest(cookie), Map[].class);
+        ResponseEntity<Map> matched = exchange(
+                "/api/assets?q={q}",
+                HttpMethod.GET, cookieRequest(cookie), Map.class,
+                "tag:Family -tag:Private album:\"Japan 2025\"");
+        ResponseEntity<Map> excluded = exchange(
+                "/api/assets?q={q}",
+                HttpMethod.GET, cookieRequest(cookie), Map.class,
+                "tag:Family -library:Two");
+        ResponseEntity<Map> invalid = exchange(
+                "/api/assets?q={q}",
+                HttpMethod.GET, cookieRequest(cookie), Map.class,
+                "person:Alice");
+
+        assertThat(parsed.getBody()).containsEntry("valid", true).containsEntry("freeText", "");
+        assertThat(parsed.getBody().get("clauses")).asList().hasSize(2);
+        assertThat(tagSuggestions.getBody()).singleElement().satisfies(value ->
+                assertThat(value).containsEntry("label", "Family"));
+        assertThat(matched.getBody()).containsEntry("totalCount", 1);
+        assertThat(excluded.getBody()).containsEntry("totalCount", 0);
+        assertThat(invalid.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(invalid.getBody()).containsEntry("code", "INVALID_SEARCH");
     }
 
     private Fixture fixture() {
@@ -253,8 +311,9 @@ class AlbumTagIntegrationTest {
         return restTemplate.postForEntity("/api/setup/admin", Map.of("username", "admin", "password", PASSWORD), Map.class);
     }
 
-    private <T> ResponseEntity<T> exchange(String path, HttpMethod method, HttpEntity<?> request, Class<T> type) {
-        return restTemplate.exchange(path, method, request, type);
+    private <T> ResponseEntity<T> exchange(String path, HttpMethod method, HttpEntity<?> request, Class<T> type,
+                                           Object... uriVariables) {
+        return restTemplate.exchange(path, method, request, type, uriVariables);
     }
 
     private HttpEntity<Object> request(String cookie, String csrf, Object body) {

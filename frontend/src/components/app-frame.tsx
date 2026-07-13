@@ -2,10 +2,10 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
-  Heart,
   Images,
-  LogOut,
   Search,
+  Star,
+  LogOut,
   Settings,
   Tags,
   UserCircle
@@ -21,7 +21,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
@@ -31,6 +30,7 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { ScanActivityButton } from '@/features/scans/scan-activity-button';
+import { StructuredSearch } from '@/features/search/structured-search';
 
 type AppFrameProps = {
   auth: AuthResponse;
@@ -39,6 +39,7 @@ type AppFrameProps = {
   currentView: AppView;
   libraries: LibrarySummary[];
   onLibrarySearchChange: (value: string) => void;
+  onLibrarySearchQueryChange: (value: string) => void;
   onLogout: () => void;
   onOpenSettings: () => void;
   searchPlaceholder?: string;
@@ -48,7 +49,7 @@ type AppFrameProps = {
 };
 
 const primaryNav: NavItemDefinition[] = [
-  { icon: Heart, label: 'Favourites', view: 'favourites' },
+  { icon: Star, label: 'Starred', view: 'starred' },
   { icon: Images, label: 'Albums', view: 'albums' },
   { icon: Tags, label: 'Tags', view: 'tags' }
 ];
@@ -87,6 +88,7 @@ export function AppFrame({
   currentView,
   libraries,
   onLibrarySearchChange,
+  onLibrarySearchQueryChange,
   onLogout,
   onOpenSettings,
   searchPlaceholder = 'Search',
@@ -128,6 +130,7 @@ export function AppFrame({
           auth={auth}
           navExpanded={effectiveNavExpanded}
           onLibrarySearchChange={onLibrarySearchChange}
+          onLibrarySearchQueryChange={onLibrarySearchQueryChange}
           onLogout={onLogout}
           onOpenSettings={onOpenSettings}
           searchPlaceholder={searchPlaceholder}
@@ -142,6 +145,12 @@ export function AppFrame({
         >
           <aside className="flex min-h-0 flex-col border-r border-border bg-sidebar px-3 py-4">
             <nav aria-label="Primary" className="grid gap-2">
+              <NavItem
+                active={currentView === 'search'}
+                expanded={effectiveNavExpanded}
+                item={{ icon: Search, label: 'Search', view: 'search' }}
+                onSelect={() => onViewChange('search')}
+              />
               <LibraryNav
                 active={currentView === 'libraries'}
                 expanded={effectiveNavExpanded}
@@ -195,6 +204,7 @@ function TopBar({
   auth,
   navExpanded,
   onLibrarySearchChange,
+  onLibrarySearchQueryChange,
   onLogout,
   onOpenSettings,
   searchPlaceholder,
@@ -204,6 +214,7 @@ function TopBar({
   auth: AuthResponse;
   navExpanded: boolean;
   onLibrarySearchChange: (value: string) => void;
+  onLibrarySearchQueryChange: (value: string) => void;
   onLogout: () => void;
   onOpenSettings: () => void;
   searchPlaceholder: string;
@@ -226,17 +237,13 @@ function TopBar({
         <span className="text-xs font-semibold uppercase tracking-normal text-foreground">pixierge</span>
       </div>
       <div className="flex justify-center px-4">
-        <label className="relative block w-full max-w-3xl">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input
-            aria-label="Search"
-            className="h-9 bg-surface pl-9"
-            disabled={!showLibrarySearch}
-            onChange={(event) => onLibrarySearchChange(event.target.value)}
-            placeholder={searchPlaceholder}
-            value={searchValue}
-          />
-        </label>
+        <StructuredSearch
+          disabled={!showLibrarySearch}
+          onChange={onLibrarySearchChange}
+          onValidQueryChange={onLibrarySearchQueryChange}
+          placeholder={searchPlaceholder}
+          value={searchValue}
+        />
       </div>
       <div className="flex items-center gap-2 px-4">
         <ScanActivityButton onOpenSettings={onOpenSettings} />

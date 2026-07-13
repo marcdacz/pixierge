@@ -23,6 +23,6 @@ public record AssetSummaryResponse(
         String thumbnailStatus,
         String thumbnailCacheKey,
         String thumbnailPlaceholder,
-        boolean favourited
+        boolean starred
 ) {
 }

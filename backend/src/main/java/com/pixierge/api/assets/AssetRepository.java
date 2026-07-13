@@ -12,13 +12,21 @@ import com.pixierge.api.db.QLibraryRoots;
 import com.pixierge.api.db.QSearchDocuments;
 import com.pixierge.api.db.QTags;
 import com.pixierge.api.albums.AlbumKind;
+import com.pixierge.api.search.SearchClause;
+import com.pixierge.api.search.SearchField;
+import com.pixierge.api.search.SearchProperties;
+import com.pixierge.api.search.SearchQuery;
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.Tuple;
+import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.sql.SQLQuery;
 import com.querydsl.sql.SQLQueryFactory;
+import com.querydsl.sql.SQLExpressions;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -52,9 +60,11 @@ class AssetRepository {
     private static final QSearchDocuments SEARCH_DOCUMENTS = QSearchDocuments.searchDocuments;
 
     private final SQLQueryFactory queryFactory;
+    private final SearchProperties searchProperties;
 
-    AssetRepository(SQLQueryFactory queryFactory) {
+    AssetRepository(SQLQueryFactory queryFactory, SearchProperties searchProperties) {
         this.queryFactory = queryFactory;
+        this.searchProperties = searchProperties;
     }
 
     List<LibraryRootRow> listLibraryRoots(UUID userId, boolean admin, UUID libraryId) {
@@ -188,7 +198,7 @@ class AssetRepository {
         return result != null;
     }
 
-    Set<UUID> favouritedAssetIds(UUID userId, Collection<UUID> assetIds) {
+    Set<UUID> starredAssetIds(UUID userId, Collection<UUID> assetIds) {
         if (assetIds == null || assetIds.isEmpty()) {
             return Set.of();
         }
@@ -196,7 +206,7 @@ class AssetRepository {
                 .from(ALBUM_ITEMS)
                 .join(ALBUMS).on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
                 .where(ALBUMS.ownerUserId.eq(userId)
-                        .and(ALBUMS.kind.eq(AlbumKind.FAVOURITES))
+                        .and(ALBUMS.kind.eq(AlbumKind.STARRED))
                         .and(ALBUM_ITEMS.assetId.in(assetIds)))
                 .fetch());
     }
@@ -473,14 +483,51 @@ class AssetRepository {
             where.and(ASSETS.availableFileCount.gt(1));
         }
 
-        if (criteria.query() != null && !criteria.query().isBlank()) {
-            String query = criteria.query().trim().toLowerCase(Locale.ROOT);
+        if (!criteria.query().freeText().isBlank()) {
+            String query = criteria.query().freeText().trim().toLowerCase(Locale.ROOT);
             where.and(ASSET_FILES.fileName.lower().contains(query)
                     .or(ASSET_FILES.normalizedPath.lower().contains(query))
                     .or(ASSETS.mediaType.lower().contains(query))
                     .or(ASSET_METADATA.fileExtension.lower().contains(query))
                     .or(ASSET_METADATA.mimeType.lower().contains(query))
-                    .or(SEARCH_DOCUMENTS.searchableText.lower().contains(query)));
+                    .or(SEARCH_DOCUMENTS.searchableText.lower().contains(query))
+                    .or(Expressions.booleanTemplate(
+                            "search_documents.search_vector @@ plainto_tsquery('simple', {0})", query)));
+        }
+
+        BooleanBuilder positiveExtensions = new BooleanBuilder();
+        BooleanBuilder positiveLibraries = new BooleanBuilder();
+        BooleanBuilder positiveAlbums = new BooleanBuilder();
+        boolean hasPositiveExtension = false;
+        boolean hasPositiveLibrary = false;
+        boolean hasPositiveAlbum = false;
+        for (SearchClause clause : criteria.query().clauses()) {
+            BooleanExpression predicate = structuredPredicate(clause, criteria.tagOwnerUserId(), admin);
+            if (clause.field() == SearchField.EXTENSION && !clause.negated()) {
+                positiveExtensions.or(predicate);
+                hasPositiveExtension = true;
+                continue;
+            }
+            if (clause.field() == SearchField.LIBRARY && !clause.negated()) {
+                positiveLibraries.or(predicate);
+                hasPositiveLibrary = true;
+                continue;
+            }
+            if (clause.field() == SearchField.ALBUM && !clause.negated()) {
+                positiveAlbums.or(predicate);
+                hasPositiveAlbum = true;
+                continue;
+            }
+            where.and(clause.negated() ? predicate.not() : predicate);
+        }
+        if (hasPositiveExtension) {
+            where.and(positiveExtensions);
+        }
+        if (hasPositiveLibrary) {
+            where.and(positiveLibraries);
+        }
+        if (hasPositiveAlbum) {
+            where.and(positiveAlbums);
         }
 
         if (criteria.tagIds() != null && !criteria.tagIds().isEmpty()) {
@@ -498,6 +545,133 @@ class AssetRepository {
         }
 
         return where;
+    }
+
+    private BooleanExpression structuredPredicate(SearchClause clause, UUID userId, boolean admin) {
+        String value = clause.value().trim();
+        String normalized = value.toLowerCase(Locale.ROOT);
+        return switch (clause.field()) {
+            case LIBRARY -> assetInLibrary(value, userId, admin);
+            case FOLDER -> assetInFolder(value, userId, admin);
+            case ALBUM -> assetInAlbum(value, userId);
+            case TAG -> assetHasTag(value, userId);
+            case EXTENSION -> {
+                List<String> extensions = new ArrayList<>();
+                for (String part : value.split(",")) {
+                    String extension = part.trim().toLowerCase(Locale.ROOT);
+                    if (extension.isEmpty()) {
+                        continue;
+                    }
+                    if (extension.startsWith(".")) {
+                        extension = extension.substring(1);
+                    }
+                    if (!extension.isEmpty() && !extensions.contains(extension)) {
+                        extensions.add(extension);
+                    }
+                }
+                yield extensions.isEmpty()
+                        ? Expressions.FALSE
+                        : ASSET_METADATA.fileExtension.lower().in(extensions);
+            }
+            case CAMERA -> ASSET_METADATA.cameraMake.lower().contains(normalized)
+                    .or(ASSET_METADATA.cameraModel.lower().contains(normalized));
+            case AFTER -> ASSET_METADATA.capturedAt.goe(dateBoundary(value));
+            case BEFORE -> ASSET_METADATA.capturedAt.lt(dateBoundary(value));
+            case ON -> ASSET_METADATA.capturedAt.goe(dateBoundary(value))
+                    .and(ASSET_METADATA.capturedAt.lt(dateBoundary(value).plusDays(1)));
+            case IS -> switch (normalized) {
+                case "available" -> ASSETS.availableFileCount.gt(0);
+                case "missing" -> ASSETS.availableFileCount.eq(0);
+                case "duplicate" -> ASSETS.availableFileCount.gt(1);
+                case "starred" -> assetInStarred(userId);
+                default -> throw new IllegalArgumentException("Unsupported is: value " + value);
+            };
+        };
+    }
+
+    private BooleanExpression assetInLibrary(String value, UUID userId, boolean admin) {
+        QAssetFiles files = new QAssetFiles("search_library_files");
+        QLibraries libraries = new QLibraries("search_libraries");
+        QLibraryMembers members = new QLibraryMembers("search_library_members");
+        BooleanBuilder predicate = new BooleanBuilder(files.assetId.eq(ASSETS.id))
+                .and(files.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                .and(libraries.status.eq(STATUS_ACTIVE))
+                .and(matchesIdentifier(libraries.id, libraries.name, value));
+        if (!admin) {
+            predicate.and(members.userId.eq(userId));
+        }
+        return SQLExpressions.selectOne().from(files)
+                .join(libraries).on(libraries.id.eq(files.libraryId))
+                .leftJoin(members).on(members.libraryId.eq(libraries.id))
+                .where(predicate).exists();
+    }
+
+    private BooleanExpression assetInFolder(String value, UUID userId, boolean admin) {
+        QAssetFiles files = new QAssetFiles("search_folder_files");
+        QLibraries libraries = new QLibraries("search_folder_libraries");
+        QLibraryMembers members = new QLibraryMembers("search_folder_members");
+        String folder = value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+        BooleanBuilder predicate = new BooleanBuilder(files.assetId.eq(ASSETS.id))
+                .and(files.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                .and(files.normalizedPath.startsWith(folder + "/"))
+                .and(libraries.status.eq(STATUS_ACTIVE));
+        if (!admin) {
+            predicate.and(members.userId.eq(userId));
+        }
+        return SQLExpressions.selectOne().from(files)
+                .join(libraries).on(libraries.id.eq(files.libraryId))
+                .leftJoin(members).on(members.libraryId.eq(libraries.id))
+                .where(predicate).exists();
+    }
+
+    private BooleanExpression assetInAlbum(String value, UUID userId) {
+        QAlbumItems items = new QAlbumItems("search_album_items");
+        QAlbums albums = new QAlbums("search_albums");
+        return SQLExpressions.selectOne().from(items)
+                .join(albums).on(albums.id.eq(items.albumId))
+                .where(items.assetId.eq(ASSETS.id)
+                        .and(albums.ownerUserId.eq(userId))
+                        .and(albums.kind.eq(AlbumKind.USER))
+                        .and(matchesIdentifier(albums.id, albums.name, value)))
+                .exists();
+    }
+
+    private BooleanExpression assetHasTag(String value, UUID userId) {
+        QAssetTags assetTags = new QAssetTags("search_asset_tags");
+        QTags tags = new QTags("search_tags");
+        return SQLExpressions.selectOne().from(assetTags)
+                .join(tags).on(tags.id.eq(assetTags.tagId))
+                .where(assetTags.assetId.eq(ASSETS.id)
+                        .and(tags.ownerUserId.eq(userId))
+                        .and(matchesIdentifier(tags.id, tags.name, value)))
+                .exists();
+    }
+
+    private BooleanExpression assetInStarred(UUID userId) {
+        QAlbumItems items = new QAlbumItems("search_starred_items");
+        QAlbums albums = new QAlbums("search_starred_albums");
+        return SQLExpressions.selectOne().from(items)
+                .join(albums).on(albums.id.eq(items.albumId))
+                .where(items.assetId.eq(ASSETS.id)
+                        .and(albums.ownerUserId.eq(userId))
+                        .and(albums.kind.eq(AlbumKind.STARRED)))
+                .exists();
+    }
+
+    private BooleanExpression matchesIdentifier(
+            com.querydsl.core.types.dsl.ComparablePath<UUID> id,
+            com.querydsl.core.types.dsl.StringPath name,
+            String value
+    ) {
+        try {
+            return id.eq(UUID.fromString(value)).or(name.lower().eq(value.toLowerCase(Locale.ROOT)));
+        } catch (IllegalArgumentException exception) {
+            return name.lower().eq(value.toLowerCase(Locale.ROOT));
+        }
+    }
+
+    private OffsetDateTime dateBoundary(String value) {
+        return LocalDate.parse(value).atStartOfDay(searchProperties.getTimeZone()).toOffsetDateTime();
     }
 
     private BrowseRows browseByIds(UUID userId, boolean admin, List<UUID> assetIds, Long count) {
@@ -586,7 +760,7 @@ class AssetRepository {
             UUID libraryId,
             String folder,
             boolean includeDescendants,
-            String query,
+            SearchQuery query,
             String availability,
             String fileType,
             Boolean duplicatesOnly,

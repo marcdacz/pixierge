@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Heart, Images } from 'lucide-react';
+import { Images, Star } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssetContextMenu } from '@/features/organizer/asset-context-menu';
 
@@ -12,13 +12,13 @@ describe('AssetContextMenu', () => {
   it('renders action labels with icons and invokes selection', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    const onFavourites = vi.fn();
+    const onStarred = vi.fn();
     const onAlbums = vi.fn();
 
     render(
       <AssetContextMenu
         actions={[
-          { id: 'favourites', icon: Heart, label: 'Add to favourites', onSelect: onFavourites },
+          { id: 'starred', icon: Star, label: 'Add to starred', onSelect: onStarred },
           { id: 'albums', icon: Images, label: 'Add to albums…', onSelect: onAlbums }
         ]}
         onClose={onClose}
@@ -28,12 +28,12 @@ describe('AssetContextMenu', () => {
       />
     );
 
-    const favouritesItem = screen.getByRole('menuitem', { name: 'Add to favourites' });
-    expect(favouritesItem.querySelector('svg')).not.toBeNull();
+    const starredItem = screen.getByRole('menuitem', { name: 'Add to starred' });
+    expect(starredItem.querySelector('svg')).not.toBeNull();
     expect(screen.getByRole('menuitem', { name: 'Add to albums…' }).querySelector('svg')).not.toBeNull();
 
-    await user.click(favouritesItem);
-    expect(onFavourites).toHaveBeenCalledOnce();
+    await user.click(starredItem);
+    expect(onStarred).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
   });
 });

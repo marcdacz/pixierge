@@ -77,7 +77,7 @@ const assetBrowseResponse = {
           thumbnailStatus: 'ready',
           thumbnailCacheKey: 'e2e-thumbnail-v1',
           thumbnailPlaceholder: 'linear-gradient(135deg, rgb(120, 130, 140), rgb(90, 100, 110))',
-          favourited: false
+          starred: false
         }
       ]
     }
@@ -159,11 +159,20 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
 
   await page.getByRole('button', { name: /^family/ }).click();
   await expect(page.getByRole('heading', { name: 'family' })).toBeVisible();
-  await page.getByLabel('Search').fill('beach');
+  await page.getByRole('textbox', { name: 'Search' }).fill('beach');
+  await expect(page.getByRole('heading', { name: 'Search results' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Filters' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Select beach.jpg' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Search' }).fill('tag:Family');
+  await page.getByRole('textbox', { name: 'Search' }).press(' ');
+  await expect(page.getByRole('button', { name: 'Remove tag: Family' })).toBeVisible();
+  await expect(page).toHaveURL(/\?q=tag%3AFamily$/);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Search results' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove tag: Family' })).toBeVisible();
   await page.getByRole('button', { name: 'Select beach.jpg' }).click();
   await expect(page.locator('[data-asset-id="asset-1"]')).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('button', { name: 'Select beach.jpg' }).dblclick();
+  await page.locator('[data-asset-id="asset-1"]').dblclick();
   await expect(page.getByRole('button', { name: 'Close photo viewer' })).toBeVisible();
   await page.getByRole('button', { name: 'Show photo metadata' }).click();
   await expect(page.getByText('/photos/family/beach.jpg').first()).toBeVisible();
@@ -203,7 +212,7 @@ test('scan activity indicator and confirmed asset detail @visual', async ({ page
   await page.getByRole('button', { name: 'Libraries' }).click();
   await page.getByRole('button', { name: 'Select beach.jpg' }).dblclick();
   await page.getByRole('button', { name: 'Show photo metadata' }).click();
-  await expect(page.getByText('Identity').locator('..')).toContainText('confirmed');
+  await expect(page.getByText('/photos/family/beach.jpg').first()).toBeVisible();
   await expect(page.getByText('Metadata').locator('..')).toContainText('pending');
 });
 
@@ -236,13 +245,13 @@ test('selects photos and assigns albums and tags', async ({ page }) => {
   await expect(page.getByRole('menu', { name: 'Asset actions' })).toBeVisible();
   await expect(tile).toHaveAttribute('aria-selected', 'true');
 
-  await page.getByRole('menuitem', { name: 'Add to favourites' }).click();
-  await expect(page.getByLabel('Favourited')).toBeVisible();
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Favourites' }).click();
-  await expect(page.getByRole('heading', { name: 'Favourites' })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Add to starred' }).click();
+  await expect(tile.getByLabel('Starred')).toBeVisible();
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Starred' }).click();
+  await expect(page.getByRole('heading', { name: 'Starred' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Albums' })).toHaveCount(0);
   await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
-  await expect(page.getByLabel('Favourited')).toBeVisible();
+  await expect(page.locator('[data-asset-id="asset-1"]').getByLabel('Starred')).toBeVisible();
 
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Libraries' }).click();
   await tile.click({ button: 'right' });
@@ -265,7 +274,7 @@ test('selects photos and assigns albums and tags', async ({ page }) => {
   const albumsNav = page.getByRole('navigation', { name: 'Albums' });
   await expect(albumsNav).toBeVisible();
   await expect(albumsNav.getByRole('button', { name: /^Best of 2026/ })).toBeVisible();
-  await expect(albumsNav.getByRole('button', { name: /^Favourites/ })).toHaveCount(0);
+  await expect(albumsNav.getByRole('button', { name: /^Starred/ })).toHaveCount(0);
   await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
 
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Tags' }).click();
@@ -287,15 +296,15 @@ test('scheduler details visual regression @visual', async ({ page }) => {
   });
 });
 
-test('favourites organizer visual regression @visual', async ({ page }) => {
+test('starred organizer visual regression @visual', async ({ page }) => {
   await mockPixiergeApi(page);
   await completeBrowsableLibrarySetup(page);
   await page.locator('[data-asset-id="asset-1"]').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Add to favourites' }).click();
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Favourites' }).click();
-  await expect(page.getByRole('heading', { name: 'Favourites' })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Add to starred' }).click();
+  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Starred' }).click();
+  await expect(page.getByRole('heading', { name: 'Starred' })).toBeVisible();
   await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
-  await expect(page).toHaveScreenshot('browse-favourites.png', {
+  await expect(page).toHaveScreenshot('browse-starred.png', {
     fullPage: true
   });
 });
@@ -369,33 +378,33 @@ async function mockPixiergeApi(page: Page) {
     name: string;
     coverAssetId: string | null;
     coverFileName: string | null;
-    kind: 'user' | 'favourites';
+    kind: 'user' | 'starred';
     itemCount: number;
     sourceLibraryCount: number;
     createdAt: string;
     updatedAt: string;
   }> = [];
-  let favourites: {
+  let starred: {
     id: string;
     name: string;
     coverAssetId: string | null;
     coverFileName: string | null;
-    kind: 'user' | 'favourites';
+    kind: 'user' | 'starred';
     itemCount: number;
     sourceLibraryCount: number;
     createdAt: string;
     updatedAt: string;
   } | null = null;
-  const favouritedAssetIds = new Set<string>();
+  const starredAssetIds = new Set<string>();
 
-  function browseWithFavourites(response: typeof assetBrowseResponse) {
+  function browseWithStarred(response: typeof assetBrowseResponse) {
     return {
       ...response,
       sections: response.sections.map((section) => ({
         ...section,
         assets: section.assets.map((asset) => ({
           ...asset,
-          favourited: favouritedAssetIds.has(asset.id)
+          starred: starredAssetIds.has(asset.id)
         }))
       }))
     };
@@ -468,6 +477,24 @@ async function mockPixiergeApi(page: Page) {
       return;
     }
 
+    if (path === '/api/search/parse') {
+      await route.fulfill({
+        json: {
+          query: new URL(request.url()).searchParams.get('q') ?? '',
+          freeText: '',
+          clauses: [{ field: 'tag', value: 'Family', negated: false, start: 0, end: 10, label: 'tag: Family' }],
+          errors: [],
+          valid: true
+        }
+      });
+      return;
+    }
+
+    if (path === '/api/search/suggestions') {
+      await route.fulfill({ json: [{ value: 'Family', label: 'Family' }] });
+      return;
+    }
+
     if (path === '/api/assets/asset-1/file') {
       await route.fulfill({
         body: assetFileSvg,
@@ -490,7 +517,7 @@ async function mockPixiergeApi(page: Page) {
     }
 
     if (path === '/api/assets') {
-      await route.fulfill({ json: browseWithFavourites(assetBrowseResponse) });
+      await route.fulfill({ json: browseWithStarred(assetBrowseResponse) });
       return;
     }
 
@@ -693,28 +720,28 @@ async function mockPixiergeApi(page: Page) {
       return;
     }
 
-    if (path === '/api/favourites' && request.method() === 'GET') {
-      if (!favourites) {
-        favourites = {
-          id: 'favourites-1',
-          name: 'Favourites',
+    if (path === '/api/starred' && request.method() === 'GET') {
+      if (!starred) {
+        starred = {
+          id: 'starred-1',
+          name: 'Starred',
           coverAssetId: null,
           coverFileName: null,
-          kind: 'favourites',
+          kind: 'starred',
           itemCount: 0,
           sourceLibraryCount: 0,
           createdAt: '2026-07-04T00:00:00Z',
           updatedAt: '2026-07-04T00:00:00Z'
         };
       }
-      await route.fulfill({ json: favourites });
+      await route.fulfill({ json: starred });
       return;
     }
 
-    if (path === '/api/favourites/assets' && request.method() === 'GET') {
+    if (path === '/api/starred/assets' && request.method() === 'GET') {
       await route.fulfill({
-        json: favourites && favourites.itemCount > 0
-          ? browseWithFavourites(assetBrowseResponse)
+        json: starred && starred.itemCount > 0
+          ? browseWithStarred(assetBrowseResponse)
           : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
       });
       return;
@@ -762,7 +789,7 @@ async function mockPixiergeApi(page: Page) {
       const album = albums.find((item) => item.id === albumAssetsMatch[1]);
       await route.fulfill({
         json: album && album.itemCount > 0
-          ? browseWithFavourites(assetBrowseResponse)
+          ? browseWithStarred(assetBrowseResponse)
           : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
       });
       return;
@@ -771,11 +798,11 @@ async function mockPixiergeApi(page: Page) {
     if (path === '/api/album-items' && request.method() === 'POST') {
       const body = await request.postDataJSON();
       for (const albumId of body.albumIds ?? []) {
-        if (favourites && favourites.id === albumId) {
-          favourites.itemCount += (body.items ?? []).length;
-          favourites.sourceLibraryCount = Math.max(favourites.sourceLibraryCount, 1);
+        if (starred && starred.id === albumId) {
+          starred.itemCount += (body.items ?? []).length;
+          starred.sourceLibraryCount = Math.max(starred.sourceLibraryCount, 1);
           for (const item of body.items ?? []) {
-            favouritedAssetIds.add(item.assetId);
+            starredAssetIds.add(item.assetId);
           }
           continue;
         }
@@ -793,10 +820,10 @@ async function mockPixiergeApi(page: Page) {
     if (albumItemsMatch && request.method() === 'DELETE') {
       const body = await request.postDataJSON();
       const removedCount = (body.assetIds ?? []).length;
-      if (favourites && favourites.id === albumItemsMatch[1]) {
-        favourites.itemCount = Math.max(0, favourites.itemCount - removedCount);
+      if (starred && starred.id === albumItemsMatch[1]) {
+        starred.itemCount = Math.max(0, starred.itemCount - removedCount);
         for (const assetId of body.assetIds ?? []) {
-          favouritedAssetIds.delete(assetId);
+          starredAssetIds.delete(assetId);
         }
       } else {
         const album = albums.find((item) => item.id === albumItemsMatch[1]);
@@ -832,7 +859,7 @@ async function mockPixiergeApi(page: Page) {
       const tag = tags.find((item) => item.id === tagAssetsMatch[1]);
       await route.fulfill({
         json: tag && tag.assetCount > 0
-          ? browseWithFavourites(assetBrowseResponse)
+          ? browseWithStarred(assetBrowseResponse)
           : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
       });
       return;

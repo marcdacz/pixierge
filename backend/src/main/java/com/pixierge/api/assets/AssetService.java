@@ -1,6 +1,7 @@
 package com.pixierge.api.assets;
 
 import com.pixierge.api.identity.AuthenticatedUser;
+import com.pixierge.api.search.SearchParser;
 import com.pixierge.api.tags.TagRepository;
 import org.springframework.core.io.PathResource;
 import org.springframework.http.HttpStatus;
@@ -47,11 +48,18 @@ public class AssetService {
     private final AssetRepository assetRepository;
     private final ThumbnailService thumbnailService;
     private final TagRepository tagRepository;
+    private final SearchParser searchParser;
 
-    public AssetService(AssetRepository assetRepository, ThumbnailService thumbnailService, TagRepository tagRepository) {
+    public AssetService(
+            AssetRepository assetRepository,
+            ThumbnailService thumbnailService,
+            TagRepository tagRepository,
+            SearchParser searchParser
+    ) {
         this.assetRepository = assetRepository;
         this.thumbnailService = thumbnailService;
         this.tagRepository = tagRepository;
+        this.searchParser = searchParser;
     }
 
     @Transactional(readOnly = true)
@@ -145,7 +153,7 @@ public class AssetService {
                 libraryId,
                 blankToNull(folder),
                 includeDescendants == null || includeDescendants,
-                blankToNull(query),
+                searchParser.parse(blankToNull(query)),
                 blankToNull(availability),
                 blankToNull(fileType),
                 duplicatesOnly,
@@ -198,7 +206,7 @@ public class AssetService {
         Map<String, ThumbnailService.ThumbnailBrowseSummary> thumbnailSummaries = thumbnailService.browseSummaries(rows.assets().stream()
                 .map(AssetRepository.AssetSummaryRow::contentHash)
                 .toList());
-        Set<UUID> favouritedIds = assetRepository.favouritedAssetIds(
+        Set<UUID> starredIds = assetRepository.starredAssetIds(
                 user.id(),
                 rows.assets().stream().map(AssetRepository.AssetSummaryRow::assetId).toList()
         );
@@ -226,7 +234,7 @@ public class AssetService {
                     thumbnail.status(),
                     thumbnail.cacheKey(),
                     thumbnail.placeholder(),
-                    favouritedIds.contains(row.assetId())
+                    starredIds.contains(row.assetId())
             );
             byFolder.computeIfAbsent(row.folderPath(), ignored -> new ArrayList<>()).add(response);
         }

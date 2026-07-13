@@ -18,6 +18,7 @@ import { PhotoBrowser } from '@/features/library/photo-browser';
 import {
   BrowseSidebarShowControl,
   BROWSE_LAYOUT_HEIGHT_CLASS,
+  BROWSE_SIDEBAR_COLLAPSED_KEYS,
   OrganizerSidebar,
   useBrowseSidebarState
 } from '@/features/organizer/organizer-sidebar';
@@ -35,9 +36,18 @@ export function TagsHome({ auth }: { auth: AuthResponse }) {
   const [error, setError] = useState<string | null>(null);
   const [assetFocused, setAssetFocused] = useState(false);
   const { collapsed, setCollapsed, isLowResolution, clearExpandTimer, handleShowControlDragOver } =
-    useBrowseSidebarState();
+    useBrowseSidebarState(BROWSE_SIDEBAR_COLLAPSED_KEYS.tags);
   const active = tags.find((tag) => tag.id === activeId) ?? null;
   const browseContextKey = `tag:${activeId ?? ''}`;
+  const showControl =
+    !assetFocused && collapsed ? (
+      <BrowseSidebarShowControl
+        onDragLeave={clearExpandTimer}
+        onDragOver={handleShowControlDragOver}
+        onShow={() => setCollapsed(false)}
+        title="Tags"
+      />
+    ) : null;
 
   async function loadTags() {
     setLoading(true);
@@ -177,7 +187,10 @@ export function TagsHome({ auth }: { auth: AuthResponse }) {
         {error && !active && <Alert className="m-4">{error}</Alert>}
         {!active && (
           <div className="grid gap-2 p-4 lg:p-6">
-            <h1 className="text-2xl font-semibold">Tags</h1>
+            <div className="flex items-center gap-2">
+              {showControl}
+              <h1 className="text-2xl font-semibold">Tags</h1>
+            </div>
             <p className="text-sm text-muted-foreground">
               Use + in the sidebar to create a tag, or select photos in Libraries to assign tags.
             </p>
@@ -192,16 +205,7 @@ export function TagsHome({ auth }: { auth: AuthResponse }) {
             emptyTitle="No assets with this tag"
             error={error}
             key={browseContextKey}
-            leadingControls={
-              !assetFocused && collapsed ? (
-                <BrowseSidebarShowControl
-                  onDragLeave={clearExpandTimer}
-                  onDragOver={handleShowControlDragOver}
-                  onShow={() => setCollapsed(false)}
-                  title="Tags"
-                />
-              ) : undefined
-            }
+            leadingControls={showControl ?? undefined}
             loadingAssets={loadingAssets}
             loadingMore={loadingMore}
             onAssignmentsChanged={() => void loadTags()}

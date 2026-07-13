@@ -1,4 +1,4 @@
-import { FileImage, Hash, Heart, HeartOff, Images } from 'lucide-react';
+import { FileImage, Hash, Images, Star, StarOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import {
   addAlbumItems,
@@ -7,7 +7,7 @@ import {
   createTag,
   fetchAlbums,
   fetchAsset,
-  fetchFavourites,
+  fetchStarred,
   fetchTags,
   removeAlbumItems,
   type AssetBrowseResponse,
@@ -95,7 +95,7 @@ export function PhotoBrowser({
   const [pickerDestinations, setPickerDestinations] = useState<AssignmentDestination[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; assetId: string } | null>(null);
-  const [favouritedOverrides, setFavouritedOverrides] = useState<Map<string, boolean>>(() => new Map());
+  const [starredOverrides, setStarredOverrides] = useState<Map<string, boolean>>(() => new Map());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const loadMoreRequestedRef = useRef(false);
@@ -110,7 +110,7 @@ export function PhotoBrowser({
     if (!assets) {
       return null;
     }
-    if (favouritedOverrides.size === 0) {
+    if (starredOverrides.size === 0) {
       return assets;
     }
     return {
@@ -118,14 +118,14 @@ export function PhotoBrowser({
       sections: assets.sections.map((section) => ({
         ...section,
         assets: section.assets.map((asset) => {
-          const override = favouritedOverrides.get(asset.id);
-          return override === undefined || override === asset.favourited
+          const override = starredOverrides.get(asset.id);
+          return override === undefined || override === asset.starred
             ? asset
-            : { ...asset, favourited: override };
+            : { ...asset, starred: override };
         })
       }))
     };
-  }, [assets, favouritedOverrides]);
+  }, [assets, starredOverrides]);
   const browseAssetIds = useMemo(() => flattenBrowseAssetIds(displayAssets?.sections ?? []), [displayAssets?.sections]);
   const selection = useAssetSelection(browseContextKey);
   const selectedAssets = useMemo(
@@ -151,7 +151,7 @@ export function PhotoBrowser({
     (focusedAssetIndex === browseAssetIds.length - 1 && (displayAssets?.hasNext ?? false));
 
   useEffect(() => {
-    setFavouritedOverrides(new Map());
+    setStarredOverrides(new Map());
   }, [browseContextKey]);
 
   useEffect(() => {
@@ -187,6 +187,7 @@ export function PhotoBrowser({
   }, [assets?.hasNext, browseContextKey, loadingAssets, loadingMore, onLoadMore]);
 
   useEffect(() => {
+    // Keep parent layout in sync for non-interactive clears (e.g. detail fetch failure).
     onFocusChange?.(selectedAssetId !== null);
   }, [onFocusChange, selectedAssetId]);
 
@@ -245,7 +246,7 @@ export function PhotoBrowser({
       const returnAssetId = focusReturnAssetIdRef.current;
       if (returnAssetId) {
         const tile = scrollContainerRef.current?.querySelector(`[data-asset-id="${returnAssetId}"]`);
-        tile?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        tile?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
         focusReturnAssetIdRef.current = null;
       } else if (scrollContainerRef.current) {
         scrollContainerRef.current.scrollTop = lastBrowseScrollTopRef.current;
@@ -261,12 +262,15 @@ export function PhotoBrowser({
     focusReturnAssetIdRef.current = null;
     pendingNextNavigationRef.current = false;
     setSelectedAssetId(assetId);
+    // Notify synchronously so parent layout (sidebar hide) batches with this render.
+    onFocusChange?.(true);
   }
 
   function closeAssetFocus() {
     focusReturnAssetIdRef.current = selectedAssetId;
     pendingRestoreBrowseScrollRef.current = true;
     setSelectedAssetId(null);
+    onFocusChange?.(false);
   }
 
   function goToPreviousAsset() {
@@ -309,16 +313,16 @@ export function PhotoBrowser({
     }
   }
 
-  async function addToFavourites() {
+  async function addToStarred() {
     if (!auth || selectedAssets.length === 0) {
       return;
     }
     setContextMenu(null);
     try {
-      const favourites = await fetchFavourites();
+      const starred = await fetchStarred();
       const items = selectedAssets.map((asset) => ({ assetId: asset.id, sourceLibraryId: asset.libraryId }));
-      await addAlbumItems([favourites.id], items, auth.csrfToken);
-      setFavouritedOverrides((current) => {
+      await addAlbumItems([starred.id], items, auth.csrfToken);
+      setStarredOverrides((current) => {
         const next = new Map(current);
         for (const asset of selectedAssets) {
           next.set(asset.id, true);
@@ -327,23 +331,23 @@ export function PhotoBrowser({
       });
       onAssignmentsChanged?.();
     } catch {
-      setBrowseError('Could not add to favourites.');
+      setBrowseError('Could not add to starred.');
     }
   }
 
-  async function removeFromFavourites() {
+  async function removeFromStarred() {
     if (!auth || selectedAssets.length === 0) {
       return;
     }
     setContextMenu(null);
     try {
-      const favourites = await fetchFavourites();
+      const starred = await fetchStarred();
       await removeAlbumItems(
-        favourites.id,
+        starred.id,
         selectedAssets.map((asset) => asset.id),
         auth.csrfToken
       );
-      setFavouritedOverrides((current) => {
+      setStarredOverrides((current) => {
         const next = new Map(current);
         for (const asset of selectedAssets) {
           next.set(asset.id, false);
@@ -352,7 +356,7 @@ export function PhotoBrowser({
       });
       onAssignmentsChanged?.();
     } catch {
-      setBrowseError('Could not remove from favourites.');
+      setBrowseError('Could not remove from starred.');
     }
   }
 
@@ -383,20 +387,20 @@ export function PhotoBrowser({
     });
   }
 
-  const selectionIsFavourited = selectedAssets.length > 0 && selectedAssets.every((asset) => asset.favourited);
+  const selectionIsStarred = selectedAssets.length > 0 && selectedAssets.every((asset) => asset.starred);
   const contextMenuActions: AssetContextMenuAction[] = [
-    selectionIsFavourited
+    selectionIsStarred
       ? {
-          id: 'remove-favourites',
-          icon: HeartOff,
-          label: 'Remove from favourites',
-          onSelect: () => void removeFromFavourites()
+          id: 'remove-starred',
+          icon: StarOff,
+          label: 'Remove from starred',
+          onSelect: () => void removeFromStarred()
         }
       : {
-          id: 'favourites',
-          icon: Heart,
-          label: 'Add to favourites',
-          onSelect: () => void addToFavourites()
+          id: 'starred',
+          icon: Star,
+          label: 'Add to starred',
+          onSelect: () => void addToStarred()
         },
     { id: 'albums', icon: Images, label: 'Add to albums…', onSelect: () => void openPicker('albums') },
     { id: 'tags', icon: Hash, label: 'Add tags…', onSelect: () => void openPicker('tags') },
@@ -456,7 +460,7 @@ export function PhotoBrowser({
         <AssetFocus
           asset={assetDetail}
           cacheKey={selectedAssetSummary?.thumbnailCacheKey}
-          favourited={selectedAssetSummary?.favourited ?? false}
+          starred={selectedAssetSummary?.starred ?? false}
           hasNext={canGoToNextAsset}
           hasPrevious={canGoToPreviousAsset}
           loading={!assetDetail}

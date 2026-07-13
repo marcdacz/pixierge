@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  fetchFavourites,
-  fetchFavouritesAssets,
+  fetchStarred,
+  fetchStarredAssets,
   type AlbumSummary,
   type AssetBrowseResponse,
   type AuthResponse
@@ -14,27 +14,27 @@ import { BROWSE_LAYOUT_HEIGHT_CLASS } from '@/features/organizer/organizer-sideb
 
 const PAGE_SIZE = 48;
 
-export function FavouritesHome({ auth }: { auth: AuthResponse }) {
-  const [favourites, setFavourites] = useState<AlbumSummary | null>(null);
+export function StarredHome({ auth }: { auth: AuthResponse }) {
+  const [starred, setStarred] = useState<AlbumSummary | null>(null);
   const [assets, setAssets] = useState<AssetBrowseResponse | null>(null);
   const [page, setPage] = useState(0);
   const [loadingAssets, setLoadingAssets] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const browseContextKey = `favourites:${favourites?.id ?? ''}`;
+  const browseContextKey = `starred:${starred?.id ?? ''}`;
 
   useEffect(() => {
     let ignore = false;
-    fetchFavourites()
+    fetchStarred()
       .then((next) => {
         if (!ignore) {
-          setFavourites(next);
+          setStarred(next);
           setError(null);
         }
       })
       .catch(() => {
         if (!ignore) {
-          setError('Favourites could not be loaded.');
+          setError('Starred could not be loaded.');
           setLoadingAssets(false);
         }
       });
@@ -49,7 +49,7 @@ export function FavouritesHome({ auth }: { auth: AuthResponse }) {
   }, [browseContextKey]);
 
   useEffect(() => {
-    if (!favourites) {
+    if (!starred) {
       return;
     }
 
@@ -64,7 +64,7 @@ export function FavouritesHome({ auth }: { auth: AuthResponse }) {
       setLoadingMore(true);
     }
 
-    fetchFavouritesAssets(requestedPage, PAGE_SIZE)
+    fetchStarredAssets(requestedPage, PAGE_SIZE)
       .then((response) => {
         if (ignore || requestedContext !== browseContextKey) {
           return;
@@ -85,7 +85,7 @@ export function FavouritesHome({ auth }: { auth: AuthResponse }) {
       })
       .catch(() => {
         if (!ignore && requestedContext === browseContextKey) {
-          setError('Favourites assets could not be loaded.');
+          setError('Starred assets could not be loaded.');
           if (requestedPage === 0) {
             setAssets(null);
           }
@@ -104,27 +104,27 @@ export function FavouritesHome({ auth }: { auth: AuthResponse }) {
     return () => {
       ignore = true;
     };
-  }, [favourites, browseContextKey, page]);
+  }, [starred, browseContextKey, page]);
 
   async function reloadAssets() {
-    if (!favourites) {
+    if (!starred) {
       return;
     }
     setPage(0);
-    setAssets(await fetchFavouritesAssets(0, PAGE_SIZE));
-    setFavourites(await fetchFavourites());
+    setAssets(await fetchStarredAssets(0, PAGE_SIZE));
+    setStarred(await fetchStarred());
   }
 
   return (
     <div className={cn('relative grid gap-0 overflow-hidden', BROWSE_LAYOUT_HEIGHT_CLASS, 'grid-rows-[minmax(0,1fr)]')}>
-      {error && !favourites && <Alert className="m-4">{error}</Alert>}
-      {favourites && (
+      {error && !starred && <Alert className="m-4">{error}</Alert>}
+      {starred && (
         <PhotoBrowser
           auth={auth}
           browseContextKey={browseContextKey}
           assets={assets}
-          emptyDescription="Right-click photos in Libraries, Albums, or Tags to add them to Favourites."
-          emptyTitle="No favourites yet"
+          emptyDescription="Right-click photos in Libraries, Albums, or Tags to add them to Starred."
+          emptyTitle="No starred photos yet"
           error={error}
           key={browseContextKey}
           loadingAssets={loadingAssets}
@@ -132,7 +132,7 @@ export function FavouritesHome({ auth }: { auth: AuthResponse }) {
           onAssignmentsChanged={() => void reloadAssets()}
           onLoadMore={() => setPage((current) => current + 1)}
           showSectionHeaders={false}
-          title={<h1 className="text-2xl font-semibold">Favourites</h1>}
+          title={<h1 className="text-2xl font-semibold">Starred</h1>}
         />
       )}
     </div>

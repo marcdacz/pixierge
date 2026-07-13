@@ -71,13 +71,13 @@ class AlbumRepository {
         return id;
     }
 
-    Optional<UUID> createFavouritesIfAbsent(UUID userId) {
+    Optional<UUID> createStarredIfAbsent(UUID userId) {
         UUID id = UUID.randomUUID();
         OffsetDateTime now = OffsetDateTime.now();
         boolean inserted = queryFactory.insert(ALBUMS).set(ALBUMS.id, id).set(ALBUMS.ownerUserId, userId)
-                .set(ALBUMS.name, AlbumKind.FAVOURITES_NAME).set(ALBUMS.kind, AlbumKind.FAVOURITES)
+                .set(ALBUMS.name, AlbumKind.STARRED_NAME).set(ALBUMS.kind, AlbumKind.STARRED)
                 .set(ALBUMS.createdAt, now).set(ALBUMS.updatedAt, now)
-                .addFlag(QueryFlag.Position.END, " ON CONFLICT (owner_user_id) WHERE (kind = 'favourites') DO NOTHING")
+                .addFlag(QueryFlag.Position.END, " ON CONFLICT (owner_user_id) WHERE (kind = 'starred') DO NOTHING")
                 .execute() > 0;
         return inserted ? Optional.of(id) : Optional.empty();
     }

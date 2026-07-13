@@ -5,12 +5,13 @@ import { ToastViewport, type ToastMessage } from '@/components/ui/toast';
 import { LoginForm, SetupForm } from '@/features/identity/identity-forms';
 import { LibraryHome } from '@/features/library/library-home';
 import { AlbumsHome } from '@/features/albums/albums-home';
-import { FavouritesHome } from '@/features/favourites/favourites-home';
+import { SearchHome } from '@/features/search/search-home';
+import { StarredHome } from '@/features/starred/starred-home';
 import { ScanActivityProvider } from '@/features/scans/scan-activity-context';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { TagsHome } from '@/features/tags/tags-home';
 
-export type AppView = 'libraries' | 'favourites' | 'albums' | 'tags' | 'settings';
+export type AppView = 'search' | 'libraries' | 'starred' | 'albums' | 'tags' | 'settings';
 
 type AppState =
   | { state: 'loading' }
@@ -19,16 +20,31 @@ type AppState =
   | { state: 'app'; auth: AuthResponse };
 
 const toastAutoDismissMs = 15_000;
-const librarySearchDebounceMs = 250;
+
+function initialSearchQuery() {
+  return new URLSearchParams(window.location.search).get('q') ?? '';
+}
+
+function syncSearchUrl(query: string) {
+  const url = new URL(window.location.href);
+  if (query) {
+    url.searchParams.set('q', query);
+  } else {
+    url.searchParams.delete('q');
+  }
+  window.history.replaceState(window.history.state, '', url);
+}
 
 export function App() {
+  const initialQuery = initialSearchQuery();
   const [appState, setAppState] = useState<AppState>({ state: 'loading' });
-  const [currentView, setCurrentView] = useState<AppView>('libraries');
+  const [currentView, setCurrentView] = useState<AppView>(initialQuery ? 'search' : 'libraries');
   const [libraries, setLibraries] = useState<LibrarySummary[]>([]);
   const [librariesLoading, setLibrariesLoading] = useState(false);
   const [librariesError, setLibrariesError] = useState<string | null>(null);
-  const [librarySearchInput, setLibrarySearchInput] = useState('');
-  const [librarySearchQuery, setLibrarySearchQuery] = useState('');
+  const [retainedSearchQuery, setRetainedSearchQuery] = useState(initialQuery);
+  const [searchInput, setSearchInput] = useState(initialQuery);
+  const [activeSearchQuery, setActiveSearchQuery] = useState(initialQuery);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastTimeouts = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
@@ -127,15 +143,46 @@ export function App() {
     }
   }, [appState.state, loadLibraries]);
 
-  useEffect(() => {
-    const handle = window.setTimeout(() => {
-      setLibrarySearchQuery(librarySearchInput.trim());
-    }, librarySearchDebounceMs);
+  const handleSearchInputChange = useCallback((value: string) => {
+    setSearchInput(value);
+    if (value.trim() && currentView !== 'search') {
+      setCurrentView('search');
+    }
+  }, [currentView]);
 
-    return () => {
-      window.clearTimeout(handle);
-    };
-  }, [librarySearchInput]);
+  const handleValidSearchQuery = useCallback((value: string) => {
+    setActiveSearchQuery(value);
+    setRetainedSearchQuery(value);
+    syncSearchUrl(value);
+    if (value.trim()) {
+      setCurrentView('search');
+    }
+  }, []);
+
+  const handleSearchPageQueryChange = useCallback((value: string) => {
+    setSearchInput(value);
+    setActiveSearchQuery(value);
+    setRetainedSearchQuery(value);
+    syncSearchUrl(value);
+    setCurrentView('search');
+  }, []);
+
+  const handleViewChange = useCallback((view: AppView) => {
+    if (view === currentView) {
+      return;
+    }
+    if (currentView === 'search' && view !== 'search') {
+      setSearchInput('');
+      setActiveSearchQuery('');
+      syncSearchUrl('');
+    }
+    if (view === 'search') {
+      setSearchInput(retainedSearchQuery);
+      setActiveSearchQuery(retainedSearchQuery);
+      syncSearchUrl(retainedSearchQuery);
+    }
+    setCurrentView(view);
+  }, [currentView, retainedSearchQuery]);
 
   if (appState.state === 'loading') {
     return <AppLoading />;
@@ -169,22 +216,26 @@ export function App() {
       <ScanActivityProvider>
         <AppFrame
           auth={appState.auth}
-          contentMode={currentView === 'settings' || currentView === 'libraries' || currentView === 'favourites' || currentView === 'albums' || currentView === 'tags' ? 'edge' : 'constrained'}
+          contentMode={currentView === 'settings' || currentView === 'search' || currentView === 'libraries' || currentView === 'starred' || currentView === 'albums' || currentView === 'tags' ? 'edge' : 'constrained'}
           currentView={currentView}
           libraries={libraries}
-          onLibrarySearchChange={(value) => {
-            setLibrarySearchInput(value);
-            if (value.trim() && currentView !== 'libraries') {
-              setCurrentView('libraries');
-            }
-          }}
+          onLibrarySearchChange={handleSearchInputChange}
+          onLibrarySearchQueryChange={handleValidSearchQuery}
           onLogout={() => setAppState({ state: 'login' })}
-          onOpenSettings={() => setCurrentView('settings')}
+          onOpenSettings={() => handleViewChange('settings')}
           searchPlaceholder="Search"
-          searchValue={librarySearchInput}
+          searchValue={searchInput}
           showLibrarySearch
-          onViewChange={setCurrentView}
+          onViewChange={handleViewChange}
         >
+          {currentView === 'search' && (
+            <SearchHome
+              auth={appState.auth}
+              libraries={libraries}
+              onQueryChange={handleSearchPageQueryChange}
+              query={activeSearchQuery}
+            />
+          )}
           {currentView === 'libraries' && (
             <LibraryHome
               error={librariesError}
@@ -197,10 +248,9 @@ export function App() {
                 const updated = await updateLibrary(libraryId, { name }, appState.auth.csrfToken);
                 setLibraries((current) => current.map((library) => (library.id === updated.id ? updated : library)));
               }}
-              searchQuery={librarySearchQuery}
             />
           )}
-          {currentView === 'favourites' && <FavouritesHome auth={appState.auth} />}
+          {currentView === 'starred' && <StarredHome auth={appState.auth} />}
           {currentView === 'albums' && <AlbumsHome auth={appState.auth} />}
           {currentView === 'tags' && <TagsHome auth={appState.auth} />}
           {currentView === 'settings' && (

@@ -20,6 +20,7 @@ import { PhotoBrowser } from '@/features/library/photo-browser';
 import {
   BrowseSidebarShowControl,
   BROWSE_LAYOUT_HEIGHT_CLASS,
+  BROWSE_SIDEBAR_COLLAPSED_KEYS,
   OrganizerSidebar,
   useBrowseSidebarState
 } from '@/features/organizer/organizer-sidebar';
@@ -36,7 +37,7 @@ export function AlbumsHome({ auth }: { auth: AuthResponse }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assetFocused, setAssetFocused] = useState(false);
-  const sidebar = useBrowseSidebarState();
+  const sidebar = useBrowseSidebarState(BROWSE_SIDEBAR_COLLAPSED_KEYS.albums);
   const active = albums.find((album) => album.id === activeId) ?? null;
   const browseContextKey = `album:${activeId ?? ''}`;
   const showControl =

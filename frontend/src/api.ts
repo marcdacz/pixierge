@@ -148,7 +148,7 @@ export type AssetSummary = {
   thumbnailStatus: 'ready' | 'missing' | 'pending';
   thumbnailCacheKey: string | null;
   thumbnailPlaceholder: string | null;
-  favourited: boolean;
+  starred: boolean;
 };
 
 export type AssetSection = {
@@ -164,6 +164,32 @@ export type AssetBrowseResponse = {
   pageSize: number;
   hasNext: boolean;
 };
+
+export type SearchClause = {
+  field: string;
+  value: string;
+  negated: boolean;
+  start: number;
+  end: number;
+  label: string;
+};
+
+export type SearchParseError = {
+  code: string;
+  message: string;
+  start: number;
+  end: number;
+};
+
+export type SearchParseResponse = {
+  query: string;
+  freeText: string;
+  clauses: SearchClause[];
+  errors: SearchParseError[];
+  valid: boolean;
+};
+
+export type SearchSuggestion = { value: string; label: string };
 
 export type AssetFileOccurrence = {
   id: string;
@@ -207,7 +233,7 @@ export type AlbumSummary = {
   name: string;
   coverAssetId: string | null;
   coverFileName: string | null;
-  kind: 'user' | 'favourites';
+  kind: 'user' | 'starred';
   itemCount: number;
   sourceLibraryCount: number;
   createdAt: string;
@@ -504,6 +530,20 @@ export async function fetchAssets(input: {
   return requestJson<AssetBrowseResponse>(`/api/assets${queryString(params)}`);
 }
 
+export async function parseSearch(query: string): Promise<SearchParseResponse> {
+  const params = new URLSearchParams({ q: query });
+  return requestJson<SearchParseResponse>(`/api/search/parse?${params.toString()}`);
+}
+
+export async function fetchSearchSuggestions(
+  field: string,
+  query: string,
+  limit = 8
+): Promise<SearchSuggestion[]> {
+  const params = new URLSearchParams({ field, q: query, limit: String(limit) });
+  return requestJson<SearchSuggestion[]>(`/api/search/suggestions?${params.toString()}`);
+}
+
 export async function fetchAsset(assetId: string): Promise<AssetDetail> {
   return requestJson<AssetDetail>(`/api/assets/${assetId}`);
 }
@@ -540,8 +580,8 @@ export async function removeAlbumItems(albumId: string, assetIds: string[], csrf
   await requestWithoutBodyWithJson(`/api/albums/${albumId}/items`, { method: 'DELETE', body: JSON.stringify({ assetIds }), csrfToken });
 }
 
-export async function fetchFavourites(): Promise<AlbumSummary> {
-  return requestJson<AlbumSummary>('/api/favourites');
+export async function fetchStarred(): Promise<AlbumSummary> {
+  return requestJson<AlbumSummary>('/api/starred');
 }
 
 export async function fetchSchedulerJobs(): Promise<SchedulerJob[]> {
@@ -567,8 +607,8 @@ export async function runSchedulerJob(jobId: string, csrfToken: string): Promise
   });
 }
 
-export async function fetchFavouritesAssets(page = 0, pageSize = 48): Promise<AssetBrowseResponse> {
-  return requestJson<AssetBrowseResponse>(`/api/favourites/assets?page=${page}&pageSize=${pageSize}`);
+export async function fetchStarredAssets(page = 0, pageSize = 48): Promise<AssetBrowseResponse> {
+  return requestJson<AssetBrowseResponse>(`/api/starred/assets?page=${page}&pageSize=${pageSize}`);
 }
 
 export async function fetchTags(): Promise<TagSummary[]> {
