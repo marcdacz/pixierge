@@ -90,6 +90,12 @@ class IdentityIntegrationTest {
                 withCookie(cookie),
                 List.class
         );
+        ResponseEntity<List> roles = restTemplate.exchange(
+                "/api/admin/roles",
+                HttpMethod.GET,
+                withCookie(cookie),
+                List.class
+        );
         ResponseEntity<Map> session = restTemplate.exchange(
                 "/api/auth/session",
                 HttpMethod.GET,
@@ -112,6 +118,9 @@ class IdentityIntegrationTest {
         assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(users.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(users.getBody()).hasSize(1);
+        assertThat(roles.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(roles.getBody()).extracting(role -> ((Map<?, ?>) role).get("key"))
+                .contains("ADMIN", "USER");
         assertThat(session.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(userBody(session)).containsEntry("username", ADMIN_USERNAME);
         assertThat(logout.getStatusCode()).isEqualTo(HttpStatus.OK);

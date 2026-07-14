@@ -101,6 +101,16 @@ class SchedulerIntegrationTest {
                 .findFirst()
                 .orElseThrow();
 
+        ResponseEntity<SchedulerJobResponse> detail = restTemplate.exchange(
+                "/api/admin/scheduler/jobs/" + metadataJob.id(),
+                HttpMethod.GET,
+                withCookie(cookies.cookie()),
+                SchedulerJobResponse.class
+        );
+        assertThat(detail.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(detail.getBody()).isNotNull();
+        assertThat(detail.getBody().jobKey()).isEqualTo(CoreSchedulerJobsConfig.METADATA_SCAN_JOB_KEY);
+
         ResponseEntity<SchedulerJobResponse> disabled = restTemplate.exchange(
                 "/api/admin/scheduler/jobs/" + metadataJob.id(),
                 HttpMethod.PATCH,

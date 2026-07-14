@@ -54,11 +54,18 @@ After restarting Docker Compose, add these source paths in Pixierge:
 
 ## Test Commands
 
-Backend:
+Backend unit tests:
 
 ```sh
 cd backend
 mvn test
+```
+
+Backend unit + integration/REST tests:
+
+```sh
+cd backend
+mvn verify
 ```
 
 Frontend:
@@ -69,10 +76,10 @@ npm install
 npm test
 ```
 
-Docker-based backend tests:
+Docker-based backend unit + integration/REST tests:
 
 ```sh
-docker run --rm -v "$PWD/backend:/workspace" -w /workspace maven:3.9.9-eclipse-temurin-21 mvn test
+docker run --rm -v "$PWD/backend:/workspace" -w /workspace maven:3.9.9-eclipse-temurin-21 mvn verify
 ```
 
 ## Review Steps
@@ -89,4 +96,4 @@ docker run --rm -v "$PWD/backend:/workspace" -w /workspace maven:3.9.9-eclipse-t
 }
 ```
 
-4. Run backend and frontend tests.
+4. Run backend unit + integration/REST tests and frontend tests.

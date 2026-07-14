@@ -93,6 +93,23 @@ class AlbumTagIntegrationTest {
                         Map.of("assetId", fixture.secondAsset(), "sourceLibraryId", fixture.secondLibrary())))), Void.class);
         ResponseEntity<Map> assets = exchange("/api/albums/" + albumId + "/assets?pageSize=2", HttpMethod.GET,
                 cookieRequest(cookie), Map.class);
+        ResponseEntity<Map> fetched = exchange("/api/albums/" + albumId, HttpMethod.GET,
+                cookieRequest(cookie), Map.class);
+        ResponseEntity<Map> renamed = exchange("/api/albums/" + albumId, HttpMethod.PATCH,
+                request(cookie, csrf, Map.of("name", "Summer Archive")), Map.class);
+        List<UUID> sourceLibraryIds = transactionTemplate.execute(status -> queryFactory
+                .select(QAlbumItems.albumItems.sourceLibraryId)
+                .from(QAlbumItems.albumItems)
+                .where(QAlbumItems.albumItems.albumId.eq(UUID.fromString(albumId)))
+                .fetch());
+        ResponseEntity<Void> removedItem = exchange("/api/albums/" + albumId + "/items", HttpMethod.DELETE,
+                request(cookie, csrf, Map.of("assetIds", List.of(fixture.firstAsset()))), Void.class);
+        ResponseEntity<Map> afterRemove = exchange("/api/albums/" + albumId + "/assets?pageSize=2", HttpMethod.GET,
+                cookieRequest(cookie), Map.class);
+        ResponseEntity<Void> deletedAlbum = exchange("/api/albums/" + albumId, HttpMethod.DELETE,
+                request(cookie, csrf, null), Void.class);
+        ResponseEntity<Map> missingAlbum = exchange("/api/albums/" + albumId, HttpMethod.GET,
+                cookieRequest(cookie), Map.class);
 
         assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
@@ -102,11 +119,14 @@ class AlbumTagIntegrationTest {
         List<Map<String, Object>> sections = (List<Map<String, Object>>) assets.getBody().get("sections");
         List<Map<String, Object>> firstSectionAssets = (List<Map<String, Object>>) sections.get(0).get("assets");
         assertThat(firstSectionAssets.get(0)).containsEntry("libraryId", fixture.firstLibrary().toString());
-        List<UUID> sourceLibraryIds = transactionTemplate.execute(status -> queryFactory
-                .select(QAlbumItems.albumItems.sourceLibraryId)
-                .from(QAlbumItems.albumItems)
-                .where(QAlbumItems.albumItems.albumId.eq(UUID.fromString(albumId)))
-                .fetch());
+        assertThat(fetched.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(fetched.getBody()).containsEntry("id", albumId).containsEntry("name", "Summer");
+        assertThat(renamed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(renamed.getBody()).containsEntry("name", "Summer Archive");
+        assertThat(removedItem.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(afterRemove.getBody()).containsEntry("totalCount", 1);
+        assertThat(deletedAlbum.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(missingAlbum.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(sourceLibraryIds)
                 .containsExactlyInAnyOrder(fixture.firstLibrary(), fixture.secondLibrary());
     }
@@ -125,14 +145,31 @@ class AlbumTagIntegrationTest {
         ResponseEntity<Void> duplicateAssigned = exchange("/api/asset-tags", HttpMethod.POST, request(cookie, csrf, Map.of(
                 "tagIds", List.of(tagId),
                 "items", List.of(Map.of("assetId", fixture.firstAsset(), "sourceLibraryId", fixture.firstLibrary())))), Void.class);
+        ResponseEntity<Map[]> tags = exchange("/api/tags", HttpMethod.GET, cookieRequest(cookie), Map[].class);
+        ResponseEntity<Map> renamed = exchange("/api/tags/" + tagId, HttpMethod.PATCH,
+                request(cookie, csrf, Map.of("name", "Family Archive")), Map.class);
         ResponseEntity<Map> browse = exchange("/api/assets?tag=" + tagId, HttpMethod.GET, cookieRequest(cookie), Map.class);
+        ResponseEntity<Map> tagAssets = exchange("/api/tags/" + tagId + "/assets?pageSize=10", HttpMethod.GET,
+                cookieRequest(cookie), Map.class);
         ResponseEntity<Map> detail = exchange("/api/assets/" + fixture.firstAsset(), HttpMethod.GET, cookieRequest(cookie), Map.class);
+        ResponseEntity<Void> unassigned = exchange("/api/asset-tags", HttpMethod.DELETE, request(cookie, csrf, Map.of(
+                "tagIds", List.of(tagId),
+                "assetIds", List.of(fixture.firstAsset()))), Void.class);
+        ResponseEntity<Map> afterUnassign = exchange("/api/tags/" + tagId + "/assets?pageSize=10", HttpMethod.GET,
+                cookieRequest(cookie), Map.class);
         ResponseEntity<Void> deleted = exchange("/api/tags/" + tagId, HttpMethod.DELETE, request(cookie, csrf, null), Void.class);
 
         assertThat(assigned.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         assertThat(duplicateAssigned.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(tags.getBody()).singleElement().satisfies(value ->
+                assertThat(value).containsEntry("name", "Family"));
+        assertThat(renamed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(renamed.getBody()).containsEntry("name", "Family Archive");
         assertThat(browse.getBody()).containsEntry("totalCount", 1);
+        assertThat(tagAssets.getBody()).containsEntry("totalCount", 1);
         assertThat(detail.getBody().get("tags")).asList().hasSize(1);
+        assertThat(unassigned.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(afterUnassign.getBody()).containsEntry("totalCount", 0);
         assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         Long remainingTags = transactionTemplate.execute(status -> queryFactory
                 .select(QAssetTags.assetTags.tagId.count())

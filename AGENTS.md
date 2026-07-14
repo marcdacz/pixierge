@@ -13,7 +13,8 @@ Pixierge is a Spring Boot API plus React TypeScript web app.
 ## Commands
 
 - Start the local stack: `docker compose up --build`
-- Backend tests: `cd backend && mvn clean test`
+- Backend unit tests: `cd backend && mvn clean test`
+- Backend unit + integration/REST tests: `cd backend && mvn clean verify`
 - Frontend dependencies: `cd frontend && npm install`
 - Frontend tests: `cd frontend && npm test`
 - Frontend build: `cd frontend && npm run build`
@@ -24,7 +25,7 @@ Pixierge is a Spring Boot API plus React TypeScript web app.
 If Maven cannot write to the default local cache, use:
 
 ```sh
-cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean test
+cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean verify
 ```
 
 ## Conventions
@@ -36,7 +37,7 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean test
 - Use Querydsl for repository SQL access instead of handwritten SQL strings.
 - Import Java types normally; avoid fully qualified class names in method signatures, fields, and local declarations unless needed to resolve a real naming conflict.
 - Add Flyway migrations under `backend/src/main/resources/db/migration/`.
-- During early development, when migrations are squashed or deleted, run backend tests with `mvn clean test` so stale copied migrations are removed from `target/classes`.
+- During early development, when migrations are squashed or deleted, run backend tests with `mvn clean verify` so stale copied migrations are removed from `target/classes` and integration tests see the current schema.
 - Keep React code typed and covered by nearby Vitest tests when behavior changes.
 - Prefer shared React components and small feature components over repeating markup, styling, or state logic across screens.
 - Keep frontend code minimal: add abstractions only when they remove real duplication or match an established local pattern.

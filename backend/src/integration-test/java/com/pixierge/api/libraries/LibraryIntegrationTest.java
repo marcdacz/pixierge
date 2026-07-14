@@ -6,6 +6,7 @@ import com.pixierge.api.db.QAlbums;
 import com.pixierge.api.db.QAssetTags;
 import com.pixierge.api.db.QAssets;
 import com.pixierge.api.db.QFileObservations;
+import com.pixierge.api.db.QGlobalExclusionPatterns;
 import com.pixierge.api.db.QLibraries;
 import com.pixierge.api.db.QLibraryExclusionPatterns;
 import com.pixierge.api.db.QLibraryMembers;
@@ -64,6 +65,14 @@ class LibraryIntegrationTest {
     private static final String USER_USERNAME = "viewer";
     private static final String USER_PASSWORD = "correct horse battery staple";
     private static final String USER_ROLE = "USER";
+    private static final List<String> SEEDED_GLOBAL_EXCLUSIONS = List.of(
+            "**/@eaDir/**",
+            "**/#recycle/**",
+            "**/#snapshot/**",
+            "**/.stversions/**",
+            "**/.stfolder/**",
+            "**/._*"
+    );
     private static final Path THUMBNAIL_STORAGE_ROOT = createThumbnailStorageRoot();
 
     @Container
@@ -108,6 +117,9 @@ class LibraryIntegrationTest {
             queryFactory.delete(QScanRuns.scanRuns).execute();
             queryFactory.delete(QAssets.assets).execute();
             queryFactory.delete(QLibraryExclusionPatterns.libraryExclusionPatterns).execute();
+            queryFactory.delete(QGlobalExclusionPatterns.globalExclusionPatterns)
+                    .where(QGlobalExclusionPatterns.globalExclusionPatterns.pattern.notIn(SEEDED_GLOBAL_EXCLUSIONS))
+                    .execute();
             queryFactory.delete(QLibraryRoots.libraryRoots).execute();
             queryFactory.delete(QLibraryMembers.libraryMembers).execute();
             queryFactory.delete(QLibraries.libraries).execute();
@@ -133,6 +145,12 @@ class LibraryIntegrationTest {
                 Map.class
         );
         String libraryId = createdLibrary.getBody().get("id").toString();
+        ResponseEntity<Map> renamedLibrary = restTemplate.exchange(
+                "/api/libraries/" + libraryId,
+                HttpMethod.PATCH,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("name", "Family Archive")),
+                Map.class
+        );
 
         ResponseEntity<Map> addedSource = restTemplate.exchange(
                 "/api/libraries/" + libraryId + "/roots",
@@ -225,6 +243,8 @@ class LibraryIntegrationTest {
         assertThat(createdLibrary.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(createdLibrary.getBody()).containsEntry("name", "Family Photos");
         assertThat(createdLibrary.getBody()).containsEntry("status", "active");
+        assertThat(renamedLibrary.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(renamedLibrary.getBody()).containsEntry("name", "Family Archive");
         assertThat(addedSource.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(addedSource.getBody()).containsEntry("sourceCount", 1);
         assertThat(duplicateSource.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
@@ -342,6 +362,12 @@ class LibraryIntegrationTest {
                 withCookie(cookie),
                 Map.class
         );
+        ResponseEntity<byte[]> originalFile = restTemplate.exchange(
+                "/api/assets/" + assetId + "/file",
+                HttpMethod.GET,
+                withCookie(cookie),
+                byte[].class
+        );
         ResponseEntity<Map> backfill = restTemplate.exchange(
                 "/api/assets/metadata/backfill",
                 HttpMethod.POST,
@@ -390,6 +416,11 @@ class LibraryIntegrationTest {
         assertThat(assetDetail.getBody()).containsEntry("availability", "available");
         assertThat(assetDetail.getBody()).containsEntry("identityStatus", "confirmed");
         assertThat(assetFiles(assetDetail)).isNotEmpty();
+        assertThat(originalFile.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(originalFile.getHeaders().getContentType().toString()).isEqualTo("image/jpeg");
+        assertThat(originalFile.getHeaders().getCacheControl()).isEqualTo("no-store");
+        assertThat(originalFile.getHeaders().getFirst(HttpHeaders.ACCEPT_RANGES)).isEqualTo("bytes");
+        assertThat(originalFile.getBody()).isNotEmpty();
         assertThat(backfill.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(backfill.getBody()).containsKey("processedCount");
     }
@@ -798,12 +829,30 @@ class LibraryIntegrationTest {
                 withCookie(cookie),
                 byte[].class
         );
+        ResponseEntity<byte[]> tinyThumbnail = restTemplate.exchange(
+                "/api/assets/" + assetId + "/thumbnail?size=tiny",
+                HttpMethod.GET,
+                withCookie(cookie),
+                byte[].class
+        );
+        ResponseEntity<byte[]> preview = restTemplate.exchange(
+                "/api/assets/" + assetId + "/preview",
+                HttpMethod.GET,
+                withCookie(cookie),
+                byte[].class
+        );
         String etag = firstThumbnail.getHeaders().getETag();
         assertThat(firstThumbnail.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(firstThumbnail.getHeaders().getContentType().toString()).isEqualTo("image/jpeg");
         assertThat(firstThumbnail.getHeaders().getCacheControl()).contains("private").contains("max-age=86400");
         assertThat(firstThumbnail.getHeaders().getLastModified()).isPositive();
         assertThat(etag).isNotBlank();
+        assertThat(tinyThumbnail.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(tinyThumbnail.getHeaders().getContentType().toString()).isEqualTo("image/jpeg");
+        assertThat(preview.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(preview.getHeaders().getContentType().toString()).isEqualTo("image/jpeg");
+        assertThat(preview.getHeaders().getETag()).isNotBlank();
+        assertThat(preview.getBody()).isNotEmpty();
 
         ResponseEntity<byte[]> notModified = restTemplate.exchange(
                 "/api/assets/" + assetId + "/thumbnail",
@@ -926,6 +975,78 @@ class LibraryIntegrationTest {
         assertThat(missingCsrf.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(userRead.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(userMutation.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void globalExclusionSettingsSupportAdminManageAndPermissionChecks() {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String adminCookie = cookiePair(admin);
+        String adminCsrf = csrfToken(admin);
+        createStandardUser();
+        ResponseEntity<Map> userLogin = login(USER_USERNAME, USER_PASSWORD);
+        String userCookie = cookiePair(userLogin);
+        String userCsrf = csrfToken(userLogin);
+
+        ResponseEntity<Map[]> initial = restTemplate.exchange(
+                "/api/settings/global-exclusion-patterns",
+                HttpMethod.GET,
+                withCookie(adminCookie),
+                Map[].class
+        );
+        ResponseEntity<Map> created = restTemplate.exchange(
+                "/api/settings/global-exclusion-patterns",
+                HttpMethod.POST,
+                withCookieAndCsrf(adminCookie, adminCsrf, Map.of("pattern", "**/cache/**")),
+                Map.class
+        );
+        ResponseEntity<Map> userRead = restTemplate.exchange(
+                "/api/settings/global-exclusion-patterns",
+                HttpMethod.GET,
+                withCookie(userCookie),
+                Map.class
+        );
+        ResponseEntity<Map> userMutation = restTemplate.exchange(
+                "/api/settings/global-exclusion-patterns",
+                HttpMethod.POST,
+                withCookieAndCsrf(userCookie, userCsrf, Map.of("pattern", "**/private/**")),
+                Map.class
+        );
+        ResponseEntity<Map> duplicate = restTemplate.exchange(
+                "/api/settings/global-exclusion-patterns",
+                HttpMethod.POST,
+                withCookieAndCsrf(adminCookie, adminCsrf, Map.of("pattern", "**/cache/**")),
+                Map.class
+        );
+        ResponseEntity<Map> invalid = restTemplate.exchange(
+                "/api/settings/global-exclusion-patterns",
+                HttpMethod.POST,
+                withCookieAndCsrf(adminCookie, adminCsrf, Map.of("pattern", "../secret/**")),
+                Map.class
+        );
+        ResponseEntity<Void> deleted = restTemplate.exchange(
+                "/api/settings/global-exclusion-patterns/" + created.getBody().get("id"),
+                HttpMethod.DELETE,
+                withCookieAndCsrf(adminCookie, adminCsrf, null),
+                Void.class
+        );
+        ResponseEntity<Void> missingDelete = restTemplate.exchange(
+                "/api/settings/global-exclusion-patterns/" + created.getBody().get("id"),
+                HttpMethod.DELETE,
+                withCookieAndCsrf(adminCookie, adminCsrf, null),
+                Void.class
+        );
+
+        assertThat(initial.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(initial.getBody()).extracting(pattern -> pattern.get("pattern"))
+                .containsAll(SEEDED_GLOBAL_EXCLUSIONS);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(created.getBody()).containsEntry("pattern", "**/cache/**");
+        assertThat(userRead.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(userMutation.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(invalid.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(missingDelete.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
 
