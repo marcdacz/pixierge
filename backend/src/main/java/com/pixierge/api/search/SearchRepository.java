@@ -12,6 +12,7 @@ import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.dsl.StringPath;
 import com.querydsl.sql.SQLQueryFactory;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -24,6 +25,7 @@ import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_MISSING;
 import static com.pixierge.api.libraries.LibraryConstants.STATUS_ACTIVE;
 
 @Repository
+@Transactional(readOnly = true)
 class SearchRepository {
     private static final QAlbums ALBUMS = QAlbums.albums;
     private static final QAssetFiles ASSET_FILES = QAssetFiles.assetFiles;

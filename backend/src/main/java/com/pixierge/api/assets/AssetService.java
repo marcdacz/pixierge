@@ -510,7 +510,7 @@ public class AssetService {
     }
 
     private String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private static Map<UUID, Integer> toAssetCountMap(Map<UUID, Set<UUID>> assetIdsByLibrary) {

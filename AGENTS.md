@@ -30,6 +30,8 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean test
 ## Conventions
 
 - Prefer small, focused changes that match the existing code style.
+- Tests must cover meaningful behavior, risk, or regression cases. Do not add getter/setter, DTO-only, or other coverage-padding tests just to raise a percentage.
+- Prefer focused unit tests for business logic and boundary/error behavior; use integration tests for database, Querydsl, migration, security, and cross-layer behavior.
 - Use Maven for backend build work.
 - Use Querydsl for repository SQL access instead of handwritten SQL strings.
 - Import Java types normally; avoid fully qualified class names in method signatures, fields, and local declarations unless needed to resolve a real naming conflict.
