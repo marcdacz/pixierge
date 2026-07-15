@@ -110,17 +110,17 @@ public class AssetController {
     }
 
     @PostMapping("/api/admin/thumbnails/rebuild-missing")
-    ThumbnailAdminActionResponse rebuildMissingThumbnails() {
+    AdminBatchActionResponse rebuildMissingThumbnails() {
         return assetService.rebuildMissingThumbnails();
     }
 
     @PostMapping("/api/admin/thumbnails/purge-stale")
-    ThumbnailAdminActionResponse purgeStaleThumbnails() {
+    AdminBatchActionResponse purgeStaleThumbnails() {
         return assetService.purgeStaleThumbnails();
     }
 
     @PostMapping("/api/assets/metadata/backfill")
-    MetadataBackfillResponse backfillMetadata() {
+    AdminBatchActionResponse backfillMetadata() {
         return assetService.backfillMetadata();
     }
 }

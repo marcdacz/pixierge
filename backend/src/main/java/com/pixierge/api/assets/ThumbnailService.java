@@ -85,7 +85,7 @@ class ThumbnailService {
     }
 
     @Transactional
-    public ThumbnailAdminActionResponse rebuildMissing(AssetService assetService) {
+    public AdminBatchActionResponse rebuildMissing(AssetService assetService) {
         int processed = 0;
         int failed = 0;
         for (AssetDetailResponse asset : assetService.listConfirmedAssets()) {
@@ -98,11 +98,11 @@ class ThumbnailService {
                 failed++;
             }
         }
-        return new ThumbnailAdminActionResponse(processed, failed);
+        return new AdminBatchActionResponse(processed, failed);
     }
 
     @Transactional
-    public ThumbnailAdminActionResponse purgeStale() {
+    public AdminBatchActionResponse purgeStale() {
         List<ThumbnailRepository.ThumbnailRow> stale = thumbnailRepository.findStaleRows(GENERATOR_VERSION, CONFIG_VERSION);
         int processed = 0;
         int failed = 0;
@@ -116,7 +116,7 @@ class ThumbnailService {
                 failed++;
             }
         }
-        return new ThumbnailAdminActionResponse(processed, failed);
+        return new AdminBatchActionResponse(processed, failed);
     }
 
     @Transactional(readOnly = true)
@@ -166,7 +166,7 @@ class ThumbnailService {
         if (IDENTITY_STATUS_PENDING.equals(asset.identityStatus())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Thumbnail unavailable while identity is pending");
         }
-        AssetFileOccurrenceResponse activeFile = asset.files().stream()
+        AssetDetailResponse.FileOccurrence activeFile = asset.files().stream()
                 .filter(file -> FILE_STATUS_ACTIVE.equals(file.status()))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active asset file not found"));

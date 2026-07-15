@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
-public record LibraryResponse(
+record LibraryResponse(
         UUID id,
         String name,
         String status,
@@ -17,4 +17,23 @@ public record LibraryResponse(
         List<LibrarySourceResponse> sources,
         List<LibraryExclusionPatternResponse> exclusionPatterns
 ) {
+}
+
+record LibrarySourceResponse(
+        UUID id,
+        String path,
+        boolean available,
+        String unavailableReason,
+        OffsetDateTime createdAt
+) {
+}
+
+record LibraryExclusionPatternResponse(
+        UUID id,
+        String pattern,
+        OffsetDateTime createdAt
+) {
+}
+
+record RenameFolderResponse(String path, String name) {
 }

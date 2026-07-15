@@ -837,8 +837,8 @@ class AssetRepository {
             String mediaType,
             String availability,
             int duplicateCount,
-            AssetMetadataResponse metadata,
-            List<AssetFileOccurrenceResponse> files
+            AssetDetailResponse.Metadata metadata,
+            List<AssetDetailResponse.FileOccurrence> files
     ) {
         static AssetDetailRow from(List<AssetFileRow> rows) {
             AssetFileRow first = rows.get(0);
@@ -853,7 +853,7 @@ class AssetRepository {
                     first.mediaType(),
                     first.availableFileCount() > 0 ? AVAILABILITY_AVAILABLE : AVAILABILITY_MISSING,
                     active.size(),
-                    new AssetMetadataResponse(
+                    new AssetDetailResponse.Metadata(
                             metadataSource.capturedAt(),
                             metadataSource.width(),
                             metadataSource.height(),
@@ -864,7 +864,7 @@ class AssetRepository {
                             metadataSource.errorMessage()
                     ),
                     rows.stream()
-                            .map(row -> new AssetFileOccurrenceResponse(
+                            .map(row -> new AssetDetailResponse.FileOccurrence(
                                     row.fileId(),
                                     row.libraryId(),
                                     row.libraryName(),

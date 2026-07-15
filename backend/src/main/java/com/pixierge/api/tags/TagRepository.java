@@ -1,6 +1,6 @@
 package com.pixierge.api.tags;
 
-import com.pixierge.api.assets.AssetTagResponse;
+import com.pixierge.api.assets.AssetDetailResponse;
 import com.pixierge.api.db.QAssetTags;
 import com.pixierge.api.db.QTags;
 import com.querydsl.core.QueryFlag;
@@ -88,12 +88,12 @@ public class TagRepository {
                 .execute();
     }
 
-    public List<AssetTagResponse> listAssetTags(UUID assetId, UUID ownerUserId) {
+    public List<AssetDetailResponse.Tag> listAssetTags(UUID assetId, UUID ownerUserId) {
         return queryFactory.select(TAGS.id, TAGS.name).from(ASSET_TAGS)
                 .join(TAGS).on(TAGS.id.eq(ASSET_TAGS.tagId))
                 .where(ASSET_TAGS.assetId.eq(assetId).and(TAGS.ownerUserId.eq(ownerUserId)))
                 .orderBy(TAGS.name.lower().asc()).fetch()
-                .stream().map(row -> new AssetTagResponse(row.get(TAGS.id), row.get(TAGS.name))).toList();
+                .stream().map(row -> new AssetDetailResponse.Tag(row.get(TAGS.id), row.get(TAGS.name))).toList();
     }
 
     public record TagRecord(UUID id, String name, OffsetDateTime createdAt, OffsetDateTime updatedAt, int assetCount) {

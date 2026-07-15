@@ -85,7 +85,7 @@ public class LibraryService {
     }
 
     @Transactional
-    public LibraryExclusionPatternResponse addGlobalExclusionPattern(AddGlobalExclusionPatternRequest request) {
+    public LibraryExclusionPatternResponse addGlobalExclusionPattern(AddExclusionPatternRequest request) {
         String pattern = validateExclusionPattern(request.pattern());
         if (libraryRepository.globalExclusionPatternExists(pattern)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Global exclusion pattern already exists");
@@ -270,7 +270,7 @@ public class LibraryService {
     }
 
     @Transactional
-    public LibraryResponse addExclusionPattern(UUID libraryId, AddLibraryExclusionPatternRequest request) {
+    public LibraryResponse addExclusionPattern(UUID libraryId, AddExclusionPatternRequest request) {
         String pattern = validateExclusionPattern(request.pattern());
         findLibraryRecord(libraryId);
         if (libraryRepository.exclusionPatternExists(libraryId, pattern)) {

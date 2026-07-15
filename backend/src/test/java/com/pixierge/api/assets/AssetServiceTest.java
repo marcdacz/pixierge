@@ -116,7 +116,7 @@ class AssetServiceTest {
             assertThat(root.name()).isEqualTo("Trips");
             assertThat(root.assetCount()).isEqualTo(2);
             assertThat(root.childCount()).isEqualTo(2);
-            assertThat(root.children()).extracting(LibraryTreeNodeResponse::name)
+            assertThat(root.children()).extracting(LibraryTreeResponse.Node::name)
                     .containsExactly("France", "Japan");
         });
     }
@@ -173,12 +173,12 @@ class AssetServiceTest {
                 List.of(file(READY_ASSET_ID, LIBRARY_ID, "/photos/ready.jpg", "ready.jpg", "active")));
         assetRepository.details.put(READY_ASSET_ID, row);
         UUID tagId = UUID.fromString("00000000-0000-0000-0000-000000000307");
-        tagRepository.tags = List.of(new AssetTagResponse(tagId, "Family"));
+        tagRepository.tags = List.of(new AssetDetailResponse.Tag(tagId, "Family"));
 
         AssetDetailResponse response = service.getAsset(user(), READY_ASSET_ID);
 
         assertThat(response.id()).isEqualTo(READY_ASSET_ID);
-        assertThat(response.tags()).extracting(AssetTagResponse::name).containsExactly("Family");
+        assertThat(response.tags()).extracting(AssetDetailResponse.Tag::name).containsExactly("Family");
         assertThat(tagRepository.lastUserId).isEqualTo(USER_ID);
     }
 
@@ -279,7 +279,7 @@ class AssetServiceTest {
         assetRepository.searchTextByAsset.put(READY_ASSET_ID, "notes txt");
         assetRepository.searchTextByAsset.put(VIDEO_ASSET_ID, "missing");
 
-        MetadataBackfillResponse response = service.backfillMetadata();
+        AdminBatchActionResponse response = service.backfillMetadata();
 
         assertThat(response.processedCount()).isEqualTo(2);
         assertThat(response.failedCount()).isEqualTo(1);
@@ -376,9 +376,9 @@ class AssetServiceTest {
                 mediaType,
                 "available",
                 1,
-                new AssetMetadataResponse(first.capturedAt(), first.width(), first.height(), first.fileExtension(),
+                new AssetDetailResponse.Metadata(first.capturedAt(), first.width(), first.height(), first.fileExtension(),
                         first.mimeType(), first.extractionStatus(), first.extractedAt(), first.errorMessage()),
-                files.stream().map(row -> new AssetFileOccurrenceResponse(
+                files.stream().map(row -> new AssetDetailResponse.FileOccurrence(
                         row.fileId(),
                         row.libraryId(),
                         row.libraryName(),
@@ -518,7 +518,7 @@ class AssetServiceTest {
     }
 
     private static final class FakeTagRepository extends TagRepository {
-        private List<AssetTagResponse> tags = List.of();
+        private List<AssetDetailResponse.Tag> tags = List.of();
         private UUID lastUserId;
 
         private FakeTagRepository() {
@@ -526,7 +526,7 @@ class AssetServiceTest {
         }
 
         @Override
-        public List<AssetTagResponse> listAssetTags(UUID assetId, UUID ownerUserId) {
+        public List<AssetDetailResponse.Tag> listAssetTags(UUID assetId, UUID ownerUserId) {
             lastUserId = ownerUserId;
             return tags;
         }

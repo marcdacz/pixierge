@@ -1,7 +1,0 @@
----
-alwaysApply: true
----
-
-Follow the repository-wide coding-agent guidance in `AGENTS.md`.
-
-In particular, keep tests meaningful: cover behavior, risk, and regressions; do not add getter/setter, DTO-only, or other coverage-padding tests just to raise a percentage.

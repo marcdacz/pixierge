@@ -121,7 +121,7 @@ public class AssetService {
             }
         }
 
-        List<LibraryTreeNodeResponse> roots = nodes.values().stream()
+        List<LibraryTreeResponse.Node> roots = nodes.values().stream()
                 .filter(node -> !hasParent(node, nodes))
                 .sorted(Comparator.comparing(MutableTreeNode::name, String.CASE_INSENSITIVE_ORDER))
                 .map(MutableTreeNode::toResponse)
@@ -239,8 +239,8 @@ public class AssetService {
             byFolder.computeIfAbsent(row.folderPath(), ignored -> new ArrayList<>()).add(response);
         }
 
-        List<AssetSectionResponse> sections = byFolder.entrySet().stream()
-                .map(entry -> new AssetSectionResponse(entry.getKey(), folderName(entry.getKey()), entry.getValue()))
+        List<AssetBrowseResponse.Section> sections = byFolder.entrySet().stream()
+                .map(entry -> new AssetBrowseResponse.Section(entry.getKey(), folderName(entry.getKey()), entry.getValue()))
                 .toList();
         return new AssetBrowseResponse(
                 sections,
@@ -284,7 +284,7 @@ public class AssetService {
     @Transactional(readOnly = true)
     public AssetFileResource file(AuthenticatedUser user, UUID assetId) {
         AssetDetailResponse asset = getAsset(user, assetId);
-        AssetFileOccurrenceResponse activeFile = asset.files().stream()
+        AssetDetailResponse.FileOccurrence activeFile = asset.files().stream()
                 .filter(file -> FILE_STATUS_ACTIVE.equals(file.status()))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active asset file not found"));
@@ -348,17 +348,17 @@ public class AssetService {
     }
 
     @Transactional
-    public ThumbnailAdminActionResponse rebuildMissingThumbnails() {
+    public AdminBatchActionResponse rebuildMissingThumbnails() {
         return thumbnailService.rebuildMissing(this);
     }
 
     @Transactional
-    public ThumbnailAdminActionResponse purgeStaleThumbnails() {
+    public AdminBatchActionResponse purgeStaleThumbnails() {
         return thumbnailService.purgeStale();
     }
 
     @Transactional
-    public MetadataBackfillResponse backfillMetadata() {
+    public AdminBatchActionResponse backfillMetadata() {
         int processed = 0;
         int failed = 0;
 
@@ -390,7 +390,7 @@ public class AssetService {
             }
         }
 
-        return new MetadataBackfillResponse(processed, failed);
+        return new AdminBatchActionResponse(processed, failed);
     }
 
     private MetadataResult extract(AssetRepository.MetadataCandidateRow candidate) {
@@ -538,7 +538,7 @@ public class AssetService {
     }
 
     private ThumbnailResponseResource toPreviewFromOriginal(AssetDetailResponse asset) {
-        AssetFileOccurrenceResponse activeFile = asset.files().stream()
+        AssetDetailResponse.FileOccurrence activeFile = asset.files().stream()
                 .filter(file -> FILE_STATUS_ACTIVE.equals(file.status()))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active asset file not found"));
@@ -605,12 +605,12 @@ public class AssetService {
             return ids;
         }
 
-        private LibraryTreeNodeResponse toResponse() {
-            List<LibraryTreeNodeResponse> childResponses = children.values().stream()
+        private LibraryTreeResponse.Node toResponse() {
+            List<LibraryTreeResponse.Node> childResponses = children.values().stream()
                     .sorted(Comparator.comparing(MutableTreeNode::name, String.CASE_INSENSITIVE_ORDER))
                     .map(MutableTreeNode::toResponse)
                     .toList();
-            return new LibraryTreeNodeResponse(
+            return new LibraryTreeResponse.Node(
                     id,
                     libraryId,
                     libraryName,

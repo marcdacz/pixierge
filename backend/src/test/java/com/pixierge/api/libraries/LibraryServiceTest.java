@@ -266,7 +266,7 @@ class LibraryServiceTest {
         LibraryService service = new LibraryService(repository);
 
         LibraryExclusionPatternResponse response =
-                service.addGlobalExclusionPattern(new AddGlobalExclusionPatternRequest(" **\\cache\\** "));
+                service.addGlobalExclusionPattern(new AddExclusionPatternRequest(" **\\cache\\** "));
 
         assertThat(response.pattern()).isEqualTo("**/cache/**");
         assertThat(repository.addedGlobalExclusionPattern).isEqualTo("**/cache/**");
@@ -279,7 +279,7 @@ class LibraryServiceTest {
         LibraryService existingService = new LibraryService(existingRepository);
 
         assertThatThrownBy(() -> existingService.addGlobalExclusionPattern(
-                new AddGlobalExclusionPatternRequest("**/cache/**")))
+                new AddExclusionPatternRequest("**/cache/**")))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
 
@@ -289,7 +289,7 @@ class LibraryServiceTest {
         LibraryService raceService = new LibraryService(raceRepository);
 
         assertThatThrownBy(() -> raceService.addGlobalExclusionPattern(
-                new AddGlobalExclusionPatternRequest("**/cache/**")))
+                new AddExclusionPatternRequest("**/cache/**")))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
     }
@@ -298,16 +298,16 @@ class LibraryServiceTest {
     void addGlobalExclusionPatternRejectsAbsoluteAndTraversalPatterns() {
         LibraryService service = new LibraryService(new StubLibraryRepository());
 
-        assertThatThrownBy(() -> service.addGlobalExclusionPattern(new AddGlobalExclusionPatternRequest("/private/**")))
+        assertThatThrownBy(() -> service.addGlobalExclusionPattern(new AddExclusionPatternRequest("/private/**")))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
-        assertThatThrownBy(() -> service.addGlobalExclusionPattern(new AddGlobalExclusionPatternRequest("../secrets/**")))
+        assertThatThrownBy(() -> service.addGlobalExclusionPattern(new AddExclusionPatternRequest("../secrets/**")))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
-        assertThatThrownBy(() -> service.addGlobalExclusionPattern(new AddGlobalExclusionPatternRequest("x".repeat(257))))
+        assertThatThrownBy(() -> service.addGlobalExclusionPattern(new AddExclusionPatternRequest("x".repeat(257))))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
-        assertThatThrownBy(() -> service.addGlobalExclusionPattern(new AddGlobalExclusionPatternRequest("   ")))
+        assertThatThrownBy(() -> service.addGlobalExclusionPattern(new AddExclusionPatternRequest("   ")))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
@@ -319,7 +319,7 @@ class LibraryServiceTest {
         LibraryService service = new LibraryService(repository);
 
         assertThatThrownBy(() ->
-                service.addExclusionPattern(LIBRARY_ID, new AddLibraryExclusionPatternRequest("**/cache/**")))
+                service.addExclusionPattern(LIBRARY_ID, new AddExclusionPatternRequest("**/cache/**")))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
     }
@@ -331,7 +331,7 @@ class LibraryServiceTest {
         LibraryService service = new LibraryService(repository);
 
         assertThatThrownBy(() ->
-                service.addExclusionPattern(LIBRARY_ID, new AddLibraryExclusionPatternRequest("**/cache/**")))
+                service.addExclusionPattern(LIBRARY_ID, new AddExclusionPatternRequest("**/cache/**")))
                 .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
     }

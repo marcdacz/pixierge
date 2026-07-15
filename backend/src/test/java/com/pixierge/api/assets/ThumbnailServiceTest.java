@@ -179,7 +179,7 @@ class ThumbnailServiceTest {
         ThumbnailRepository.ThumbnailRow stale = row(UUID.randomUUID(), input, Path.of("..", "outside.jpg"));
         repository.setStaleRows(List.of(stale));
 
-        ThumbnailAdminActionResponse response = service.purgeStale();
+        AdminBatchActionResponse response = service.purgeStale();
 
         assertThat(response.processedCount()).isZero();
         assertThat(response.failedCount()).isEqualTo(1);
@@ -214,8 +214,8 @@ class ThumbnailServiceTest {
                 "image/jpeg",
                 "available",
                 1,
-                new AssetMetadataResponse(null, width, height, "jpg", "image/jpeg", "extracted", null, null),
-                List.of(new AssetFileOccurrenceResponse(
+                new AssetDetailResponse.Metadata(null, width, height, "jpg", "image/jpeg", "extracted", null, null),
+                List.of(new AssetDetailResponse.FileOccurrence(
                         UUID.randomUUID(),
                         UUID.randomUUID(),
                         "Test Library",

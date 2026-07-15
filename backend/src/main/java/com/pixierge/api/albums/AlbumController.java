@@ -60,6 +60,18 @@ public class AlbumController {
         return albumService.browseAssets(albumId, user, page, pageSize);
     }
 
+    @GetMapping("/api/starred")
+    AlbumSummaryResponse starred(@AuthenticationPrincipal AuthenticatedUser user) {
+        return albumService.getOrCreateStarred(user);
+    }
+
+    @GetMapping("/api/starred/assets")
+    AssetBrowseResponse starredAssets(@AuthenticationPrincipal AuthenticatedUser user,
+                                      @RequestParam(required = false) Integer page,
+                                      @RequestParam(required = false) Integer pageSize) {
+        return albumService.browseStarredAssets(user, page, pageSize);
+    }
+
     @PostMapping("/api/album-items")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void addItems(@RequestBody AddAlbumItemsRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
