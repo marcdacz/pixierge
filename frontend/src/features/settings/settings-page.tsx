@@ -202,6 +202,7 @@ export function SettingsPage({
                       effectiveNavCollapsed ? 'w-10 justify-center px-0' : 'gap-3 px-3',
                       active && 'bg-muted text-foreground'
                     )}
+                    data-testid={`settings-nav-${item.view}`}
                     onClick={() => setCurrentView(item.view)}
                     type="button"
                   >
@@ -770,6 +771,7 @@ function LibrarySourceCard({
           ) : (
             <div className="flex flex-wrap gap-2">
               <Button
+                data-testid={`library-${library.id}-scan`}
                 disabled={scanDisabled || library.sourceCount === 0}
                 onClick={() => void runLibraryScan()}
                 type="button"

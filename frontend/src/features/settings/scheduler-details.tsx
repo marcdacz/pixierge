@@ -157,7 +157,7 @@ export function SchedulerDetails({ auth, onError }: SchedulerDetailsProps) {
                   ? `Disable · ${job.displayName}`
                   : `Enable · ${job.displayName}`;
                 return (
-                  <TableRow key={job.id}>
+                  <TableRow data-testid={`scheduler-job-${job.id}`} key={job.id}>
                     <TableCell className="min-w-[22rem] align-top">
                       <div className="grid max-w-xl gap-1">
                         <span className="font-medium text-foreground">{job.displayName}</span>
@@ -191,6 +191,7 @@ export function SchedulerDetails({ auth, onError }: SchedulerDetailsProps) {
                                 checked={job.enabled}
                                 label={toggleEnabledLabel}
                                 onToggle={() => void handleToggleEnabled(job)}
+                                testId={`scheduler-job-${job.id}-enabled-toggle`}
                               />
                             </span>
                           </TooltipTrigger>
@@ -200,6 +201,7 @@ export function SchedulerDetails({ auth, onError }: SchedulerDetailsProps) {
                           <TooltipTrigger asChild>
                             <Button
                               aria-label={runNowLabel}
+                              data-testid={`scheduler-job-${job.id}-run-now`}
                               disabled={jobBusy}
                               onClick={() => void handleRunNow(job)}
                               size="icon"
@@ -219,6 +221,7 @@ export function SchedulerDetails({ auth, onError }: SchedulerDetailsProps) {
                           <TooltipTrigger asChild>
                             <Button
                               aria-label={editScheduleLabel}
+                              data-testid={`scheduler-job-${job.id}-edit-schedule`}
                               disabled={busyJobId === job.id}
                               onClick={() => setEditingJob(job)}
                               size="icon"
@@ -266,12 +269,14 @@ function EnabledToggle({
   busy,
   checked,
   label,
-  onToggle
+  onToggle,
+  testId
 }: {
   busy: boolean;
   checked: boolean;
   label: string;
   onToggle: () => void;
+  testId: string;
 }) {
   return (
     <button
@@ -284,6 +289,7 @@ function EnabledToggle({
         checked ? 'border-zinc-500 bg-zinc-700' : 'border-border bg-background'
       )}
       disabled={busy}
+      data-testid={testId}
       onClick={onToggle}
       role="switch"
       type="button"
@@ -511,4 +517,3 @@ function formatTimestamp(value: string | null): string {
   }
   return date.toLocaleString();
 }
-

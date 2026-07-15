@@ -337,6 +337,7 @@ export function StructuredSearch({
             <button
               aria-label={`Remove ${pillLabel(pill)}`}
               className="rounded-sm"
+              data-testid={searchPillRemoveTestId(pill)}
               disabled={disabled}
               onClick={(event) => {
                 event.stopPropagation();
@@ -355,6 +356,7 @@ export function StructuredSearch({
           aria-label="Search"
           autoComplete="off"
           className="min-w-[8rem] flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+          data-testid="structured-search-input"
           disabled={disabled}
           onBlur={() => window.setTimeout(() => setFocused(false), 100)}
           onChange={(event) => emit(pills, event.target.value)}
@@ -373,6 +375,7 @@ export function StructuredSearch({
                 <button
                   aria-selected={index === activeSuggestion}
                   className={cn('rounded-sm px-2 py-1.5 text-left text-sm', index === activeSuggestion && 'bg-accent text-accent-foreground')}
+                  data-testid={`structured-search-suggestion-${searchTestIdPart(suggestion.value)}`}
                   key={`${suggestion.value}:${index}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => selectSuggestion(suggestion)}
@@ -466,6 +469,14 @@ function pillRaw(pill: SearchPill): string {
 
 function pillLabel(pill: SearchPill): string {
   return `${pill.negated ? 'Not ' : ''}${pill.field}: ${pill.value}`;
+}
+
+function searchPillRemoveTestId(pill: SearchPill) {
+  return `structured-search-pill-remove-${pill.negated ? 'not-' : ''}${pill.field}-${searchTestIdPart(pill.value)}`;
+}
+
+function searchTestIdPart(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'empty';
 }
 
 function unquote(value: string): string {

@@ -306,6 +306,7 @@ export function AssetTile({
       aria-selected={selected}
       className="group relative aspect-[4/3] min-w-0 overflow-hidden bg-muted text-left"
       data-asset-id={asset.id}
+      data-testid={`asset-tile-${asset.id}`}
       draggable={Boolean(onDragStart)}
       onClick={(event) => (onSelectClick ? onSelectClick(event) : onOpen())}
       onContextMenu={(event) => {
@@ -352,6 +353,7 @@ export function AssetTile({
               'absolute inset-0 h-full w-full object-cover transition-[opacity,transform] duration-300 group-hover:scale-[1.02]',
               thumbnailLoaded ? 'opacity-100' : 'opacity-0'
             )}
+            data-testid={`asset-tile-${asset.id}-image`}
             decoding="async"
             loading="lazy"
             onError={() => setThumbnailFailed(true)}
@@ -674,7 +676,14 @@ export function AssetFocus({
             </button>
           )}
           <div className={cn('absolute left-3 top-3 z-20', overlayControlsClass)}>
-            <Button aria-label="Close photo viewer" onClick={onClose} size="icon" type="button" variant="secondary">
+            <Button
+              aria-label="Close photo viewer"
+              data-testid="photo-viewer-close"
+              onClick={onClose}
+              size="icon"
+              type="button"
+              variant="secondary"
+            >
               <X className="h-4 w-4" aria-hidden />
             </Button>
           </div>
@@ -705,6 +714,7 @@ export function AssetFocus({
             </Button>
             <Button
               aria-label={showMetadata ? 'Hide photo metadata' : 'Show photo metadata'}
+              data-testid="photo-viewer-metadata-toggle"
               onClick={() => setShowMetadata((current) => !current)}
               size="icon"
               type="button"
@@ -781,6 +791,7 @@ export function AssetFocus({
               <button
                 aria-label="Dismiss photo metadata"
                 className="absolute inset-0 z-20 bg-background/40 backdrop-blur-[1px]"
+                data-testid="photo-metadata-dismiss"
                 onClick={() => setShowMetadata(false)}
                 type="button"
               />

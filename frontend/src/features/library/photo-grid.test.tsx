@@ -309,6 +309,7 @@ describe('AssetGrid', () => {
     expect(grid.style.getPropertyValue('--asset-grid-tile-size')).toBe(
       ASSET_TILE_SIZE_OPTIONS[DEFAULT_ASSET_TILE_SIZE_INDEX].minWidth
     );
+    expect(screen.getByTestId('asset-tile-asset-1')).toBeInTheDocument();
   });
 
   it('uses column-count track sizes for the last three slider steps', () => {

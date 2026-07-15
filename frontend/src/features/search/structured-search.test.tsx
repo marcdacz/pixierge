@@ -82,12 +82,12 @@ describe('StructuredSearch', () => {
     }));
 
     render(<Harness onValidQueryChange={validQuery} />);
-    const input = screen.getByLabelText('Search');
+    const input = screen.getByTestId('structured-search-input');
     await userEvent.type(input, 'tag:fa');
-    expect(await screen.findByRole('option', { name: 'Family' })).toBeInTheDocument();
+    expect(await screen.findByTestId('structured-search-suggestion-family')).toBeInTheDocument();
     await userEvent.keyboard('{Enter}');
 
-    expect(screen.getByRole('button', { name: 'Remove tag: Family' })).toBeInTheDocument();
+    expect(screen.getByTestId('structured-search-pill-remove-tag-family')).toBeInTheDocument();
     expect(input).toHaveValue('');
     await waitFor(() => expect(validQuery).toHaveBeenCalledWith('tag:Family'));
 

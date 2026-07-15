@@ -43,5 +43,9 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean verify
 - Keep frontend code minimal: add abstractions only when they remove real duplication or match an established local pattern.
 - Avoid frontend layout magic numbers; use named constants, CSS variables, or theme tokens for repeated structural dimensions.
 - For UI-facing acceptance criteria, include unit tests, Playwright E2E tests, and Playwright visual regression tests.
+- Write Playwright E2E tests around user-observable workflows with deterministic fixtures or mocks; keep tests independent of order, real user data, and external services.
+- Prefer stable, app-owned `data-testid` locators for E2E targets, then role/label locators when they clearly express the user-facing contract; avoid brittle CSS selectors and unscoped text matches.
+- Put repeated Playwright locators and workflow actions behind small page/component objects or helpers near the specs; keep assertions in the spec when they describe the behavior under test.
+- Avoid fixed waits in Playwright tests; wait for visible UI state, URLs, network mocks, or other behavior that proves the workflow is ready.
 - When `.plans/` defines an active slice, treat its test gate as required; skipped environment-dependent tests are unverified, not passed.
 - For generated filesystem caches, enforce storage-root containment and use atomic, concurrency-safe writes and database upserts.

@@ -249,7 +249,14 @@ function TopBar({
         <ScanActivityButton onOpenSettings={onOpenSettings} />
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button aria-label="Settings" size="icon" type="button" variant="ghost" onClick={onOpenSettings}>
+            <Button
+              aria-label="Settings"
+              data-testid="app-shell-settings"
+              size="icon"
+              type="button"
+              variant="ghost"
+              onClick={onOpenSettings}
+            >
               <Settings className="h-4 w-4" aria-hidden />
             </Button>
           </TooltipTrigger>
@@ -258,7 +265,13 @@ function TopBar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button aria-label="Profile" size="icon" type="button" variant="ghost">
+            <Button
+              aria-label="Profile"
+              data-testid="app-shell-profile"
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
               <UserCircle className="h-5 w-5" aria-hidden />
             </Button>
           </DropdownMenuTrigger>
@@ -318,6 +331,7 @@ function NavItem({
             expanded ? 'w-full justify-start gap-3 px-3 text-sm font-medium' : 'w-11 justify-center',
             active && 'bg-sidebar-accent text-sidebar-foreground'
           )}
+          data-testid={`primary-nav-${item.view}`}
           onClick={onSelect}
           type="button"
         >
@@ -343,6 +357,7 @@ function RailToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () =>
             'flex h-11 items-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
             expanded ? 'w-full justify-start gap-3 px-3 text-sm font-medium' : 'w-11 justify-center'
           )}
+          data-testid="primary-nav-toggle"
           onClick={onToggle}
           type="button"
         >

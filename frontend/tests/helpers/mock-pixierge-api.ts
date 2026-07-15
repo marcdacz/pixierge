@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 const authBody = {
   csrfToken: 'csrf-token',
@@ -116,217 +116,7 @@ const libraryTreeResponse = {
   libraryAssetCounts: {}
 };
 
-test('admin setup, empty library, settings, and profile logout', async ({ page }) => {
-  await mockPixiergeApi(page);
-
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Create admin account' })).toBeVisible();
-
-  await page.getByLabel('Username').fill('admin');
-  await page.getByLabel('Password').fill('correct horse battery staple');
-  await page.getByRole('button', { name: 'Create admin' }).click();
-
-  await expect(page.getByRole('heading', { name: 'Libraries' })).toBeVisible();
-  await expect(page.getByText('No library sources have been added yet.')).toBeVisible();
-
-  await page.getByRole('button', { name: 'Configure sources' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Configuration' })).toBeVisible();
-
-  await page.getByLabel('Library name').fill('Family Photos');
-  await page.getByRole('button', { name: 'Create' }).click();
-  const librariesNavigation = page.getByRole('navigation', { name: 'Libraries' });
-  await expect(
-    librariesNavigation.getByRole('button', { name: /Family Photos\s+0 sources/ })
-  ).toBeVisible();
-
-  await page.getByRole('button', { name: 'Source path Docker guidance' }).hover();
-  await expect(page.getByText(/Docker sources must use container paths/)).toBeVisible();
-  await page.getByRole('textbox', { name: 'Source path' }).fill('/photos/family');
-  await page.getByRole('button', { name: 'Add source' }).click();
-  await expect(page.getByText('/photos/family')).toBeVisible();
-  await expect(
-    librariesNavigation.getByRole('button', { name: /Family Photos\s+1 source/ })
-  ).toBeVisible();
-
-  await page.getByRole('button', { name: 'Expand navigation' }).click();
-  await expect(page.getByRole('navigation', { name: 'Primary' }).getByText('Family Photos')).toBeHidden();
-
-  await page.getByRole('button', { name: 'Libraries' }).click();
-  await expect(page.getByRole('navigation', { name: 'Folders' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'All folders' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Select beach.jpg' })).toBeVisible();
-
-  await page.getByRole('button', { name: /^family/ }).click();
-  await expect(page.getByRole('heading', { name: 'family' })).toBeVisible();
-  await page.getByRole('textbox', { name: 'Search' }).fill('beach');
-  await expect(page.getByRole('heading', { name: 'Search results' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Filters' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Select beach.jpg' })).toBeVisible();
-  await page.getByRole('textbox', { name: 'Search' }).fill('tag:Family');
-  await page.getByRole('textbox', { name: 'Search' }).press(' ');
-  await expect(page.getByRole('button', { name: 'Remove tag: Family' })).toBeVisible();
-  await expect(page).toHaveURL(/\?q=tag%3AFamily$/);
-  await page.reload();
-  await expect(page.getByRole('heading', { name: 'Search results' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Remove tag: Family' })).toBeVisible();
-  await page.getByRole('button', { name: 'Select beach.jpg' }).click();
-  await expect(page.locator('[data-asset-id="asset-1"]')).toHaveAttribute('aria-selected', 'true');
-  await page.locator('[data-asset-id="asset-1"]').dblclick();
-  await expect(page.getByRole('button', { name: 'Close photo viewer' })).toBeVisible();
-  await page.getByRole('button', { name: 'Show photo metadata' }).click();
-  await expect(page.getByText('/photos/family/beach.jpg').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Dismiss photo metadata' }).click();
-  await page.getByRole('button', { name: 'Close photo viewer' }).click();
-
-  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Scheduler details' }).click();
-  await expect(page.getByRole('heading', { name: 'Scheduler details' })).toBeVisible();
-  await expect(page.getByText('Metadata scan')).toBeVisible();
-  await page.getByRole('button', { name: 'Run now · Metadata scan' }).click();
-  const metadataSchedulerRow = page.getByRole('row').filter({ hasText: 'Metadata scan' });
-  await expect(metadataSchedulerRow.getByText(/^Last: (?!—$).+/)).toBeVisible();
-  await expect(metadataSchedulerRow.getByText('succeeded')).toBeVisible();
-  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Plugins' }).click();
-  await expect(page.getByRole('heading', { name: 'Plugins' })).toBeVisible();
-  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Backups' }).click();
-  await expect(page.getByRole('heading', { name: 'Backups' })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Profile' }).click();
-  await page.getByRole('menuitem', { name: 'Log out' }).click();
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-});
-
-test('scan activity indicator and confirmed asset detail @visual', async ({ page }) => {
-  await mockPixiergeApi(page);
-  await completeBrowsableLibrarySetup(page);
-
-  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: 'Scan library' }).click();
-  await expect(page.getByRole('button', { name: 'Scan activity' })).toBeVisible();
-  await page.getByRole('button', { name: 'Scan activity' }).click();
-  await expect(page.getByText('Scan activity', { exact: true })).toBeVisible();
-  await expect(page.getByText('Scanned 3')).toBeVisible();
-  await page.keyboard.press('Escape');
-
-  await page.getByRole('button', { name: 'Libraries' }).click();
-  await page.getByRole('button', { name: 'Select beach.jpg' }).dblclick();
-  await page.getByRole('button', { name: 'Show photo metadata' }).click();
-  await expect(page.getByText('/photos/family/beach.jpg').first()).toBeVisible();
-  await expect(page.getByText('Metadata').locator('..')).toContainText('pending');
-});
-
-test('authenticated shell visual regression @visual', async ({ page }) => {
-  await mockPixiergeApi(page);
-  await completeBrowsableLibrarySetup(page);
-
-  await expect(page.getByRole('navigation', { name: 'Folders' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Select beach.jpg' })).toBeVisible();
-  await expect(page.locator('img[src$="/api/assets/asset-1/thumbnail?c=e2e-thumbnail-v1"]')).toHaveClass(/opacity-100/, {
-    timeout: 10_000
-  });
-  await expect(page).toHaveScreenshot('browse-library.png', {
-    fullPage: true
-  });
-
-  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-  await expect(page).toHaveScreenshot('settings.png', {
-    fullPage: true
-  });
-});
-
-test('selects photos and assigns albums and tags', async ({ page }) => {
-  await mockPixiergeApi(page);
-  await completeBrowsableLibrarySetup(page);
-
-  const tile = page.locator('[data-asset-id="asset-1"]');
-  await tile.click({ button: 'right' });
-  await expect(page.getByRole('menu', { name: 'Asset actions' })).toBeVisible();
-  await expect(tile).toHaveAttribute('aria-selected', 'true');
-
-  await page.getByRole('menuitem', { name: 'Add to starred' }).click();
-  await expect(tile.getByLabel('Starred')).toBeVisible();
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Starred' }).click();
-  await expect(page.getByRole('heading', { name: 'Starred' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Albums' })).toHaveCount(0);
-  await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
-  await expect(page.locator('[data-asset-id="asset-1"]').getByLabel('Starred')).toBeVisible();
-
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Libraries' }).click();
-  await tile.click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Add to albums…' }).click();
-  await page.getByLabel('Search add to albums').fill('Best of 2026');
-  await page.getByRole('option', { name: 'Create album “Best of 2026”' }).click();
-  await expect(page.getByRole('button', { name: 'Remove Best of 2026' })).toBeVisible();
-  await page.getByLabel('Search add to albums').press('Enter');
-  await expect(page.getByRole('dialog')).toBeHidden();
-
-  await tile.click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Add tags…' }).click();
-  await page.getByLabel('Search add tags').fill('Favourite');
-  await page.getByRole('option', { name: 'Create tag “Favourite”' }).click();
-  await expect(page.getByRole('button', { name: 'Remove Favourite' })).toBeVisible();
-  await page.getByLabel('Search add tags').press('Enter');
-  await expect(page.getByRole('dialog')).toBeHidden();
-
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Albums' }).click();
-  const albumsNav = page.getByRole('navigation', { name: 'Albums' });
-  await expect(albumsNav).toBeVisible();
-  await expect(albumsNav.getByRole('button', { name: /^Best of 2026/ })).toBeVisible();
-  await expect(albumsNav.getByRole('button', { name: /^Starred/ })).toHaveCount(0);
-  await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
-
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Tags' }).click();
-  const tagsNav = page.getByRole('navigation', { name: 'Tags' });
-  await expect(tagsNav).toBeVisible();
-  await expect(tagsNav.getByRole('button', { name: /^Favourite/ })).toBeVisible();
-  await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
-});
-
-test('scheduler details visual regression @visual', async ({ page }) => {
-  await mockPixiergeApi(page);
-  await completeBrowsableLibrarySetup(page);
-  await page.getByRole('navigation', { name: 'Utilities' }).getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('navigation', { name: 'Settings' }).getByRole('button', { name: 'Scheduler details' }).click();
-  await expect(page.getByRole('heading', { name: 'Scheduler details' })).toBeVisible();
-  await expect(page.getByText('Metadata scan')).toBeVisible();
-  await expect(page).toHaveScreenshot('settings-scheduler-details.png', {
-    fullPage: true
-  });
-});
-
-test('starred organizer visual regression @visual', async ({ page }) => {
-  await mockPixiergeApi(page);
-  await completeBrowsableLibrarySetup(page);
-  await page.locator('[data-asset-id="asset-1"]').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Add to starred' }).click();
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Starred' }).click();
-  await expect(page.getByRole('heading', { name: 'Starred' })).toBeVisible();
-  await expect(page.locator('[data-asset-id="asset-1"]')).toBeVisible();
-  await expect(page).toHaveScreenshot('browse-starred.png', {
-    fullPage: true
-  });
-});
-
-test('albums organizer visual regression @visual', async ({ page }) => {
-  await mockPixiergeApi(page);
-  await completeBrowsableLibrarySetup(page);
-  await page.locator('[data-asset-id="asset-1"]').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Add to albums…' }).click();
-  await page.getByLabel('Search add to albums').fill('Summer');
-  await page.getByRole('option', { name: 'Create album “Summer”' }).click();
-  await expect(page.getByRole('button', { name: 'Remove Summer' })).toBeVisible();
-  await page.getByLabel('Search add to albums').press('Enter');
-  await expect(page.getByRole('dialog')).toBeHidden();
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Albums' }).click();
-  await expect(page.getByRole('navigation', { name: 'Albums' })).toBeVisible();
-  await expect(page).toHaveScreenshot('browse-albums.png', {
-    fullPage: true
-  });
-});
-
-async function mockPixiergeApi(page: Page) {
+export async function mockPixiergeApi(page: Page) {
   let setupRequired = true;
   let signedIn = false;
   let scanStatus: 'running' | 'completed' = 'completed';
@@ -478,20 +268,15 @@ async function mockPixiergeApi(page: Page) {
     }
 
     if (path === '/api/search/parse') {
-      await route.fulfill({
-        json: {
-          query: new URL(request.url()).searchParams.get('q') ?? '',
-          freeText: '',
-          clauses: [{ field: 'tag', value: 'Family', negated: false, start: 0, end: 10, label: 'tag: Family' }],
-          errors: [],
-          valid: true
-        }
-      });
+      await route.fulfill({ json: mockSearchParse(new URL(request.url()).searchParams.get('q') ?? '') });
       return;
     }
 
     if (path === '/api/search/suggestions') {
-      await route.fulfill({ json: [{ value: 'Family', label: 'Family' }] });
+      const url = new URL(request.url());
+      await route.fulfill({
+        json: mockSearchSuggestions(url.searchParams.get('field') ?? '', url.searchParams.get('q') ?? '')
+      });
       return;
     }
 
@@ -917,6 +702,92 @@ function libraryResponses(libraries: Map<string, {
   });
 }
 
+const SEARCH_FIELDS = new Set(['library', 'folder', 'album', 'tag', 'extension', 'after', 'before', 'on', 'is']);
+
+function mockSearchParse(query: string) {
+  const clauses: Array<{
+    field: string;
+    value: string;
+    negated: boolean;
+    start: number;
+    end: number;
+    label: string;
+  }> = [];
+  const freeTextParts: string[] = [];
+  const tokenPattern = /\S+/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenPattern.exec(query))) {
+    const raw = match[0]!;
+    const negated = raw.startsWith('-');
+    const token = negated ? raw.slice(1) : raw;
+    const colon = token.indexOf(':');
+
+    if (colon < 0) {
+      freeTextParts.push(raw);
+      continue;
+    }
+
+    const field = token.slice(0, colon);
+    const value = token.slice(colon + 1);
+    if (!SEARCH_FIELDS.has(field)) {
+      return {
+        query,
+        freeText: freeTextParts.join(' '),
+        clauses: [],
+        errors: [
+          {
+            code: 'UNKNOWN_FIELD',
+            message: `Unknown search field "${field}".`,
+            start: match.index + (negated ? 1 : 0),
+            end: match.index + raw.length
+          }
+        ],
+        valid: false
+      };
+    }
+
+    if (value.length === 0) {
+      freeTextParts.push(raw);
+      continue;
+    }
+
+    clauses.push({
+      field,
+      value,
+      negated,
+      start: match.index,
+      end: match.index + raw.length,
+      label: `${negated ? '-' : ''}${field}: ${value}`
+    });
+  }
+
+  return {
+    query,
+    freeText: freeTextParts.join(' '),
+    clauses,
+    errors: [],
+    valid: true
+  };
+}
+
+function mockSearchSuggestions(field: string, partial: string) {
+  const suggestions: Record<string, Array<{ value: string; label: string }>> = {
+    album: [{ value: 'Best of 2026', label: 'Best of 2026' }],
+    extension: [{ value: 'jpg', label: 'jpg' }],
+    is: [{ value: 'starred', label: 'starred' }],
+    library: [{ value: 'Family Photos', label: 'Family Photos' }],
+    tag: [
+      { value: 'Family', label: 'Family' },
+      { value: 'Favourite', label: 'Favourite' }
+    ]
+  };
+  const normalized = partial.toLowerCase();
+  return (suggestions[field] ?? []).filter((suggestion) =>
+    suggestion.label.toLowerCase().startsWith(normalized)
+  );
+}
+
 function scanResponse(libraryId: string, rootId: string | null, status: 'running' | 'completed' = 'completed') {
   return {
     id: 'scan-1',
@@ -975,7 +846,7 @@ async function completeOnboarding(page: Page) {
   await expect(page.getByRole('heading', { name: 'Libraries' })).toBeVisible();
 }
 
-async function completeBrowsableLibrarySetup(page: Page) {
+export async function completeBrowsableLibrarySetup(page: Page) {
   await completeOnboarding(page);
   await page.getByRole('button', { name: 'Configure sources' }).click();
   await page.getByLabel('Library name').fill('Family Photos');

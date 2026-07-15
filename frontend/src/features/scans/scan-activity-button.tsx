@@ -51,7 +51,7 @@ export function ScanActivityButton({ onOpenSettings }: ScanActivityButtonProps) 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button aria-label="Scan activity" size="icon" type="button" variant="ghost">
+        <Button aria-label="Scan activity" data-testid="scan-activity-trigger" size="icon" type="button" variant="ghost">
           <RefreshCw className={cn('h-4 w-4', spinning && 'animate-spin')} aria-hidden />
         </Button>
       </DropdownMenuTrigger>
