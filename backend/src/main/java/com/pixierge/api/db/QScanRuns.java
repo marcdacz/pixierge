@@ -25,6 +25,7 @@ public class QScanRuns extends RelationalPathBase<QScanRuns> {
     public final StringPath status = createString("status");
     public final DateTimePath<OffsetDateTime> startedAt = createDateTime("startedAt", OffsetDateTime.class);
     public final DateTimePath<OffsetDateTime> completedAt = createDateTime("completedAt", OffsetDateTime.class);
+    public final DateTimePath<OffsetDateTime> catalogCompletedAt = createDateTime("catalogCompletedAt", OffsetDateTime.class);
     public final NumberPath<Integer> scannedFileCount = createNumber("scannedFileCount", Integer.class);
     public final NumberPath<Integer> addedCount = createNumber("addedCount", Integer.class);
     public final NumberPath<Integer> unchangedCount = createNumber("unchangedCount", Integer.class);
@@ -57,6 +58,7 @@ public class QScanRuns extends RelationalPathBase<QScanRuns> {
         addMetadata(missingCount, ColumnMetadata.named("missing_count").withIndex(14).ofType(Types.INTEGER).notNull());
         addMetadata(reappearedCount, ColumnMetadata.named("reappeared_count").withIndex(15).ofType(Types.INTEGER).notNull());
         addMetadata(errorCount, ColumnMetadata.named("error_count").withIndex(16).ofType(Types.INTEGER).notNull());
+        addMetadata(catalogCompletedAt, ColumnMetadata.named("catalog_completed_at").withIndex(17).ofType(Types.TIMESTAMP_WITH_TIMEZONE));
     }
 
     @Override

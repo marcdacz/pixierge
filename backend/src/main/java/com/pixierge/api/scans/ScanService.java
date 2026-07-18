@@ -1,7 +1,10 @@
 package com.pixierge.api.scans;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pixierge.api.background.BackgroundJobCreate;
+import com.pixierge.api.background.BackgroundJobService;
 import com.pixierge.api.libraries.LibraryRepository;
-import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,26 +31,30 @@ import java.util.stream.Stream;
 public class ScanService {
 
     private static final int OBSERVATION_BATCH_SIZE = 100;
+    private static final int CATALOG_BATCH_SIZE = 500;
 
     private final LibraryRepository libraryRepository;
     private final ScanRepository scanRepository;
     private final FileHasher fileHasher;
-    private final TaskExecutor taskExecutor;
+    private final BackgroundJobService backgroundJobService;
     private final TransactionTemplate transactionTemplate;
+    private final ObjectMapper objectMapper;
     private final Map<UUID, Semaphore> libraryScanSlots = new ConcurrentHashMap<>();
 
     public ScanService(
             LibraryRepository libraryRepository,
             ScanRepository scanRepository,
             FileHasher fileHasher,
-            TaskExecutor taskExecutor,
-            TransactionTemplate transactionTemplate
+            BackgroundJobService backgroundJobService,
+            TransactionTemplate transactionTemplate,
+            ObjectMapper objectMapper
     ) {
         this.libraryRepository = libraryRepository;
         this.scanRepository = scanRepository;
         this.fileHasher = fileHasher;
-        this.taskExecutor = taskExecutor;
+        this.backgroundJobService = backgroundJobService;
         this.transactionTemplate = transactionTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public ScanRunResponse scanLibrary(UUID libraryId, UUID requestedBy) {
@@ -97,9 +104,15 @@ public class ScanService {
         boolean scanScheduled = false;
         try {
             UUID rootScope = singleRoot == null ? null : singleRoot.id();
-            UUID scanRunId = transactionTemplate.execute(status ->
-                    scanRepository.createScanRun(library.id(), rootScope, requestedBy, OffsetDateTime.now()));
-            taskExecutor.execute(() -> runScan(scanRunId, library, singleRoot, scanSlot));
+            UUID scanRunId = transactionTemplate.execute(status -> {
+                if (scanRepository.hasActiveScanRun(library.id())) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "A scan is already running for this library");
+                }
+                OffsetDateTime now = OffsetDateTime.now();
+                UUID createdScanRunId = scanRepository.createScanRun(library.id(), rootScope, requestedBy, now);
+                backgroundJobService.enqueue(catalogJob(createdScanRunId, library.id(), rootScope, now));
+                return createdScanRunId;
+            });
             scanScheduled = true;
             return readScan(scanRunId);
         } catch (RuntimeException exception) {
@@ -107,6 +120,10 @@ public class ScanService {
                 scanSlot.release();
             }
             throw exception;
+        } finally {
+            if (scanScheduled) {
+                scanSlot.release();
+            }
         }
     }
 
@@ -123,28 +140,50 @@ public class ScanService {
         return scanSlot;
     }
 
-    private void runScan(
-            UUID scanRunId,
-            LibraryRepository.LibraryRecord library,
-            LibraryRepository.LibraryRootRecord singleRoot,
-            Semaphore scanSlot
-    ) {
+    private BackgroundJobCreate catalogJob(UUID scanRunId, UUID libraryId, UUID rootId, OffsetDateTime now) {
         try {
-            executeScan(scanRunId, library, singleRoot);
+            String payload = objectMapper.writeValueAsString(new ScanCatalogJobPayload(scanRunId, libraryId, rootId));
+            return new BackgroundJobCreate(
+                    ScanJobTypes.LIBRARY_CATALOG_ROOT,
+                    payload,
+                    0,
+                    1,
+                    now,
+                    "library:" + libraryId,
+                    ScanJobTypes.LIBRARY_CATALOG_ROOT + ":" + scanRunId
+            );
+        } catch (JsonProcessingException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not create scan job", exception);
+        }
+    }
+
+    void executeCatalogJob(ScanCatalogJobPayload payload, UUID jobId) {
+        try {
+            LibraryRepository.LibraryRecord library = findLibrary(payload.libraryId());
+            ensureActive(library);
+            LibraryRepository.LibraryRootRecord root = payload.rootId() == null
+                    ? null
+                    : library.roots().stream()
+                    .filter(candidate -> candidate.id().equals(payload.rootId()))
+                    .findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Source path not found"));
+            transactionTemplate.executeWithoutResult(status ->
+                    scanRepository.markScanRunRunning(payload.scanRunId(), OffsetDateTime.now())
+            );
+            executeScan(payload.scanRunId(), library, root, jobId);
         } catch (RuntimeException exception) {
             transactionTemplate.executeWithoutResult(status -> {
                 scanRepository.createError(
-                        scanRunId,
-                        library.id(),
-                        singleRoot == null ? null : singleRoot.id(),
+                        payload.scanRunId(),
+                        payload.libraryId(),
+                        payload.rootId(),
                         null,
                         "scan_failed",
                         exception.getMessage() == null ? "Scan failed" : exception.getMessage()
                 );
-                scanRepository.failScanRun(scanRunId, OffsetDateTime.now());
+                scanRepository.failScanRun(payload.scanRunId(), OffsetDateTime.now());
             });
-        } finally {
-            scanSlot.release();
+            throw exception;
         }
     }
 
@@ -153,16 +192,19 @@ public class ScanService {
             LibraryRepository.LibraryRecord library,
             LibraryRepository.LibraryRootRecord singleRoot
     ) {
+        executeScan(scanRunId, library, singleRoot, null);
+    }
+
+    private void executeScan(
+            UUID scanRunId,
+            LibraryRepository.LibraryRecord library,
+            LibraryRepository.LibraryRootRecord singleRoot,
+            UUID currentCatalogJobId
+    ) {
         ScanCounts counts = new ScanCounts();
         ScanProgressThrottle progress = new ScanProgressThrottle(scanRunId, scanRepository, counts);
         List<LibraryRepository.LibraryRootRecord> roots = singleRoot == null ? library.roots() : List.of(singleRoot);
-        List<String> exclusionPatterns = new ArrayList<>(libraryRepository.listGlobalExclusionPatterns().stream()
-                .map(LibraryRepository.GlobalExclusionPatternRecord::pattern)
-                .toList());
-        exclusionPatterns.addAll(library.exclusionPatterns().stream()
-                .map(LibraryRepository.LibraryExclusionPatternRecord::pattern)
-                .toList());
-        ExclusionMatcher exclusionMatcher = new ExclusionMatcher(exclusionPatterns);
+        ExclusionMatcher exclusionMatcher = exclusionMatcher(library);
         Set<UUID> handledPreviousFiles = new HashSet<>();
         List<HashWorkItem> hashQueue = new ArrayList<>();
         List<ScanRepository.ObservationInsert> pendingObservations = new ArrayList<>();
@@ -177,16 +219,18 @@ public class ScanService {
                 continue;
             }
 
+            List<FileCandidate> catalogBatch = new ArrayList<>();
             try (Stream<Path> paths = Files.walk(rootPath)) {
                 paths.filter(Files::isRegularFile)
                         .filter(MediaFileSupport::isSupportedMedia)
                         .filter(path -> !exclusionMatcher.matches(rootPath, path))
-                        .forEach(path -> catalogFile(
+                        .forEach(path -> catalogFileCandidate(
                                 scanRunId,
                                 library.id(),
                                 root,
                                 path,
                                 counts,
+                                catalogBatch,
                                 hashQueue,
                                 pendingObservations,
                                 handledPreviousFiles,
@@ -198,66 +242,29 @@ public class ScanService {
                     flushProgress(progress);
                 });
             }
+            catalogFileBatch(scanRunId, library.id(), root, catalogBatch, counts, hashQueue, pendingObservations, progress);
 
             flushObservations(pendingObservations);
             flushProgress(progress);
-
-            for (HashWorkItem item : hashQueue) {
-                if (!item.rootId().equals(root.id())) {
-                    continue;
-                }
-                transactionTemplate.executeWithoutResult(status ->
-                        hashAndReconcile(scanRunId, root, item, counts, handledPreviousFiles, pendingObservations));
-                maybeFlushProgress(progress);
-                if (pendingObservations.size() >= OBSERVATION_BATCH_SIZE) {
-                    flushObservations(pendingObservations);
-                }
-            }
-            hashQueue.removeIf(item -> item.rootId().equals(root.id()));
-
-            List<ScanRepository.AssetFileRecord> notSeen = transactionTemplate.execute(status ->
-                    scanRepository.activeFilesNotSeenInRun(library.id(), root.id(), scanRunId));
-            for (ScanRepository.AssetFileRecord activeFile : notSeen) {
-                if (
-                        handledPreviousFiles.contains(activeFile.id())
-                                || exclusionMatcher.matches(rootPath, Path.of(activeFile.normalizedPath()))
-                ) {
-                    continue;
-                }
-                transactionTemplate.executeWithoutResult(status -> {
-                    scanRepository.markStatus(activeFile.id(), "missing", null);
-                    pendingObservations.add(observation(
-                            scanRunId,
-                            library.id(),
-                            root.id(),
-                            activeFile.assetId(),
-                            activeFile.id(),
-                            activeFile.path(),
-                            activeFile.normalizedPath(),
-                            activeFile.sizeBytes(),
-                            activeFile.modifiedAt(),
-                            null,
-                            activeFile.contentHash(),
-                            "missing"
-                    ));
-                    counts.result("missing");
-                    progress.maybeUpdate();
-                });
-            }
         }
 
+        enqueueIdentityJobs(scanRunId, library.id(), hashQueue, OffsetDateTime.now());
+        transactionTemplate.executeWithoutResult(status ->
+                scanRepository.markScanCatalogCompleted(scanRunId, OffsetDateTime.now()));
         flushObservations(pendingObservations);
         flushProgress(progress);
-        transactionTemplate.executeWithoutResult(status ->
-                scanRepository.completeScanRun(scanRunId, counts, OffsetDateTime.now()));
+        if (currentCatalogJobId == null) {
+            tryCompleteScanIfReady(scanRunId, library, roots, exclusionMatcher, null);
+        }
     }
 
-    private void catalogFile(
+    private void catalogFileCandidate(
             UUID scanRunId,
             UUID libraryId,
             LibraryRepository.LibraryRootRecord root,
             Path file,
             ScanCounts counts,
+            List<FileCandidate> catalogBatch,
             List<HashWorkItem> hashQueue,
             List<ScanRepository.ObservationInsert> pendingObservations,
             Set<UUID> handledPreviousFiles,
@@ -273,41 +280,10 @@ public class ScanService {
             String normalizedPath = normalized.toString();
             String path = normalizedPath;
             String fileName = normalized.getFileName().toString();
-            OffsetDateTime now = OffsetDateTime.now();
-
-            transactionTemplate.executeWithoutResult(status -> {
-                counts.scanned();
-                scanRepository.findActiveFileByPath(libraryId, normalizedPath).ifPresentOrElse(
-                        existing -> catalogExistingPath(
-                                scanRunId,
-                                root,
-                                existing,
-                                path,
-                                normalizedPath,
-                                fileName,
-                                size,
-                                modifiedAt,
-                                now,
-                                counts,
-                                hashQueue,
-                                pendingObservations
-                        ),
-                        () -> catalogNewPath(
-                                scanRunId,
-                                libraryId,
-                                root,
-                                path,
-                                normalizedPath,
-                                fileName,
-                                size,
-                                modifiedAt,
-                                now,
-                                counts,
-                                hashQueue
-                        )
-                );
-                progress.maybeUpdate();
-            });
+            catalogBatch.add(new FileCandidate(path, normalizedPath, fileName, size, modifiedAt));
+            if (catalogBatch.size() >= CATALOG_BATCH_SIZE) {
+                catalogFileBatch(scanRunId, libraryId, root, catalogBatch, counts, hashQueue, pendingObservations, progress);
+            }
         } catch (IOException | SecurityException exception) {
             transactionTemplate.executeWithoutResult(status -> {
                 scanRepository.findActiveFileByPath(libraryId, normalized.toString())
@@ -315,6 +291,68 @@ public class ScanService {
                 recordError(scanRunId, libraryId, root.id(), normalized.toString(), "file_failed", exception.getMessage(), counts);
                 progress.maybeUpdate();
             });
+        }
+    }
+
+    private void catalogFileBatch(
+            UUID scanRunId,
+            UUID libraryId,
+            LibraryRepository.LibraryRootRecord root,
+            List<FileCandidate> catalogBatch,
+            ScanCounts counts,
+            List<HashWorkItem> hashQueue,
+            List<ScanRepository.ObservationInsert> pendingObservations,
+            ScanProgressThrottle progress
+    ) {
+        if (catalogBatch.isEmpty()) {
+            return;
+        }
+        List<FileCandidate> candidates = List.copyOf(catalogBatch);
+        catalogBatch.clear();
+        transactionTemplate.executeWithoutResult(status -> {
+            OffsetDateTime now = OffsetDateTime.now();
+            Map<String, ScanRepository.AssetFileRecord> existingByPath = scanRepository.findActiveFilesByPaths(
+                    libraryId,
+                    candidates.stream().map(FileCandidate::normalizedPath).toList()
+            );
+            for (FileCandidate candidate : candidates) {
+                counts.scanned();
+                ScanRepository.AssetFileRecord existing = existingByPath.get(candidate.normalizedPath());
+                if (existing == null) {
+                    catalogNewPath(
+                            scanRunId,
+                            libraryId,
+                            root,
+                            candidate.path(),
+                            candidate.normalizedPath(),
+                            candidate.fileName(),
+                            candidate.size(),
+                            candidate.modifiedAt(),
+                            now,
+                            counts,
+                            hashQueue
+                    );
+                } else {
+                    catalogExistingPath(
+                            scanRunId,
+                            root,
+                            existing,
+                            candidate.path(),
+                            candidate.normalizedPath(),
+                            candidate.fileName(),
+                            candidate.size(),
+                            candidate.modifiedAt(),
+                            now,
+                            counts,
+                            hashQueue,
+                            pendingObservations
+                    );
+                }
+                progress.maybeUpdate();
+            }
+        });
+        if (pendingObservations.size() >= OBSERVATION_BATCH_SIZE) {
+            flushObservations(pendingObservations);
         }
     }
 
@@ -395,7 +433,6 @@ public class ScanService {
                 scanRunId,
                 now
         );
-        counts.result("added");
         hashQueue.add(new HashWorkItem(
                 root.id(),
                 assetFileId,
@@ -406,6 +443,128 @@ public class ScanService {
                 modifiedAt,
                 null
         ));
+    }
+
+    private void enqueueIdentityJobs(
+            UUID scanRunId,
+            UUID libraryId,
+            List<HashWorkItem> hashQueue,
+            OffsetDateTime now
+    ) {
+        for (HashWorkItem item : hashQueue) {
+            backgroundJobService.enqueue(identityJob(scanRunId, libraryId, item, now));
+        }
+    }
+
+    private BackgroundJobCreate identityJob(UUID scanRunId, UUID libraryId, HashWorkItem item, OffsetDateTime now) {
+        try {
+            ScanIdentityJobPayload payload = new ScanIdentityJobPayload(
+                    scanRunId,
+                    libraryId,
+                    item.rootId(),
+                    item.assetFileId(),
+                    item.path(),
+                    item.normalizedPath(),
+                    item.fileName(),
+                    item.size(),
+                    item.modifiedAt()
+            );
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            return new BackgroundJobCreate(
+                    ScanJobTypes.ASSET_IDENTITY_BACKFILL,
+                    payloadJson,
+                    0,
+                    3,
+                    now,
+                    ScanJobTypes.ASSET_IDENTITY_BACKFILL + ":size:" + item.size(),
+                    identityDedupeKey(scanRunId, item)
+            );
+        } catch (JsonProcessingException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not create identity job", exception);
+        }
+    }
+
+    private String identityDedupeKey(UUID scanRunId, HashWorkItem item) {
+        return ScanJobTypes.ASSET_IDENTITY_BACKFILL
+                + ":" + scanRunId
+                + ":" + item.assetFileId()
+                + ":" + item.size()
+                + ":" + item.modifiedAt().toInstant().toEpochMilli();
+    }
+
+    void executeIdentityJob(ScanIdentityJobPayload payload, UUID jobId) {
+        LibraryRepository.LibraryRecord library = libraryRepository.findLibrary(payload.libraryId()).orElse(null);
+        if (library == null) {
+            return;
+        }
+        ensureActive(library);
+        LibraryRepository.LibraryRootRecord root = library.roots().stream()
+                .filter(candidate -> candidate.id().equals(payload.rootId()))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Source path not found"));
+
+        ScanRepository.AssetFileRecord candidate = transactionTemplate.execute(status ->
+                scanRepository.findAssetFile(payload.assetFileId()).orElse(null));
+        if (candidate == null || !identityPayloadMatches(payload, candidate)) {
+            return;
+        }
+
+        ScanCounts counts = new ScanCounts();
+        List<ScanRepository.ObservationInsert> pendingObservations = new ArrayList<>();
+        try {
+            FileHasher.Hashes hashes = fileHasher.hash(Path.of(payload.normalizedPath()));
+            transactionTemplate.executeWithoutResult(status -> {
+                ScanRepository.AssetFileRecord current = scanRepository.findAssetFile(payload.assetFileId()).orElse(null);
+                if (current == null || !identityPayloadMatches(payload, current)) {
+                    return;
+                }
+                reconcileHashes(
+                        payload.scanRunId(),
+                        root,
+                        new HashWorkItem(
+                                payload.rootId(),
+                                payload.assetFileId(),
+                                payload.path(),
+                                payload.normalizedPath(),
+                                payload.fileName(),
+                                payload.size(),
+                                payload.modifiedAt(),
+                                current
+                        ),
+                        hashes,
+                        counts,
+                        new HashSet<>(),
+                        pendingObservations
+                );
+                scanRepository.createObservations(pendingObservations);
+                scanRepository.incrementScanRunCounts(payload.scanRunId(), counts);
+            });
+        } catch (IOException | SecurityException exception) {
+            transactionTemplate.executeWithoutResult(status -> {
+                ScanRepository.AssetFileRecord current = scanRepository.findAssetFile(payload.assetFileId()).orElse(null);
+                if (current != null && identityPayloadMatches(payload, current)) {
+                    recordError(
+                            payload.scanRunId(),
+                            payload.libraryId(),
+                            payload.rootId(),
+                            payload.normalizedPath(),
+                            "file_failed",
+                            exception.getMessage(),
+                            counts
+                    );
+                    scanRepository.incrementScanRunCounts(payload.scanRunId(), counts);
+                }
+            });
+        }
+    }
+
+    private boolean identityPayloadMatches(ScanIdentityJobPayload payload, ScanRepository.AssetFileRecord current) {
+        return "active".equals(current.status())
+                && current.libraryId().equals(payload.libraryId())
+                && current.rootId().equals(payload.rootId())
+                && current.normalizedPath().equals(payload.normalizedPath())
+                && current.sizeBytes() == payload.size()
+                && current.modifiedAt().toInstant().toEpochMilli() == payload.modifiedAt().toInstant().toEpochMilli();
     }
 
     private void hashAndReconcile(
@@ -419,54 +578,35 @@ public class ScanService {
         Path normalized = Path.of(item.normalizedPath());
         try {
             FileHasher.Hashes hashes = fileHasher.hash(normalized);
-            OffsetDateTime now = OffsetDateTime.now();
-            ScanRepository.AssetFileRecord existing = item.existingFile() == null
-                    ? scanRepository.findActiveFileByPath(root.libraryId(), item.normalizedPath()).orElse(null)
-                    : item.existingFile();
-
-            if (existing == null) {
-                return;
+            reconcileHashes(scanRunId, root, item, hashes, counts, handledPreviousFiles, pendingObservations);
+        } catch (IOException | SecurityException exception) {
+            if (item.existingFile() != null) {
+                handledPreviousFiles.add(item.existingFile().id());
             }
+            recordError(scanRunId, root.libraryId(), root.id(), item.normalizedPath(), "file_failed", exception.getMessage(), counts);
+        }
+    }
 
-            if (ProvisionalIdentity.isProvisional(existing.contentHash())) {
-                promoteProvisionalFile(
-                        scanRunId,
-                        root,
-                        existing,
-                        item.path(),
-                        item.normalizedPath(),
-                        item.fileName(),
-                        item.size(),
-                        item.modifiedAt(),
-                        hashes,
-                        counts,
-                        handledPreviousFiles,
-                        pendingObservations,
-                        now
-                );
-                return;
-            }
+    private void reconcileHashes(
+            UUID scanRunId,
+            LibraryRepository.LibraryRootRecord root,
+            HashWorkItem item,
+            FileHasher.Hashes hashes,
+            ScanCounts counts,
+            Set<UUID> handledPreviousFiles,
+            List<ScanRepository.ObservationInsert> pendingObservations
+    ) {
+        OffsetDateTime now = OffsetDateTime.now();
+        ScanRepository.AssetFileRecord existing = item.existingFile() == null
+                ? scanRepository.findActiveFileByPath(root.libraryId(), item.normalizedPath()).orElse(null)
+                : item.existingFile();
 
-            if (existing.contentHash().equals(hashes.contentHash())) {
-                pendingObservations.add(observation(
-                        scanRunId,
-                        root.libraryId(),
-                        root.id(),
-                        existing.assetId(),
-                        existing.id(),
-                        item.path(),
-                        item.normalizedPath(),
-                        item.size(),
-                        item.modifiedAt(),
-                        hashes.partialHash(),
-                        hashes.contentHash(),
-                        "unchanged"
-                ));
-                counts.result("unchanged");
-                return;
-            }
+        if (existing == null) {
+            return;
+        }
 
-            reconcileModifiedPath(
+        if (ProvisionalIdentity.isProvisional(existing.contentHash())) {
+            promoteProvisionalFile(
                     scanRunId,
                     root,
                     existing,
@@ -481,12 +621,43 @@ public class ScanService {
                     pendingObservations,
                     now
             );
-        } catch (IOException | SecurityException exception) {
-            if (item.existingFile() != null) {
-                handledPreviousFiles.add(item.existingFile().id());
-            }
-            recordError(scanRunId, root.libraryId(), root.id(), item.normalizedPath(), "file_failed", exception.getMessage(), counts);
+            return;
         }
+
+        if (existing.contentHash().equals(hashes.contentHash())) {
+            pendingObservations.add(observation(
+                    scanRunId,
+                    root.libraryId(),
+                    root.id(),
+                    existing.assetId(),
+                    existing.id(),
+                    item.path(),
+                    item.normalizedPath(),
+                    item.size(),
+                    item.modifiedAt(),
+                    hashes.partialHash(),
+                    hashes.contentHash(),
+                    "unchanged"
+            ));
+            counts.result("unchanged");
+            return;
+        }
+
+        reconcileModifiedPath(
+                scanRunId,
+                root,
+                existing,
+                item.path(),
+                item.normalizedPath(),
+                item.fileName(),
+                item.size(),
+                item.modifiedAt(),
+                hashes,
+                counts,
+                handledPreviousFiles,
+                pendingObservations,
+                now
+        );
     }
 
     private void promoteProvisionalFile(
@@ -573,6 +744,42 @@ public class ScanService {
             return;
         }
 
+        var existingAssetWithHash = scanRepository.findAssetByHash(hashes.contentHash());
+        if (existingAssetWithHash.isPresent() && !existingAssetWithHash.get().equals(existing.assetId())) {
+            handledPreviousFiles.add(existing.id());
+            scanRepository.markStatus(existing.id(), "superseded", null);
+            UUID assetFileId = scanRepository.createAssetFile(
+                    existingAssetWithHash.get(),
+                    existing.libraryId(),
+                    root.id(),
+                    path,
+                    normalizedPath,
+                    fileName,
+                    size,
+                    modifiedAt,
+                    hashes.contentHash(),
+                    scanRunId,
+                    now
+            );
+            scanRepository.markStatus(existing.id(), "superseded", assetFileId);
+            pendingObservations.add(observation(
+                    scanRunId,
+                    root.libraryId(),
+                    root.id(),
+                    existingAssetWithHash.get(),
+                    assetFileId,
+                    path,
+                    normalizedPath,
+                    size,
+                    modifiedAt,
+                    hashes.partialHash(),
+                    hashes.contentHash(),
+                    "added"
+            ));
+            counts.result("added");
+            return;
+        }
+
         scanRepository.updateAssetContentHash(existing.assetId(), hashes.contentHash(), now);
         scanRepository.updateAssetFileContentHash(existing.id(), hashes.contentHash());
         scanRepository.updateActiveFileSeen(existing.id(), size, modifiedAt, scanRunId, now);
@@ -591,6 +798,7 @@ public class ScanService {
                 hashes.contentHash(),
                 "added"
         ));
+        counts.result("added");
     }
 
     private void reconcileModifiedPath(
@@ -645,6 +853,128 @@ public class ScanService {
     private UUID assetForHash(String contentHash, String mediaType) {
         return scanRepository.findAssetByHash(contentHash)
                 .orElseGet(() -> scanRepository.createAsset(contentHash, mediaType, OffsetDateTime.now()));
+    }
+
+    void tryCompleteCatalogScan(ScanCatalogJobPayload payload) {
+        LibraryRepository.LibraryRecord library = libraryRepository.findLibrary(payload.libraryId()).orElse(null);
+        if (library == null) {
+            return;
+        }
+        LibraryRepository.LibraryRootRecord root = payload.rootId() == null
+                ? null
+                : library.roots().stream()
+                .filter(candidate -> candidate.id().equals(payload.rootId()))
+                .findFirst()
+                .orElse(null);
+        tryCompleteScanIfReady(
+                payload.scanRunId(),
+                library,
+                rootsForScan(library, root),
+                exclusionMatcher(library),
+                null
+        );
+    }
+
+    void tryCompleteIdentityScan(ScanIdentityJobPayload payload) {
+        LibraryRepository.LibraryRecord library = libraryRepository.findLibrary(payload.libraryId()).orElse(null);
+        if (library == null) {
+            return;
+        }
+        LibraryRepository.LibraryRootRecord root = library.roots().stream()
+                .filter(candidate -> candidate.id().equals(payload.rootId()))
+                .findFirst()
+                .orElse(null);
+        tryCompleteScanIfReady(
+                payload.scanRunId(),
+                library,
+                rootsForScan(library, root),
+                exclusionMatcher(library),
+                null
+        );
+    }
+
+    private List<LibraryRepository.LibraryRootRecord> rootsForScan(
+            LibraryRepository.LibraryRecord library,
+            LibraryRepository.LibraryRootRecord singleRoot
+    ) {
+        return singleRoot == null ? library.roots() : List.of(singleRoot);
+    }
+
+    private ExclusionMatcher exclusionMatcher(LibraryRepository.LibraryRecord library) {
+        List<String> exclusionPatterns = new ArrayList<>(libraryRepository.listGlobalExclusionPatterns().stream()
+                .map(LibraryRepository.GlobalExclusionPatternRecord::pattern)
+                .toList());
+        exclusionPatterns.addAll(library.exclusionPatterns().stream()
+                .map(LibraryRepository.LibraryExclusionPatternRecord::pattern)
+                .toList());
+        return new ExclusionMatcher(exclusionPatterns);
+    }
+
+    private void tryCompleteScanIfReady(
+            UUID scanRunId,
+            LibraryRepository.LibraryRecord library,
+            List<LibraryRepository.LibraryRootRecord> roots,
+            ExclusionMatcher exclusionMatcher,
+            UUID currentJobId
+    ) {
+        boolean catalogCompleted = transactionTemplate.execute(status -> scanRepository.isScanCatalogCompleted(scanRunId));
+        if (!catalogCompleted) {
+            return;
+        }
+        if (backgroundJobService.hasActiveJobs(
+                ScanJobTypes.LIBRARY_CATALOG_ROOT,
+                ScanJobTypes.LIBRARY_CATALOG_ROOT + ":" + scanRunId,
+                currentJobId
+        )) {
+            return;
+        }
+        if (backgroundJobService.hasActiveJobs(
+                ScanJobTypes.ASSET_IDENTITY_BACKFILL,
+                ScanJobTypes.ASSET_IDENTITY_BACKFILL + ":" + scanRunId,
+                currentJobId
+        )) {
+            return;
+        }
+        transactionTemplate.executeWithoutResult(status -> {
+            ScanRepository.ScanRunRecord run = scanRepository.findScanRun(scanRunId).orElse(null);
+            if (run == null || !"running".equals(run.status())) {
+                return;
+            }
+            ScanCounts counts = new ScanCounts();
+            List<ScanRepository.ObservationInsert> observations = new ArrayList<>();
+            for (LibraryRepository.LibraryRootRecord root : roots) {
+                Path rootPath = Path.of(root.normalizedPath());
+                if (!Files.isDirectory(rootPath) || !Files.isReadable(rootPath) || !Files.isExecutable(rootPath)) {
+                    continue;
+                }
+                List<ScanRepository.AssetFileRecord> notSeen =
+                        scanRepository.activeFilesNotSeenInRun(library.id(), root.id(), scanRunId);
+                for (ScanRepository.AssetFileRecord activeFile : notSeen) {
+                    if (exclusionMatcher.matches(rootPath, Path.of(activeFile.normalizedPath()))) {
+                        continue;
+                    }
+                    scanRepository.markStatus(activeFile.id(), "missing", null);
+                    observations.add(observation(
+                            scanRunId,
+                            library.id(),
+                            root.id(),
+                            activeFile.assetId(),
+                            activeFile.id(),
+                            activeFile.path(),
+                            activeFile.normalizedPath(),
+                            activeFile.sizeBytes(),
+                            activeFile.modifiedAt(),
+                            null,
+                            activeFile.contentHash(),
+                            "missing"
+                    ));
+                    counts.result("missing");
+                }
+            }
+            scanRepository.createObservations(observations);
+            scanRepository.incrementScanRunCounts(scanRunId, counts);
+            scanRepository.completeScanRunFromCurrentCounts(scanRunId, OffsetDateTime.now());
+        });
     }
 
     private void maybeFlushProgress(ScanProgressThrottle progress) {
@@ -774,6 +1104,15 @@ public class ScanService {
         if (!"active".equals(library.status())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived libraries must be restored before scanning");
         }
+    }
+
+    private record FileCandidate(
+            String path,
+            String normalizedPath,
+            String fileName,
+            long size,
+            OffsetDateTime modifiedAt
+    ) {
     }
 
     private record HashWorkItem(

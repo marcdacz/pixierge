@@ -56,7 +56,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "pixierge.background-jobs.enabled=true"
+)
 class LibraryIntegrationTest {
 
     private static final String ADMIN_USERNAME = "admin";

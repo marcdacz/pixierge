@@ -15,6 +15,7 @@ import org.springframework.stereotype.Repository;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,10 +43,41 @@ class ScanRepository {
                 .set(SCAN_RUNS.libraryId, libraryId)
                 .set(SCAN_RUNS.rootId, rootId)
                 .set(SCAN_RUNS.requestedBy, requestedBy)
-                .set(SCAN_RUNS.status, "running")
+                .set(SCAN_RUNS.status, "queued")
                 .set(SCAN_RUNS.startedAt, now)
                 .execute();
         return id;
+    }
+
+    boolean hasActiveScanRun(UUID libraryId) {
+        Integer exists = queryFactory.selectOne()
+                .from(SCAN_RUNS)
+                .where(SCAN_RUNS.libraryId.eq(libraryId).and(SCAN_RUNS.status.in("queued", "running")))
+                .fetchFirst();
+        return exists != null;
+    }
+
+    void markScanRunRunning(UUID scanRunId, OffsetDateTime startedAt) {
+        queryFactory.update(SCAN_RUNS)
+                .set(SCAN_RUNS.status, "running")
+                .set(SCAN_RUNS.startedAt, startedAt)
+                .where(SCAN_RUNS.id.eq(scanRunId).and(SCAN_RUNS.status.in("queued", "running")))
+                .execute();
+    }
+
+    void markScanCatalogCompleted(UUID scanRunId, OffsetDateTime completedAt) {
+        queryFactory.update(SCAN_RUNS)
+                .set(SCAN_RUNS.catalogCompletedAt, completedAt)
+                .where(SCAN_RUNS.id.eq(scanRunId).and(SCAN_RUNS.status.eq("running")))
+                .execute();
+    }
+
+    boolean isScanCatalogCompleted(UUID scanRunId) {
+        OffsetDateTime completedAt = queryFactory.select(SCAN_RUNS.catalogCompletedAt)
+                .from(SCAN_RUNS)
+                .where(SCAN_RUNS.id.eq(scanRunId).and(SCAN_RUNS.status.eq("running")))
+                .fetchOne();
+        return completedAt != null;
     }
 
     void completeScanRun(UUID scanRunId, ScanCounts counts, OffsetDateTime completedAt) {
@@ -66,6 +98,19 @@ class ScanRepository {
                 .execute();
     }
 
+    void completeScanRunFromCurrentCounts(UUID scanRunId, OffsetDateTime completedAt) {
+        ScanRunRecord run = findScanRun(scanRunId).orElse(null);
+        if (run == null) {
+            return;
+        }
+        String status = run.errorCount() > 0 ? "completed_with_errors" : "completed";
+        queryFactory.update(SCAN_RUNS)
+                .set(SCAN_RUNS.status, status)
+                .set(SCAN_RUNS.completedAt, completedAt)
+                .where(SCAN_RUNS.id.eq(scanRunId).and(SCAN_RUNS.status.eq("running")))
+                .execute();
+    }
+
     void updateScanRunProgress(UUID scanRunId, ScanCounts counts) {
         queryFactory.update(SCAN_RUNS)
                 .set(SCAN_RUNS.scannedFileCount, counts.scannedFileCount())
@@ -77,6 +122,32 @@ class ScanRepository {
                 .set(SCAN_RUNS.missingCount, counts.missingCount())
                 .set(SCAN_RUNS.reappearedCount, counts.reappearedCount())
                 .set(SCAN_RUNS.errorCount, counts.errorCount())
+                .where(SCAN_RUNS.id.eq(scanRunId).and(SCAN_RUNS.status.eq("running")))
+                .execute();
+    }
+
+    void incrementScanRunCounts(UUID scanRunId, ScanCounts counts) {
+        if (counts.scannedFileCount() == 0
+                && counts.addedCount() == 0
+                && counts.unchangedCount() == 0
+                && counts.movedCount() == 0
+                && counts.modifiedCount() == 0
+                && counts.duplicateCount() == 0
+                && counts.missingCount() == 0
+                && counts.reappearedCount() == 0
+                && counts.errorCount() == 0) {
+            return;
+        }
+        queryFactory.update(SCAN_RUNS)
+                .set(SCAN_RUNS.scannedFileCount, SCAN_RUNS.scannedFileCount.add(counts.scannedFileCount()))
+                .set(SCAN_RUNS.addedCount, SCAN_RUNS.addedCount.add(counts.addedCount()))
+                .set(SCAN_RUNS.unchangedCount, SCAN_RUNS.unchangedCount.add(counts.unchangedCount()))
+                .set(SCAN_RUNS.movedCount, SCAN_RUNS.movedCount.add(counts.movedCount()))
+                .set(SCAN_RUNS.modifiedCount, SCAN_RUNS.modifiedCount.add(counts.modifiedCount()))
+                .set(SCAN_RUNS.duplicateCount, SCAN_RUNS.duplicateCount.add(counts.duplicateCount()))
+                .set(SCAN_RUNS.missingCount, SCAN_RUNS.missingCount.add(counts.missingCount()))
+                .set(SCAN_RUNS.reappearedCount, SCAN_RUNS.reappearedCount.add(counts.reappearedCount()))
+                .set(SCAN_RUNS.errorCount, SCAN_RUNS.errorCount.add(counts.errorCount()))
                 .where(SCAN_RUNS.id.eq(scanRunId).and(SCAN_RUNS.status.eq("running")))
                 .execute();
     }
@@ -180,6 +251,29 @@ class ScanRepository {
                         .and(ASSET_FILES.status.eq("active")))
                 .fetchOne();
         return Optional.ofNullable(row).map(this::toAssetFileRecord);
+    }
+
+    Optional<AssetFileRecord> findAssetFile(UUID assetFileId) {
+        Tuple row = selectAssetFiles()
+                .where(ASSET_FILES.id.eq(assetFileId))
+                .fetchOne();
+        return Optional.ofNullable(row).map(this::toAssetFileRecord);
+    }
+
+    Map<String, AssetFileRecord> findActiveFilesByPaths(UUID libraryId, List<String> normalizedPaths) {
+        if (normalizedPaths.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, AssetFileRecord> recordsByPath = new java.util.HashMap<>();
+        selectAssetFiles()
+                .where(ASSET_FILES.libraryId.eq(libraryId)
+                        .and(ASSET_FILES.normalizedPath.in(normalizedPaths))
+                        .and(ASSET_FILES.status.eq("active")))
+                .fetch()
+                .stream()
+                .map(this::toAssetFileRecord)
+                .forEach(record -> recordsByPath.put(record.normalizedPath(), record));
+        return recordsByPath;
     }
 
     Optional<AssetFileRecord> findActiveFileByHash(UUID libraryId, String contentHash) {

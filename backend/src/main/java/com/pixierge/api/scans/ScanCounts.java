@@ -30,6 +30,18 @@ final class ScanCounts {
         }
     }
 
+    void add(ScanCounts counts) {
+        scannedFileCount += counts.scannedFileCount();
+        addedCount += counts.addedCount();
+        unchangedCount += counts.unchangedCount();
+        movedCount += counts.movedCount();
+        modifiedCount += counts.modifiedCount();
+        duplicateCount += counts.duplicateCount();
+        missingCount += counts.missingCount();
+        reappearedCount += counts.reappearedCount();
+        errorCount += counts.errorCount();
+    }
+
     int scannedFileCount() {
         return scannedFileCount;
     }

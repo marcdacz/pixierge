@@ -6,7 +6,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(name = "pixierge.background-jobs.enabled", havingValue = "true")
+@ConditionalOnProperty(
+        name = "pixierge.background-jobs.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class BackgroundJobPoller {
 
     private final BackgroundJobWorker worker;

@@ -217,6 +217,23 @@ public class BackgroundJobRepository {
         return Optional.ofNullable(row).map(this::toRecord);
     }
 
+    @Transactional(readOnly = true)
+    public boolean hasActiveJobs(String jobType, String dedupeKeyPrefix, UUID excludedJobId) {
+        var predicate = JOBS.jobType.eq(jobType)
+                .and(JOBS.status.in(STATUS_PENDING, STATUS_RUNNING));
+        if (dedupeKeyPrefix != null && !dedupeKeyPrefix.isBlank()) {
+            predicate = predicate.and(JOBS.dedupeKey.startsWith(dedupeKeyPrefix));
+        }
+        if (excludedJobId != null) {
+            predicate = predicate.and(JOBS.id.ne(excludedJobId));
+        }
+        Integer exists = queryFactory.selectOne()
+                .from(JOBS)
+                .where(predicate)
+                .fetchFirst();
+        return exists != null;
+    }
+
     private com.querydsl.sql.SQLQuery<Tuple> selectJobs() {
         return queryFactory
                 .select(

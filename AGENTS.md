@@ -52,3 +52,4 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean verify
 - Avoid fixed waits in Playwright tests; wait for visible UI state, URLs, network mocks, or other behavior that proves the workflow is ready.
 - When `.plans/` defines an active slice, treat its test gate as required; skipped environment-dependent tests are unverified, not passed.
 - For generated filesystem caches, enforce storage-root containment and use atomic, concurrency-safe writes and database upserts.
+- Watch for Spring `TaskExecutor` bean ambiguity after adding executors, wrap Querydsl connection access in repository/service transaction boundaries, compare filesystem timestamps at database-supported precision, and make queued scan completion wait for all active follow-up jobs before missing-file reconciliation.

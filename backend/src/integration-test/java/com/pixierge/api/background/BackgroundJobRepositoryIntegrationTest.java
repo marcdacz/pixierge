@@ -19,7 +19,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest
+@SpringBootTest(properties = "pixierge.background-jobs.enabled=false")
 class BackgroundJobRepositoryIntegrationTest {
 
     @Container

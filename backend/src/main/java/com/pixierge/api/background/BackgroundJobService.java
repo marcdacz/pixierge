@@ -86,6 +86,10 @@ public class BackgroundJobService {
         transactionTemplate.executeWithoutResult(status -> repository.cancel(jobId, now));
     }
 
+    public boolean hasActiveJobs(String jobType, String dedupeKeyPrefix, UUID excludedJobId) {
+        return transactionTemplate.execute(status -> repository.hasActiveJobs(jobType, dedupeKeyPrefix, excludedJobId));
+    }
+
     private Duration retryDelay(int attempts) {
         long multiplier = 1L << Math.min(Math.max(0, attempts - 1), 6);
         Duration delay = BASE_RETRY_DELAY.multipliedBy(multiplier);
