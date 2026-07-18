@@ -80,24 +80,6 @@ class ScanRepository {
         return completedAt != null;
     }
 
-    void completeScanRun(UUID scanRunId, ScanCounts counts, OffsetDateTime completedAt) {
-        String status = counts.errorCount() > 0 ? "completed_with_errors" : "completed";
-        queryFactory.update(SCAN_RUNS)
-                .set(SCAN_RUNS.status, status)
-                .set(SCAN_RUNS.completedAt, completedAt)
-                .set(SCAN_RUNS.scannedFileCount, counts.scannedFileCount())
-                .set(SCAN_RUNS.addedCount, counts.addedCount())
-                .set(SCAN_RUNS.unchangedCount, counts.unchangedCount())
-                .set(SCAN_RUNS.movedCount, counts.movedCount())
-                .set(SCAN_RUNS.modifiedCount, counts.modifiedCount())
-                .set(SCAN_RUNS.duplicateCount, counts.duplicateCount())
-                .set(SCAN_RUNS.missingCount, counts.missingCount())
-                .set(SCAN_RUNS.reappearedCount, counts.reappearedCount())
-                .set(SCAN_RUNS.errorCount, counts.errorCount())
-                .where(SCAN_RUNS.id.eq(scanRunId))
-                .execute();
-    }
-
     void completeScanRunFromCurrentCounts(UUID scanRunId, OffsetDateTime completedAt) {
         ScanRunRecord run = findScanRun(scanRunId).orElse(null);
         if (run == null) {

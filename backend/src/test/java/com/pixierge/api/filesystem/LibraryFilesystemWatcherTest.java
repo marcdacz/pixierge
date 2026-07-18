@@ -28,6 +28,7 @@ class LibraryFilesystemWatcherTest {
                 new LibraryRepository(null),
                 backgroundJobService,
                 objectMapper,
+                new FilesystemWatcherHealth(),
                 Duration.ofSeconds(2),
                 Duration.ofSeconds(30)
         );
@@ -51,6 +52,25 @@ class LibraryFilesystemWatcherTest {
         assertThat(payload.rootId()).isEqualTo(rootId);
         assertThat(payload.path()).isEqualTo(path.toString());
         assertThat(payload.eventType()).isEqualTo("directory_created");
+    }
+
+    @Test
+    void watcherHealthTracksOverflowAndRecoversAfterCleanRefresh() {
+        FilesystemWatcherHealth health = new FilesystemWatcherHealth();
+
+        health.recordStarted();
+        health.recordOverflow("Overflow under /photos");
+        FilesystemWatcherHealthSnapshot degraded = health.snapshot();
+        health.recordRegistrationRefresh(1, 5, true);
+        FilesystemWatcherHealthSnapshot recovered = health.snapshot();
+
+        assertThat(degraded.status()).isEqualTo("degraded");
+        assertThat(degraded.lastErrorCode()).isEqualTo("watcher_overflow");
+        assertThat(degraded.lastOverflowAt()).isNotNull();
+        assertThat(recovered.status()).isEqualTo("healthy");
+        assertThat(recovered.lastErrorCode()).isEqualTo("watcher_overflow");
+        assertThat(recovered.registeredRootCount()).isEqualTo(1);
+        assertThat(recovered.registeredDirectoryCount()).isEqualTo(5);
     }
 
     private static class RecordingBackgroundJobService extends BackgroundJobService {

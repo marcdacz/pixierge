@@ -41,6 +41,7 @@ class LibraryFilesystemWatcher implements DisposableBean {
     private final LibraryRepository libraryRepository;
     private final BackgroundJobService backgroundJobService;
     private final ObjectMapper objectMapper;
+    private final FilesystemWatcherHealth watcherHealth;
     private final Duration debounce;
     private final Duration registrationRefreshInterval;
     private final Map<WatchKey, WatchedDirectory> watchedDirectories = new ConcurrentHashMap<>();
@@ -54,12 +55,14 @@ class LibraryFilesystemWatcher implements DisposableBean {
             LibraryRepository libraryRepository,
             BackgroundJobService backgroundJobService,
             ObjectMapper objectMapper,
+            FilesystemWatcherHealth watcherHealth,
             @Value("${pixierge.filesystem-watcher.debounce:2s}") Duration debounce,
             @Value("${pixierge.filesystem-watcher.registration-refresh-interval:30s}") Duration registrationRefreshInterval
     ) {
         this.libraryRepository = libraryRepository;
         this.backgroundJobService = backgroundJobService;
         this.objectMapper = objectMapper;
+        this.watcherHealth = watcherHealth;
         this.debounce = debounce;
         this.registrationRefreshInterval = registrationRefreshInterval;
     }
@@ -73,9 +76,11 @@ class LibraryFilesystemWatcher implements DisposableBean {
             watchService = FileSystems.getDefault().newWatchService();
         } catch (IOException exception) {
             log.warn("Filesystem watcher could not start", exception);
+            watcherHealth.recordDegraded("watcher_start_failed", exception.getMessage());
             return;
         }
         running = true;
+        watcherHealth.recordStarted();
         watcherThread = new Thread(this::runLoop, "pixierge-filesystem-watcher");
         watcherThread.setDaemon(true);
         watcherThread.start();
@@ -97,6 +102,7 @@ class LibraryFilesystemWatcher implements DisposableBean {
                 return;
             } catch (RuntimeException exception) {
                 log.warn("Filesystem watcher loop failed", exception);
+                watcherHealth.recordDegraded("watcher_loop_failed", exception.getMessage());
             }
         }
     }
@@ -107,29 +113,39 @@ class LibraryFilesystemWatcher implements DisposableBean {
             return;
         }
         nextRegistrationRefresh = now.plus(registrationRefreshInterval);
+        int rootCount = 0;
+        boolean healthy = true;
         for (LibraryRepository.LibraryRecord library : libraryRepository.listLibraries()) {
             if (!"active".equals(library.status())) {
                 continue;
             }
             for (LibraryRepository.LibraryRootRecord root : library.roots()) {
-                registerTree(library.id(), root.id(), Path.of(root.normalizedPath()));
+                rootCount++;
+                healthy = registerTree(library.id(), root.id(), Path.of(root.normalizedPath())) && healthy;
             }
         }
+        watcherHealth.recordRegistrationRefresh(rootCount, watchedPaths.size(), healthy);
     }
 
-    private void registerTree(UUID libraryId, UUID rootId, Path rootPath) {
+    private boolean registerTree(UUID libraryId, UUID rootId, Path rootPath) {
         if (!Files.isDirectory(rootPath) || !Files.isReadable(rootPath)) {
-            return;
+            watcherHealth.recordDegraded("root_unavailable", "Source root is unavailable: " + rootPath);
+            enqueueChange(libraryId, rootId, rootPath, "root_unavailable");
+            return false;
         }
         try (var paths = Files.walk(rootPath)) {
             paths.filter(Files::isDirectory)
-                    .forEach(path -> registerDirectory(libraryId, rootId, path));
+                    .forEach(path -> registerDirectory(libraryId, rootId, rootPath, path));
+            return true;
         } catch (IOException | SecurityException exception) {
             log.debug("Could not register filesystem watcher path {}", rootPath, exception);
+            watcherHealth.recordDegraded("root_registration_failed", exception.getMessage());
+            enqueueChange(libraryId, rootId, rootPath, "root_registration_failed");
+            return false;
         }
     }
 
-    private void registerDirectory(UUID libraryId, UUID rootId, Path directory) {
+    private void registerDirectory(UUID libraryId, UUID rootId, Path rootPath, Path directory) {
         Path normalized = directory.toAbsolutePath().normalize();
         if (watchedPaths.containsKey(normalized)) {
             return;
@@ -141,11 +157,18 @@ class LibraryFilesystemWatcher implements DisposableBean {
                     StandardWatchEventKinds.ENTRY_MODIFY,
                     StandardWatchEventKinds.OVERFLOW
             );
-            WatchedDirectory watched = new WatchedDirectory(libraryId, rootId, normalized);
+            WatchedDirectory watched = new WatchedDirectory(
+                    libraryId,
+                    rootId,
+                    rootPath.toAbsolutePath().normalize(),
+                    normalized
+            );
             watchedPaths.put(normalized, watched);
             watchedDirectories.put(key, watched);
         } catch (IOException | SecurityException exception) {
             log.debug("Could not register filesystem watcher directory {}", normalized, exception);
+            watcherHealth.recordDegraded("directory_registration_failed", exception.getMessage());
+            enqueueChange(libraryId, rootId, rootPath, "directory_registration_failed");
         }
     }
 
@@ -157,12 +180,13 @@ class LibraryFilesystemWatcher implements DisposableBean {
         }
         for (WatchEvent<?> event : key.pollEvents()) {
             if (event.kind() == StandardWatchEventKinds.OVERFLOW) {
-                enqueueChange(watched, watched.path(), "overflow");
+                watcherHealth.recordOverflow("Filesystem watcher overflow under " + watched.rootPath());
+                enqueueChange(watched, watched.rootPath(), "overflow");
                 continue;
             }
             Path changed = watched.path().resolve((Path) event.context()).toAbsolutePath().normalize();
             if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(changed)) {
-                registerTree(watched.libraryId(), watched.rootId(), changed);
+                registerTree(watched.libraryId(), watched.rootId(), watched.rootPath(), changed);
                 enqueueChange(watched, changed, "directory_created");
                 continue;
             }
@@ -175,6 +199,21 @@ class LibraryFilesystemWatcher implements DisposableBean {
         if (!key.reset()) {
             watchedDirectories.remove(key);
             watchedPaths.remove(watched.path());
+        }
+    }
+
+    private void registerTree(UUID libraryId, UUID rootId, Path rootPath, Path newSubtree) {
+        if (!Files.isDirectory(newSubtree) || !Files.isReadable(newSubtree)) {
+            watcherHealth.recordDegraded("directory_unavailable", "Directory is unavailable: " + newSubtree);
+            return;
+        }
+        try (var paths = Files.walk(newSubtree)) {
+            paths.filter(Files::isDirectory)
+                    .forEach(path -> registerDirectory(libraryId, rootId, rootPath, path));
+        } catch (IOException | SecurityException exception) {
+            log.debug("Could not register filesystem watcher subtree {}", newSubtree, exception);
+            watcherHealth.recordDegraded("directory_registration_failed", exception.getMessage());
+            enqueueChange(libraryId, rootId, rootPath, "directory_registration_failed");
         }
     }
 
@@ -213,8 +252,9 @@ class LibraryFilesystemWatcher implements DisposableBean {
         if (watcherThread != null) {
             watcherThread.interrupt();
         }
+        watcherHealth.recordStopped();
     }
 
-    private record WatchedDirectory(UUID libraryId, UUID rootId, Path path) {
+    private record WatchedDirectory(UUID libraryId, UUID rootId, Path rootPath, Path path) {
     }
 }

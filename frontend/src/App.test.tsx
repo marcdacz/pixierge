@@ -91,6 +91,50 @@ const runningScan = {
   unchangedCount: 0
 };
 
+const backgroundWorkHealth = {
+  queues: [
+    {
+      jobType: 'library-catalog-root',
+      status: 'pending',
+      count: 2,
+      oldestCreatedAt: '2026-07-04T00:00:00Z',
+      oldestNextRunAt: '2026-07-04T00:00:00Z',
+      latestUpdatedAt: '2026-07-04T00:02:00Z'
+    },
+    {
+      jobType: 'filesystem-change-event',
+      status: 'dead_letter',
+      count: 1,
+      oldestCreatedAt: '2026-07-04T00:03:00Z',
+      oldestNextRunAt: '2026-07-04T00:03:00Z',
+      latestUpdatedAt: '2026-07-04T00:04:00Z'
+    }
+  ],
+  recentProblems: [
+    {
+      id: 'job-1',
+      jobType: 'filesystem-change-event',
+      status: 'dead_letter',
+      attempts: 3,
+      maxAttempts: 3,
+      lastErrorCode: 'watcher_overflow',
+      lastErrorMessage: 'Watcher overflow under /photos',
+      updatedAt: '2026-07-04T00:04:00Z',
+      completedAt: '2026-07-04T00:04:00Z'
+    }
+  ],
+  watcher: {
+    status: 'degraded',
+    lastErrorCode: 'watcher_overflow',
+    lastErrorMessage: 'Filesystem watcher overflow under /photos',
+    lastErrorAt: '2026-07-04T00:04:00Z',
+    lastOverflowAt: '2026-07-04T00:04:00Z',
+    lastRegistrationRefreshAt: '2026-07-04T00:05:00Z',
+    registeredRootCount: 1,
+    registeredDirectoryCount: 42
+  }
+};
+
 const libraryTree = {
   roots: [
     {
@@ -281,6 +325,37 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
     expect(screen.getByLabelText('Library name')).toBeInTheDocument();
+  });
+
+  it('shows background work health in settings', async () => {
+    const fetchMock = mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: libraryTree },
+      { status: 200, body: browseAssets },
+      { status: 200, body: globalExclusionPatterns },
+      { status: 200, body: backgroundWorkHealth }
+    ]);
+
+    render(<App />);
+
+    await screen.findByRole('heading', { name: 'All folders', level: 2 });
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Utilities' })).getByRole('button', { name: 'Settings' })
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Background work' }));
+
+    expect(await screen.findByRole('heading', { name: 'Background work' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Queue health' })).toBeInTheDocument();
+    expect(screen.getByText('library-catalog-root')).toBeInTheDocument();
+    expect(screen.getAllByText('dead letter')).not.toHaveLength(0);
+    expect(screen.getByText(/Filesystem watcher overflow under \/photos/)).toBeInTheDocument();
+    expect(screen.getByText('42')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/admin/background/health',
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
   });
 
   it('opens the search page when searching from another view', async () => {

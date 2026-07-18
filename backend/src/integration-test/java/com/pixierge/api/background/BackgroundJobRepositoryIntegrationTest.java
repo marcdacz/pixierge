@@ -87,6 +87,47 @@ class BackgroundJobRepositoryIntegrationTest {
         assertThat(secondClaim).extracting(BackgroundJobRecord::id).containsExactly(secondId);
     }
 
+    @Test
+    void summarizesQueueCountsAndRecentProblemJobs() {
+        OffsetDateTime now = OffsetDateTime.now();
+        UUID pendingId = transactionTemplate.execute(status -> repository.enqueue(
+                job("asset-identity-backfill", "identity:1", "identity:1"), now));
+        UUID deadLetterId = transactionTemplate.execute(status -> repository.enqueue(
+                job("filesystem-change-event", "watcher:1", "watcher:1"), now));
+        transactionTemplate.executeWithoutResult(status -> {
+            List<BackgroundJobRecord> claimed = repository.claimReadyJobs(2, "worker-1", now.plusSeconds(1), now.plusMinutes(5));
+            claimed.stream()
+                    .filter(job -> job.id().equals(deadLetterId))
+                    .findFirst()
+                    .ifPresent(job -> repository.deadLetter(
+                            job.id(),
+                            "worker-1",
+                            "watcher_overflow",
+                            "Watcher overflow",
+                            now.plusSeconds(2)
+                    ));
+        });
+
+        List<BackgroundJobStatusSummary> summaries = transactionTemplate.execute(status ->
+                repository.summarizeByTypeAndStatus());
+        List<BackgroundJobProblemSummary> problems = transactionTemplate.execute(status ->
+                repository.latestProblemJobs(10));
+
+        assertThat(summaries)
+                .anySatisfy(summary -> {
+                    assertThat(summary.jobType()).isEqualTo("asset-identity-backfill");
+                    assertThat(summary.status()).isEqualTo(BackgroundJobRepository.STATUS_RUNNING);
+                    assertThat(summary.count()).isEqualTo(1);
+                })
+                .anySatisfy(summary -> {
+                    assertThat(summary.jobType()).isEqualTo("filesystem-change-event");
+                    assertThat(summary.status()).isEqualTo(BackgroundJobRepository.STATUS_DEAD_LETTER);
+                    assertThat(summary.count()).isEqualTo(1);
+                });
+        assertThat(problems).extracting(BackgroundJobProblemSummary::id).contains(deadLetterId);
+        assertThat(problems).extracting(BackgroundJobProblemSummary::id).doesNotContain(pendingId);
+    }
+
     private BackgroundJobCreate job(String jobType, String dedupeKey, String concurrencyKey) {
         return new BackgroundJobCreate(
                 jobType,

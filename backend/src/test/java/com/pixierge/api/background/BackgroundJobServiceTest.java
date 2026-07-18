@@ -113,6 +113,31 @@ class BackgroundJobServiceTest {
         assertThat(repository.find(secondId).orElseThrow().status()).isEqualTo(BackgroundJobRepository.STATUS_PENDING);
     }
 
+    @Test
+    void summarizesQueueHealthAndRecentProblemJobs() {
+        UUID retryingId = service.enqueue(job("asset-identity-backfill", "identity:1", 3));
+        UUID deadLetterId = service.enqueue(job("filesystem-change-event", "watcher:1", 1));
+        BackgroundJobRecord retrying = service.claimReadyJobs(1, WORKER_ID).getFirst();
+        service.fail(retrying.id(), WORKER_ID, "io_error", "Temporary failure");
+        BackgroundJobRecord deadLetter = service.claimReadyJobs(1, WORKER_ID).getFirst();
+        service.fail(deadLetter.id(), WORKER_ID, "overflow", "Overflow fallback failed");
+
+        assertThat(service.summarizeByTypeAndStatus())
+                .anySatisfy(summary -> {
+                    assertThat(summary.jobType()).isEqualTo("asset-identity-backfill");
+                    assertThat(summary.status()).isEqualTo(BackgroundJobRepository.STATUS_PENDING);
+                    assertThat(summary.count()).isEqualTo(1);
+                })
+                .anySatisfy(summary -> {
+                    assertThat(summary.jobType()).isEqualTo("filesystem-change-event");
+                    assertThat(summary.status()).isEqualTo(BackgroundJobRepository.STATUS_DEAD_LETTER);
+                    assertThat(summary.count()).isEqualTo(1);
+                });
+        assertThat(service.latestProblemJobs(10))
+                .extracting(BackgroundJobProblemSummary::id)
+                .contains(retryingId, deadLetterId);
+    }
+
     private BackgroundJobCreate job(String jobType, String dedupeKey, int maxAttempts) {
         return new BackgroundJobCreate(
                 jobType,
@@ -325,6 +350,59 @@ class BackgroundJobServiceTest {
                     .filter(job -> dedupeKey.equals(job.dedupeKey()))
                     .filter(job -> STATUS_PENDING.equals(job.status()) || STATUS_RUNNING.equals(job.status()))
                     .findFirst();
+        }
+
+        @Override
+        public List<BackgroundJobStatusSummary> summarizeByTypeAndStatus() {
+            return jobs.stream()
+                    .collect(java.util.stream.Collectors.groupingBy(
+                            job -> job.jobType() + "\n" + job.status()
+                    ))
+                    .entrySet()
+                    .stream()
+                    .map(entry -> {
+                        BackgroundJobRecord first = entry.getValue().getFirst();
+                        return new BackgroundJobStatusSummary(
+                                first.jobType(),
+                                first.status(),
+                                entry.getValue().size(),
+                                entry.getValue().stream()
+                                        .map(BackgroundJobRecord::createdAt)
+                                        .min(OffsetDateTime::compareTo)
+                                        .orElse(null),
+                                entry.getValue().stream()
+                                        .map(BackgroundJobRecord::nextRunAt)
+                                        .min(OffsetDateTime::compareTo)
+                                        .orElse(null),
+                                entry.getValue().stream()
+                                        .map(BackgroundJobRecord::updatedAt)
+                                        .max(OffsetDateTime::compareTo)
+                                        .orElse(null)
+                        );
+                    })
+                    .toList();
+        }
+
+        @Override
+        public List<BackgroundJobProblemSummary> latestProblemJobs(int limit) {
+            return jobs.stream()
+                    .filter(job -> STATUS_FAILED.equals(job.status())
+                            || STATUS_DEAD_LETTER.equals(job.status())
+                            || job.lastErrorCode() != null)
+                    .sorted(Comparator.comparing(BackgroundJobRecord::updatedAt).reversed())
+                    .limit(Math.max(1, limit))
+                    .map(job -> new BackgroundJobProblemSummary(
+                            job.id(),
+                            job.jobType(),
+                            job.status(),
+                            job.attempts(),
+                            job.maxAttempts(),
+                            job.lastErrorCode(),
+                            job.lastErrorMessage(),
+                            job.updatedAt(),
+                            job.completedAt()
+                    ))
+                    .toList();
         }
 
         private void makeReady(UUID jobId) {

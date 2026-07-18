@@ -689,10 +689,6 @@ class ScanServiceTest {
             currentCounts = counts;
         }
 
-        @Override
-        void completeScanRun(UUID scanRunId, ScanCounts counts, OffsetDateTime completedAt) {
-            completedCounts = counts;
-        }
     }
 
     private static class RecordingBackgroundJobService extends BackgroundJobService {

@@ -17,10 +17,8 @@ import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
@@ -272,7 +270,6 @@ public class ScanService {
         ScanProgressThrottle progress = new ScanProgressThrottle(scanRunId, scanRepository, counts);
         List<LibraryRepository.LibraryRootRecord> roots = singleRoot == null ? library.roots() : List.of(singleRoot);
         ExclusionMatcher exclusionMatcher = exclusionMatcher(library);
-        Set<UUID> handledPreviousFiles = new HashSet<>();
         List<HashWorkItem> hashQueue = new ArrayList<>();
         List<ScanRepository.ObservationInsert> pendingObservations = new ArrayList<>();
 
@@ -301,7 +298,6 @@ public class ScanService {
                                 catalogBatch,
                                 hashQueue,
                                 pendingObservations,
-                                handledPreviousFiles,
                                 progress
                         ));
             } catch (IOException | SecurityException exception) {
@@ -343,7 +339,6 @@ public class ScanService {
             List<FileCandidate> catalogBatch,
             List<HashWorkItem> hashQueue,
             List<ScanRepository.ObservationInsert> pendingObservations,
-            Set<UUID> handledPreviousFiles,
             ScanProgressThrottle progress
     ) {
         Path normalized = file.toAbsolutePath().normalize();
@@ -362,8 +357,6 @@ public class ScanService {
             }
         } catch (IOException | SecurityException exception) {
             transactionTemplate.executeWithoutResult(status -> {
-                scanRepository.findActiveFileByPath(libraryId, normalized.toString())
-                        .ifPresent(activeFile -> handledPreviousFiles.add(activeFile.id()));
                 recordError(scanRunId, libraryId, root.id(), normalized.toString(), "file_failed", exception.getMessage(), counts);
                 progress.maybeUpdate();
             });
@@ -617,7 +610,6 @@ public class ScanService {
                         ),
                         hashes,
                         counts,
-                        new HashSet<>(),
                         pendingObservations
                 );
                 scanRepository.createObservations(pendingObservations);
@@ -651,33 +643,12 @@ public class ScanService {
                 && current.modifiedAt().toInstant().toEpochMilli() == payload.modifiedAt().toInstant().toEpochMilli();
     }
 
-    private void hashAndReconcile(
-            UUID scanRunId,
-            LibraryRepository.LibraryRootRecord root,
-            HashWorkItem item,
-            ScanCounts counts,
-            Set<UUID> handledPreviousFiles,
-            List<ScanRepository.ObservationInsert> pendingObservations
-    ) {
-        Path normalized = Path.of(item.normalizedPath());
-        try {
-            FileHasher.Hashes hashes = fileHasher.hash(normalized);
-            reconcileHashes(scanRunId, root, item, hashes, counts, handledPreviousFiles, pendingObservations);
-        } catch (IOException | SecurityException exception) {
-            if (item.existingFile() != null) {
-                handledPreviousFiles.add(item.existingFile().id());
-            }
-            recordError(scanRunId, root.libraryId(), root.id(), item.normalizedPath(), "file_failed", exception.getMessage(), counts);
-        }
-    }
-
     private void reconcileHashes(
             UUID scanRunId,
             LibraryRepository.LibraryRootRecord root,
             HashWorkItem item,
             FileHasher.Hashes hashes,
             ScanCounts counts,
-            Set<UUID> handledPreviousFiles,
             List<ScanRepository.ObservationInsert> pendingObservations
     ) {
         OffsetDateTime now = OffsetDateTime.now();
@@ -701,7 +672,6 @@ public class ScanService {
                     item.modifiedAt(),
                     hashes,
                     counts,
-                    handledPreviousFiles,
                     pendingObservations,
                     now
             );
@@ -738,7 +708,6 @@ public class ScanService {
                 item.modifiedAt(),
                 hashes,
                 counts,
-                handledPreviousFiles,
                 pendingObservations,
                 now
         );
@@ -755,7 +724,6 @@ public class ScanService {
             OffsetDateTime modifiedAt,
             FileHasher.Hashes hashes,
             ScanCounts counts,
-            Set<UUID> handledPreviousFiles,
             List<ScanRepository.ObservationInsert> pendingObservations,
             OffsetDateTime now
     ) {
@@ -786,12 +754,10 @@ public class ScanService {
         var activeWithHash = scanRepository.findActiveFileByHash(root.libraryId(), hashes.contentHash());
         if (activeWithHash.isPresent() && !activeWithHash.get().id().equals(existing.id())) {
             ScanRepository.AssetFileRecord duplicateSource = activeWithHash.get();
-            handledPreviousFiles.add(existing.id());
             scanRepository.markStatus(existing.id(), "superseded", null);
             String result = "duplicate";
             if (!Files.exists(Path.of(duplicateSource.normalizedPath()))) {
                 scanRepository.markStatus(duplicateSource.id(), "superseded", null);
-                handledPreviousFiles.add(duplicateSource.id());
                 result = "moved";
             }
             UUID assetFileId = scanRepository.createAssetFile(
@@ -830,7 +796,6 @@ public class ScanService {
 
         var existingAssetWithHash = scanRepository.findAssetByHash(hashes.contentHash());
         if (existingAssetWithHash.isPresent() && !existingAssetWithHash.get().equals(existing.assetId())) {
-            handledPreviousFiles.add(existing.id());
             scanRepository.markStatus(existing.id(), "superseded", null);
             UUID assetFileId = scanRepository.createAssetFile(
                     existingAssetWithHash.get(),
@@ -896,11 +861,9 @@ public class ScanService {
             OffsetDateTime modifiedAt,
             FileHasher.Hashes hashes,
             ScanCounts counts,
-            Set<UUID> handledPreviousFiles,
             List<ScanRepository.ObservationInsert> pendingObservations,
             OffsetDateTime now
     ) {
-        handledPreviousFiles.add(existing.id());
         scanRepository.markStatus(existing.id(), "superseded", null);
         UUID assetId = assetForHash(hashes.contentHash(), MediaFileSupport.mediaType(Path.of(path)));
         UUID assetFileId = scanRepository.createAssetFile(
@@ -1073,12 +1036,6 @@ public class ScanService {
             scanRepository.incrementScanRunCounts(scanRunId, counts);
             scanRepository.completeScanRunFromCurrentCounts(scanRunId, OffsetDateTime.now());
         });
-    }
-
-    private void maybeFlushProgress(ScanProgressThrottle progress) {
-        if (progress.shouldUpdate()) {
-            flushProgress(progress);
-        }
     }
 
     private void flushProgress(ScanProgressThrottle progress) {

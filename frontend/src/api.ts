@@ -268,6 +268,44 @@ export type SchedulerJobRun = {
   errorMessage: string | null;
 };
 
+export type BackgroundJobStatusSummary = {
+  jobType: string;
+  status: string;
+  count: number;
+  oldestCreatedAt: string | null;
+  oldestNextRunAt: string | null;
+  latestUpdatedAt: string | null;
+};
+
+export type BackgroundJobProblemSummary = {
+  id: string;
+  jobType: string;
+  status: string;
+  attempts: number;
+  maxAttempts: number;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  updatedAt: string;
+  completedAt: string | null;
+};
+
+export type FilesystemWatcherHealth = {
+  status: string;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  lastErrorAt: string | null;
+  lastOverflowAt: string | null;
+  lastRegistrationRefreshAt: string | null;
+  registeredRootCount: number;
+  registeredDirectoryCount: number;
+};
+
+export type BackgroundWorkHealth = {
+  queues: BackgroundJobStatusSummary[];
+  recentProblems: BackgroundJobProblemSummary[];
+  watcher: FilesystemWatcherHealth;
+};
+
 export type TagSummary = {
   id: string;
   name: string;
@@ -586,6 +624,10 @@ export async function fetchStarred(): Promise<AlbumSummary> {
 
 export async function fetchSchedulerJobs(): Promise<SchedulerJob[]> {
   return requestJson<SchedulerJob[]>('/api/admin/scheduler/jobs');
+}
+
+export async function fetchBackgroundWorkHealth(): Promise<BackgroundWorkHealth> {
+  return requestJson<BackgroundWorkHealth>('/api/admin/background/health');
 }
 
 export async function updateSchedulerJob(

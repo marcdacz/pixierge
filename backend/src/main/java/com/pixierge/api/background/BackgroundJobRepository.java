@@ -234,6 +234,43 @@ public class BackgroundJobRepository {
         return exists != null;
     }
 
+    @Transactional(readOnly = true)
+    public List<BackgroundJobStatusSummary> summarizeByTypeAndStatus() {
+        var jobCount = JOBS.id.count();
+        var oldestCreatedAt = JOBS.createdAt.min();
+        var oldestNextRunAt = JOBS.nextRunAt.min();
+        var latestUpdatedAt = JOBS.updatedAt.max();
+        return queryFactory
+                .select(JOBS.jobType, JOBS.status, jobCount, oldestCreatedAt, oldestNextRunAt, latestUpdatedAt)
+                .from(JOBS)
+                .groupBy(JOBS.jobType, JOBS.status)
+                .orderBy(JOBS.jobType.asc(), JOBS.status.asc())
+                .fetch()
+                .stream()
+                .map(row -> new BackgroundJobStatusSummary(
+                        row.get(JOBS.jobType),
+                        row.get(JOBS.status),
+                        row.get(jobCount) == null ? 0L : row.get(jobCount),
+                        row.get(oldestCreatedAt),
+                        row.get(oldestNextRunAt),
+                        row.get(latestUpdatedAt)
+                ))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<BackgroundJobProblemSummary> latestProblemJobs(int limit) {
+        return selectJobs()
+                .where(JOBS.status.in(STATUS_FAILED, STATUS_DEAD_LETTER)
+                        .or(JOBS.lastErrorCode.isNotNull()))
+                .orderBy(JOBS.updatedAt.desc())
+                .limit(Math.max(1, limit))
+                .fetch()
+                .stream()
+                .map(this::toProblemSummary)
+                .toList();
+    }
+
     private com.querydsl.sql.SQLQuery<Tuple> selectJobs() {
         return queryFactory
                 .select(
@@ -296,6 +333,20 @@ public class BackgroundJobRepository {
                 row.get(JOBS.lastErrorMessage),
                 row.get(JOBS.createdAt),
                 updatedAt,
+                row.get(JOBS.completedAt)
+        );
+    }
+
+    private BackgroundJobProblemSummary toProblemSummary(Tuple row) {
+        return new BackgroundJobProblemSummary(
+                row.get(JOBS.id),
+                row.get(JOBS.jobType),
+                row.get(JOBS.status),
+                row.get(JOBS.attempts) == null ? 0 : row.get(JOBS.attempts),
+                row.get(JOBS.maxAttempts) == null ? 1 : row.get(JOBS.maxAttempts),
+                row.get(JOBS.lastErrorCode),
+                row.get(JOBS.lastErrorMessage),
+                row.get(JOBS.updatedAt),
                 row.get(JOBS.completedAt)
         );
     }

@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlertTriangle,
   Archive,
   Blocks,
@@ -26,11 +27,13 @@ import {
   deleteGlobalExclusionPattern,
   deleteLibraryExclusionPattern,
   deleteLibraryRoot,
+  fetchBackgroundWorkHealth,
   fetchGlobalExclusionPatterns,
   restoreLibrary,
   scanLibrary,
   scanLibraryRoot,
   type AuthResponse,
+  type BackgroundWorkHealth,
   type GlobalExclusionPattern,
   type LibraryExclusionPattern,
   type LibrarySummary,
@@ -63,7 +66,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-type SettingsView = 'configuration' | 'scheduler' | 'plugins' | 'backups';
+type SettingsView = 'configuration' | 'scheduler' | 'background' | 'plugins' | 'backups';
 
 type SettingsItem = {
   description: string;
@@ -84,6 +87,12 @@ const settingsItems: SettingsItem[] = [
     icon: CalendarClock,
     label: 'Scheduler details',
     view: 'scheduler'
+  },
+  {
+    description: 'Monitor queued work, retries, and filesystem watcher health.',
+    icon: Activity,
+    label: 'Background work',
+    view: 'background'
   },
   {
     description: 'Plugin installation and lifecycle controls will live here.',
@@ -264,6 +273,8 @@ function SettingsContent({
         />
       ) : item.view === 'scheduler' ? (
         <SchedulerDetails auth={auth} onError={onError} />
+      ) : item.view === 'background' ? (
+        <BackgroundWorkHealthPanel onError={onError} />
       ) : (
         <EmptySettingsPage label={item.label} />
       )}
@@ -454,6 +465,170 @@ function SourceStat({ label, value, warning = false }: { label: string; value: n
     <div className="rounded-md border border-border bg-surface p-4">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className={cn('mt-1 text-2xl font-semibold text-foreground', warning && 'text-zinc-200')}>{value}</p>
+    </div>
+  );
+}
+
+function BackgroundWorkHealthPanel({ onError }: { onError: (title: string, description?: string) => void }) {
+  const [health, setHealth] = useState<BackgroundWorkHealth | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  async function loadHealth() {
+    setLoading(true);
+    try {
+      setHealth(await fetchBackgroundWorkHealth());
+      setLoadError(null);
+    } catch (error) {
+      const message = messageForError(error, 'Background work health could not be loaded.');
+      setLoadError(message);
+      onError('Background work health could not be loaded', message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadHealth();
+  }, []);
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading background work health...</p>;
+  }
+
+  if (loadError || health === null) {
+    return <Alert>{loadError ?? 'Background work health could not be loaded.'}</Alert>;
+  }
+
+  const totalVisibleJobs = health.queues.reduce((total, queue) => total + queue.count, 0);
+  const failedJobs = health.queues
+    .filter((queue) => queue.status === 'failed' || queue.status === 'dead_letter')
+    .reduce((total, queue) => total + queue.count, 0);
+  const watcherHealthy = health.watcher.status === 'healthy' || health.watcher.status === 'started';
+
+  return (
+    <div className="grid gap-6">
+      <section aria-label="Background work totals" className="grid gap-3 md:grid-cols-3">
+        <SourceStat label="Tracked jobs" value={totalVisibleJobs} />
+        <SourceStat label="Recent problems" value={health.recentProblems.length} warning={failedJobs > 0} />
+        <div className="rounded-md border border-border bg-surface p-4">
+          <p className="text-sm text-muted-foreground">Watcher</p>
+          <p className="mt-2">
+            <Badge variant={watcherHealthy ? 'success' : 'warning'}>{formatQueueStatus(health.watcher.status)}</Badge>
+          </p>
+        </div>
+      </section>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Queue health</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {health.queues.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No background jobs are currently visible.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Job type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Count</TableHead>
+                    <TableHead>Oldest queued</TableHead>
+                    <TableHead>Latest update</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {health.queues.map((queue) => (
+                    <TableRow key={`${queue.jobType}-${queue.status}`}>
+                      <TableCell className="font-mono text-xs">{queue.jobType}</TableCell>
+                      <TableCell>
+                        <Badge variant={queue.status === 'failed' || queue.status === 'dead_letter' ? 'warning' : 'secondary'}>
+                          {formatQueueStatus(queue.status)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{queue.count}</TableCell>
+                      <TableCell>{formatOptionalTimestamp(queue.oldestCreatedAt)}</TableCell>
+                      <TableCell>{formatOptionalTimestamp(queue.latestUpdatedAt)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Filesystem watcher</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <dl className="grid gap-3 text-sm md:grid-cols-3">
+            <div className="grid gap-0.5">
+              <dt className="text-muted-foreground">Registered roots</dt>
+              <dd className="text-foreground">{health.watcher.registeredRootCount}</dd>
+            </div>
+            <div className="grid gap-0.5">
+              <dt className="text-muted-foreground">Watched folders</dt>
+              <dd className="text-foreground">{health.watcher.registeredDirectoryCount}</dd>
+            </div>
+            <div className="grid gap-0.5">
+              <dt className="text-muted-foreground">Last refresh</dt>
+              <dd className="text-foreground">{formatOptionalTimestamp(health.watcher.lastRegistrationRefreshAt)}</dd>
+            </div>
+          </dl>
+          {health.watcher.lastErrorMessage && (
+            <Alert>
+              {formatQueueStatus(health.watcher.lastErrorCode ?? 'watcher_error')}: {health.watcher.lastErrorMessage}
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent problems</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {health.recentProblems.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No recent queue problems.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Job type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Attempts</TableHead>
+                    <TableHead>Error</TableHead>
+                    <TableHead>Updated</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {health.recentProblems.map((problem) => (
+                    <TableRow key={problem.id}>
+                      <TableCell className="font-mono text-xs">{problem.jobType}</TableCell>
+                      <TableCell>
+                        <Badge variant="warning">{formatQueueStatus(problem.status)}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {problem.attempts}/{problem.maxAttempts}
+                      </TableCell>
+                      <TableCell className="max-w-md">
+                        <span className="block truncate">
+                          {problem.lastErrorMessage ?? formatQueueStatus(problem.lastErrorCode ?? 'unknown_error')}
+                        </span>
+                      </TableCell>
+                      <TableCell>{formatOptionalTimestamp(problem.updatedAt)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1119,6 +1294,14 @@ function formatSourceCount(count: number) {
 
 function formatUnavailableReason(reason: string) {
   return reason.replaceAll('_', ' ');
+}
+
+function formatQueueStatus(status: string) {
+  return status.replaceAll('_', ' ');
+}
+
+function formatOptionalTimestamp(value: string | null) {
+  return value ? formatScanTimestamp(value) : 'Never';
 }
 
 function messageForError(error: unknown, fallback: string) {
