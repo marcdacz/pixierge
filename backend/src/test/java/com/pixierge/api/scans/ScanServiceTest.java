@@ -201,6 +201,49 @@ class ScanServiceTest {
         );
     }
 
+    @Test
+    void subtreeCatalogScanDoesNotMarkFilesOutsideSubtreeMissing() throws Exception {
+        UUID libraryId = UUID.randomUUID();
+        UUID rootId = UUID.randomUUID();
+        UUID outsideAssetId = UUID.randomUUID();
+        UUID outsideAssetFileId = UUID.randomUUID();
+        Path incoming = Files.createDirectories(tempDir.resolve("incoming"));
+        Path newFile = incoming.resolve("new.jpg");
+        Path outside = tempDir.resolve("outside.jpg");
+        Files.writeString(newFile, "new");
+        LibraryRepository.LibraryRootRecord root = root(libraryId, rootId, tempDir);
+        LibraryRepository.LibraryRecord library = library(libraryId, root, List.of());
+        ScanRepository.AssetFileRecord outsideFile = new ScanRepository.AssetFileRecord(
+                outsideAssetFileId,
+                outsideAssetId,
+                libraryId,
+                rootId,
+                outside.toString(),
+                outside.toAbsolutePath().normalize().toString(),
+                outside.getFileName().toString(),
+                4,
+                OffsetDateTime.now(),
+                "confirmed-hash",
+                "active"
+        );
+        FakeScanRepository scanRepository = new FakeScanRepository(List.of(outsideFile));
+        RecordingBackgroundJobService backgroundJobService = new RecordingBackgroundJobService();
+        ScanService service = service(new FakeLibraryRepository(library), scanRepository, new FakeFileHasher(), backgroundJobService);
+        UUID scanRunId = scanRepository.createScanRun(libraryId, rootId, null, OffsetDateTime.now());
+
+        service.executeCatalogJob(new ScanCatalogJobPayload(
+                scanRunId,
+                libraryId,
+                rootId,
+                incoming.toAbsolutePath().normalize().toString()
+        ), UUID.randomUUID());
+        runIdentityJobs(service, backgroundJobService);
+
+        assertThat(scanRepository.markedStatuses).doesNotContain(outsideAssetFileId + ":missing");
+        assertThat(scanRepository.completedCounts.missingCount()).isZero();
+        assertThat(scanRepository.completedCounts.addedCount()).isEqualTo(1);
+    }
+
     private ScanService service(FakeScanRepository scanRepository, FileHasher fileHasher) {
         return service(new FakeLibraryRepository(), scanRepository, fileHasher, new RecordingBackgroundJobService());
     }

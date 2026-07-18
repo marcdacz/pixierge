@@ -4,7 +4,7 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Set;
 
-final class MediaFileSupport {
+public final class MediaFileSupport {
 
     private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
             "jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "tif", "tiff",
@@ -14,7 +14,7 @@ final class MediaFileSupport {
     private MediaFileSupport() {
     }
 
-    static boolean isSupportedMedia(Path path) {
+    public static boolean isSupportedMedia(Path path) {
         String fileName = path.getFileName() == null ? "" : path.getFileName().toString();
         int dot = fileName.lastIndexOf('.');
         return dot > 0 && SUPPORTED_EXTENSIONS.contains(fileName.substring(dot + 1).toLowerCase(Locale.ROOT));

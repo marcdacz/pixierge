@@ -5,6 +5,10 @@ import java.util.UUID;
 public record ScanCatalogJobPayload(
         UUID scanRunId,
         UUID libraryId,
-        UUID rootId
+        UUID rootId,
+        String subtreePath
 ) {
+    public ScanCatalogJobPayload(UUID scanRunId, UUID libraryId, UUID rootId) {
+        this(scanRunId, libraryId, rootId, null);
+    }
 }

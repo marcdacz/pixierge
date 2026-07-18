@@ -141,20 +141,86 @@ public class ScanService {
     }
 
     private BackgroundJobCreate catalogJob(UUID scanRunId, UUID libraryId, UUID rootId, OffsetDateTime now) {
+        return catalogJob(scanRunId, libraryId, rootId, null, now);
+    }
+
+    private BackgroundJobCreate catalogJob(
+            UUID scanRunId,
+            UUID libraryId,
+            UUID rootId,
+            String subtreePath,
+            OffsetDateTime now
+    ) {
         try {
-            String payload = objectMapper.writeValueAsString(new ScanCatalogJobPayload(scanRunId, libraryId, rootId));
+            String payload = objectMapper.writeValueAsString(new ScanCatalogJobPayload(
+                    scanRunId,
+                    libraryId,
+                    rootId,
+                    subtreePath
+            ));
+            String jobType = subtreePath == null ? ScanJobTypes.LIBRARY_CATALOG_ROOT : ScanJobTypes.LIBRARY_CATALOG_SUBTREE;
             return new BackgroundJobCreate(
-                    ScanJobTypes.LIBRARY_CATALOG_ROOT,
+                    jobType,
                     payload,
                     0,
                     1,
                     now,
                     "library:" + libraryId,
-                    ScanJobTypes.LIBRARY_CATALOG_ROOT + ":" + scanRunId
+                    jobType + ":" + scanRunId
             );
         } catch (JsonProcessingException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not create scan job", exception);
         }
+    }
+
+    public UUID enqueueFilesystemChangeScan(UUID libraryId, UUID rootId, String changedPath) {
+        LibraryRepository.LibraryRecord library = libraryRepository.findLibrary(libraryId).orElse(null);
+        if (library == null || !"active".equals(library.status())) {
+            return null;
+        }
+        LibraryRepository.LibraryRootRecord root = library.roots().stream()
+                .filter(candidate -> candidate.id().equals(rootId))
+                .findFirst()
+                .orElse(null);
+        if (root == null) {
+            return null;
+        }
+        Path rootPath = Path.of(root.normalizedPath());
+        Path subtree = normalizeSubtree(rootPath, changedPath);
+        if (subtree == null) {
+            return null;
+        }
+
+        return transactionTemplate.execute(status -> {
+            if (scanRepository.hasActiveScanRun(library.id())) {
+                return null;
+            }
+            OffsetDateTime now = OffsetDateTime.now();
+            UUID scanRunId = scanRepository.createScanRun(library.id(), root.id(), null, now);
+            backgroundJobService.enqueue(catalogJob(
+                    scanRunId,
+                    library.id(),
+                    root.id(),
+                    subtree.toString(),
+                    now
+            ));
+            return scanRunId;
+        });
+    }
+
+    private Path normalizeSubtree(Path rootPath, String changedPath) {
+        if (changedPath == null || changedPath.isBlank()) {
+            return rootPath;
+        }
+        Path normalized = Path.of(changedPath).toAbsolutePath().normalize();
+        if (!normalized.startsWith(rootPath)) {
+            return null;
+        }
+        if (Files.isRegularFile(normalized)) {
+            Path parent = normalized.getParent();
+            return parent == null ? rootPath : parent;
+        }
+        return normalized;
     }
 
     void executeCatalogJob(ScanCatalogJobPayload payload, UUID jobId) {
@@ -170,7 +236,7 @@ public class ScanService {
             transactionTemplate.executeWithoutResult(status ->
                     scanRepository.markScanRunRunning(payload.scanRunId(), OffsetDateTime.now())
             );
-            executeScan(payload.scanRunId(), library, root, jobId);
+            executeScan(payload.scanRunId(), library, root, payload.subtreePath(), jobId);
         } catch (RuntimeException exception) {
             transactionTemplate.executeWithoutResult(status -> {
                 scanRepository.createError(
@@ -192,13 +258,14 @@ public class ScanService {
             LibraryRepository.LibraryRecord library,
             LibraryRepository.LibraryRootRecord singleRoot
     ) {
-        executeScan(scanRunId, library, singleRoot, null);
+        executeScan(scanRunId, library, singleRoot, null, null);
     }
 
     private void executeScan(
             UUID scanRunId,
             LibraryRepository.LibraryRecord library,
             LibraryRepository.LibraryRootRecord singleRoot,
+            String subtreePath,
             UUID currentCatalogJobId
     ) {
         ScanCounts counts = new ScanCounts();
@@ -211,16 +278,17 @@ public class ScanService {
 
         for (LibraryRepository.LibraryRootRecord root : roots) {
             Path rootPath = Path.of(root.normalizedPath());
-            if (!Files.isDirectory(rootPath) || !Files.isReadable(rootPath) || !Files.isExecutable(rootPath)) {
+            Path scanPath = catalogStartPath(rootPath, subtreePath);
+            if (!Files.isDirectory(scanPath) || !Files.isReadable(scanPath) || !Files.isExecutable(scanPath)) {
                 transactionTemplate.executeWithoutResult(status -> {
-                    recordError(scanRunId, library.id(), root.id(), root.normalizedPath(), "root_unavailable", "Source root is unavailable", counts);
+                    recordError(scanRunId, library.id(), root.id(), scanPath.toString(), "root_unavailable", "Source root is unavailable", counts);
                     flushProgress(progress);
                 });
                 continue;
             }
 
             List<FileCandidate> catalogBatch = new ArrayList<>();
-            try (Stream<Path> paths = Files.walk(rootPath)) {
+            try (Stream<Path> paths = Files.walk(scanPath)) {
                 paths.filter(Files::isRegularFile)
                         .filter(MediaFileSupport::isSupportedMedia)
                         .filter(path -> !exclusionMatcher.matches(rootPath, path))
@@ -248,14 +316,22 @@ public class ScanService {
             flushProgress(progress);
         }
 
-        enqueueIdentityJobs(scanRunId, library.id(), hashQueue, OffsetDateTime.now());
+        enqueueIdentityJobs(scanRunId, library.id(), hashQueue, subtreePath, OffsetDateTime.now());
         transactionTemplate.executeWithoutResult(status ->
                 scanRepository.markScanCatalogCompleted(scanRunId, OffsetDateTime.now()));
         flushObservations(pendingObservations);
         flushProgress(progress);
         if (currentCatalogJobId == null) {
-            tryCompleteScanIfReady(scanRunId, library, roots, exclusionMatcher, null);
+            tryCompleteScanIfReady(scanRunId, library, roots, exclusionMatcher, subtreePath, null);
         }
+    }
+
+    private Path catalogStartPath(Path rootPath, String subtreePath) {
+        if (subtreePath == null || subtreePath.isBlank()) {
+            return rootPath;
+        }
+        Path scanPath = Path.of(subtreePath).toAbsolutePath().normalize();
+        return scanPath.startsWith(rootPath) ? scanPath : rootPath;
     }
 
     private void catalogFileCandidate(
@@ -449,14 +525,21 @@ public class ScanService {
             UUID scanRunId,
             UUID libraryId,
             List<HashWorkItem> hashQueue,
+            String subtreePath,
             OffsetDateTime now
     ) {
         for (HashWorkItem item : hashQueue) {
-            backgroundJobService.enqueue(identityJob(scanRunId, libraryId, item, now));
+            backgroundJobService.enqueue(identityJob(scanRunId, libraryId, item, subtreePath, now));
         }
     }
 
-    private BackgroundJobCreate identityJob(UUID scanRunId, UUID libraryId, HashWorkItem item, OffsetDateTime now) {
+    private BackgroundJobCreate identityJob(
+            UUID scanRunId,
+            UUID libraryId,
+            HashWorkItem item,
+            String subtreePath,
+            OffsetDateTime now
+    ) {
         try {
             ScanIdentityJobPayload payload = new ScanIdentityJobPayload(
                     scanRunId,
@@ -467,7 +550,8 @@ public class ScanService {
                     item.normalizedPath(),
                     item.fileName(),
                     item.size(),
-                    item.modifiedAt()
+                    item.modifiedAt(),
+                    subtreePath
             );
             String payloadJson = objectMapper.writeValueAsString(payload);
             return new BackgroundJobCreate(
@@ -871,6 +955,7 @@ public class ScanService {
                 library,
                 rootsForScan(library, root),
                 exclusionMatcher(library),
+                payload.subtreePath(),
                 null
         );
     }
@@ -889,6 +974,7 @@ public class ScanService {
                 library,
                 rootsForScan(library, root),
                 exclusionMatcher(library),
+                payload.subtreePath(),
                 null
         );
     }
@@ -915,6 +1001,7 @@ public class ScanService {
             LibraryRepository.LibraryRecord library,
             List<LibraryRepository.LibraryRootRecord> roots,
             ExclusionMatcher exclusionMatcher,
+            String subtreePath,
             UUID currentJobId
     ) {
         boolean catalogCompleted = transactionTemplate.execute(status -> scanRepository.isScanCatalogCompleted(scanRunId));
@@ -924,6 +1011,13 @@ public class ScanService {
         if (backgroundJobService.hasActiveJobs(
                 ScanJobTypes.LIBRARY_CATALOG_ROOT,
                 ScanJobTypes.LIBRARY_CATALOG_ROOT + ":" + scanRunId,
+                currentJobId
+        )) {
+            return;
+        }
+        if (backgroundJobService.hasActiveJobs(
+                ScanJobTypes.LIBRARY_CATALOG_SUBTREE,
+                ScanJobTypes.LIBRARY_CATALOG_SUBTREE + ":" + scanRunId,
                 currentJobId
         )) {
             return;
@@ -947,9 +1041,13 @@ public class ScanService {
                 if (!Files.isDirectory(rootPath) || !Files.isReadable(rootPath) || !Files.isExecutable(rootPath)) {
                     continue;
                 }
+                Path missingScope = catalogStartPath(rootPath, subtreePath);
                 List<ScanRepository.AssetFileRecord> notSeen =
                         scanRepository.activeFilesNotSeenInRun(library.id(), root.id(), scanRunId);
                 for (ScanRepository.AssetFileRecord activeFile : notSeen) {
+                    if (!Path.of(activeFile.normalizedPath()).startsWith(missingScope)) {
+                        continue;
+                    }
                     if (exclusionMatcher.matches(rootPath, Path.of(activeFile.normalizedPath()))) {
                         continue;
                     }

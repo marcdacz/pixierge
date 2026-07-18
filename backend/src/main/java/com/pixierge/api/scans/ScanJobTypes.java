@@ -1,10 +1,11 @@
 package com.pixierge.api.scans;
 
-final class ScanJobTypes {
+public final class ScanJobTypes {
 
-    static final String LIBRARY_CATALOG_ROOT = "library-catalog-root";
-    static final String LIBRARY_CATALOG_SUBTREE = "library-catalog-subtree";
-    static final String ASSET_IDENTITY_BACKFILL = "asset-identity-backfill";
+    public static final String LIBRARY_CATALOG_ROOT = "library-catalog-root";
+    public static final String LIBRARY_CATALOG_SUBTREE = "library-catalog-subtree";
+    public static final String ASSET_IDENTITY_BACKFILL = "asset-identity-backfill";
+    public static final String FILESYSTEM_CHANGE_EVENT = "filesystem-change-event";
 
     private ScanJobTypes() {
     }
