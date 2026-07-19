@@ -135,6 +135,58 @@ const backgroundWorkHealth = {
   }
 };
 
+const backgroundWorkActivity = {
+  jobs: [
+    {
+      id: 'job-identity-8',
+      jobType: 'asset-identity-backfill',
+      status: 'running',
+      batchLabel: 'identity batch 8',
+      fileCount: 100,
+      attempts: 1,
+      maxAttempts: 3,
+      lockedBy: 'pixierge-worker',
+      createdAt: '2026-07-04T00:03:00Z',
+      updatedAt: '2026-07-04T00:04:00Z'
+    }
+  ],
+  files: []
+};
+
+const backgroundWorkFiles = {
+  items: [
+    {
+      path: '/photos/family/IMG_3001.HEIC',
+      fileName: 'IMG_3001.HEIC',
+      status: 'processing',
+      jobId: 'job-identity-8',
+      batchLabel: 'identity batch 8',
+      updatedAt: '2026-07-04T00:04:00Z',
+      message: null
+    },
+    {
+      path: '/photos/family/IMG_2999.HEIC',
+      fileName: 'IMG_2999.HEIC',
+      status: 'added',
+      jobId: null,
+      batchLabel: null,
+      updatedAt: '2026-07-04T00:03:00Z',
+      message: null
+    }
+  ],
+  page: 0,
+  pageSize: 25,
+  totalCount: 2,
+  hasNext: false
+};
+
+const backgroundWorkConfig = {
+  maxConcurrentJobs: 3,
+  identityBatchSize: 100,
+  claimBatchSize: 25,
+  pollIntervalMs: 1000
+};
+
 const libraryTree = {
   roots: [
     {
@@ -334,8 +386,7 @@ describe('App', () => {
       { status: 200, body: configuredLibraries },
       { status: 200, body: libraryTree },
       { status: 200, body: browseAssets },
-      { status: 200, body: globalExclusionPatterns },
-      { status: 200, body: backgroundWorkHealth }
+      { status: 200, body: globalExclusionPatterns }
     ]);
 
     render(<App />);
@@ -347,15 +398,126 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Background work' }));
 
     expect(await screen.findByRole('heading', { name: 'Background work' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/settings/background');
+    expect(screen.getByRole('tab', { name: 'Jobs' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('heading', { name: 'Queue health' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Active batches' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Recent file activity' })).not.toBeInTheDocument();
     expect(screen.getByText('library-catalog-root')).toBeInTheDocument();
+    expect(screen.getAllByText('identity batch 8')).not.toHaveLength(0);
     expect(screen.getAllByText('dead letter')).not.toHaveLength(0);
     expect(screen.getByText(/Filesystem watcher overflow under \/photos/)).toBeInTheDocument();
     expect(screen.getByText('42')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/admin/background/health',
       expect.objectContaining({ credentials: 'include', method: 'GET' })
     );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/admin/background/activity?limit=100',
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Recent file activity' }));
+    expect(await screen.findByRole('heading', { name: 'Recent file activity' })).toBeInTheDocument();
+    expect(screen.getByTestId('background-file-search')).toBeInTheDocument();
+    expect(screen.getByTestId('background-file-status')).toHaveTextContent('All statuses');
+    expect(screen.getByTestId('background-file-updated')).toHaveTextContent('Any date');
+    expect(screen.getByText('IMG_3001.HEIC')).toBeInTheDocument();
+    expect(screen.getByText('IMG_2999.HEIC')).toBeInTheDocument();
+    expect(screen.getByTestId('background-file-page-size')).toHaveValue('25');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/background/files?'),
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('pageSize=25'),
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
+
+    await userEvent.selectOptions(screen.getByTestId('background-file-page-size'), '50');
+    expect(screen.getByTestId('background-file-page-size')).toHaveValue('50');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('pageSize=50'),
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
+
+    await userEvent.click(screen.getByTestId('background-file-status'));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Added/i }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /Failed/i }));
+    expect(screen.getByTestId('background-file-status-pills')).toHaveTextContent('Added');
+    expect(screen.getByTestId('background-file-status-pills')).toHaveTextContent('Failed');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/status=added.*status=failed|status=failed.*status=added/),
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByTestId('background-file-status-menu')).not.toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByTestId('background-file-updated'));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Last 7 days' }));
+    expect(screen.getByTestId('background-file-updated')).toHaveTextContent('Last 7 days');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('updatedFrom='),
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
+
+    await userEvent.click(screen.getByTestId('background-file-updated'));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom range…' }));
+    expect(screen.getByTestId('background-file-updated-from')).toBeInTheDocument();
+    expect(screen.getByTestId('background-file-updated-to')).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('background-file-updated-from'), { target: { value: '2026-07-20' } });
+    fireEvent.change(screen.getByTestId('background-file-updated-to'), { target: { value: '2026-07-10' } });
+    expect(screen.getByTestId('background-file-updated-from')).toHaveValue('2026-07-10');
+    expect(screen.getByTestId('background-file-updated-to')).toHaveValue('2026-07-20');
+    expect(screen.getByTestId('background-file-updated')).toHaveTextContent('2026-07-10 → 2026-07-20');
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Configuration' }));
+    expect(await screen.findByRole('heading', { name: 'Worker configuration' })).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByTestId('background-config-advice')).toHaveTextContent(
+      'PIXIERGE_BACKGROUND_JOBS_MAX_CONCURRENT_JOBS'
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/admin/background/config',
+      expect.objectContaining({ credentials: 'include', method: 'GET' })
+    );
+  });
+
+  it('loads the background settings route directly', async () => {
+    window.history.replaceState(null, '', '/settings/background');
+    mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Background work' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Active batches' })).toBeInTheDocument();
+  });
+
+  it('keeps the direct configuration settings route after the search field hydrates', async () => {
+    window.history.replaceState(null, '', '/settings/configuration');
+    mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: authBody },
+      { status: 200, body: configuredLibraries },
+      { status: 200, body: globalExclusionPatterns }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    });
+
+    expect(window.location.pathname).toBe('/settings/configuration');
   });
 
   it('opens the search page when searching from another view', async () => {
@@ -1123,6 +1285,18 @@ function mockFetch(responses: MockResponse[]) {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.endsWith('/api/scans/active')) {
       return jsonResponse(200, []);
+    }
+    if (url.endsWith('/api/admin/background/health')) {
+      return jsonResponse(200, backgroundWorkHealth);
+    }
+    if (url.endsWith('/api/admin/background/activity?limit=100')) {
+      return jsonResponse(200, backgroundWorkActivity);
+    }
+    if (url.includes('/api/admin/background/files?')) {
+      return jsonResponse(200, backgroundWorkFiles);
+    }
+    if (url.endsWith('/api/admin/background/config')) {
+      return jsonResponse(200, backgroundWorkConfig);
     }
     if (url.includes('/api/search/parse')) {
       const query = new URL(url).searchParams.get('q') ?? '';

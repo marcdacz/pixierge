@@ -27,13 +27,11 @@ import {
   deleteGlobalExclusionPattern,
   deleteLibraryExclusionPattern,
   deleteLibraryRoot,
-  fetchBackgroundWorkHealth,
   fetchGlobalExclusionPatterns,
   restoreLibrary,
   scanLibrary,
   scanLibraryRoot,
   type AuthResponse,
-  type BackgroundWorkHealth,
   type GlobalExclusionPattern,
   type LibraryExclusionPattern,
   type LibrarySummary,
@@ -49,6 +47,7 @@ import {
   isScanInProgress
 } from '@/features/scans/scan-utils';
 import { ScanStatsGrid } from '@/features/scans/scan-stats-grid';
+import { BackgroundWorkHealthPanel } from '@/features/settings/background-work-panel';
 import { SchedulerDetails } from '@/features/settings/scheduler-details';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -66,7 +65,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-type SettingsView = 'configuration' | 'scheduler' | 'background' | 'plugins' | 'backups';
+export type SettingsView = 'configuration' | 'scheduler' | 'background' | 'plugins' | 'backups';
 
 type SettingsItem = {
   description: string;
@@ -110,22 +109,25 @@ const settingsItems: SettingsItem[] = [
 
 type SettingsPageProps = {
   auth: AuthResponse;
+  currentView: SettingsView;
   error?: string | null;
   libraries: LibrarySummary[];
   loading?: boolean;
   onError: (title: string, description?: string) => void;
   onLibrariesChange: () => Promise<void>;
+  onViewChange: (view: SettingsView) => void;
 };
 
 export function SettingsPage({
   auth,
+  currentView,
   error = null,
   libraries,
   loading = false,
   onError,
-  onLibrariesChange
+  onLibrariesChange,
+  onViewChange
 }: SettingsPageProps) {
-  const [currentView, setCurrentView] = useState<SettingsView>('configuration');
   const [settingsNavCollapsed, setSettingsNavCollapsed] = useState(false);
   const [settingsNavAutoCollapsed, setSettingsNavAutoCollapsed] = useState(false);
   const currentItem = settingsItems.find((item) => item.view === currentView) ?? settingsItems[0];
@@ -152,13 +154,13 @@ export function SettingsPage({
   return (
     <div
       className={cn(
-        'grid min-h-full gap-8',
+        'grid h-full min-h-0 grid-rows-[minmax(0,1fr)] gap-8',
         effectiveNavCollapsed
           ? 'grid-cols-[3.5rem_minmax(0,1fr)]'
           : 'grid-cols-[var(--settings-nav-width)_minmax(0,1fr)]'
       )}
     >
-      <aside className="border-r border-border pr-4">
+      <aside className="min-h-0 overflow-y-auto border-r border-border pr-4">
         <div className="mb-4 grid gap-3">
           {effectiveNavCollapsed ? (
             <>
@@ -212,7 +214,7 @@ export function SettingsPage({
                       active && 'bg-muted text-foreground'
                     )}
                     data-testid={`settings-nav-${item.view}`}
-                    onClick={() => setCurrentView(item.view)}
+                    onClick={() => onViewChange(item.view)}
                     type="button"
                   >
                     <Icon className="h-4 w-4" aria-hidden />
@@ -228,12 +230,14 @@ export function SettingsPage({
 
       <SettingsContent
         auth={auth}
+        currentView={currentView}
         error={error}
         item={currentItem}
         libraries={libraries}
         loading={loading}
         onError={onError}
         onLibrariesChange={onLibrariesChange}
+        onViewChange={onViewChange}
       />
     </div>
   );
@@ -241,17 +245,22 @@ export function SettingsPage({
 
 function SettingsContent({
   auth,
+  currentView,
   error,
   item,
   libraries,
   loading,
   onError,
-  onLibrariesChange
+  onLibrariesChange,
+  onViewChange
 }: SettingsPageProps & { item: SettingsItem }) {
   const Icon = item.icon;
 
   return (
-    <section aria-labelledby="settings-page-title" className="grid content-start gap-8">
+    <section
+      aria-labelledby="settings-page-title"
+      className="grid min-h-0 content-start gap-8 overflow-y-auto"
+    >
       <div className="grid gap-2">
         <div className="flex items-center gap-3">
           <Icon className="h-5 w-5 text-muted-foreground" aria-hidden />
@@ -270,6 +279,8 @@ function SettingsContent({
           loading={loading}
           onError={onError}
           onLibrariesChange={onLibrariesChange}
+          currentView={currentView}
+          onViewChange={onViewChange}
         />
       ) : item.view === 'scheduler' ? (
         <SchedulerDetails auth={auth} onError={onError} />
@@ -465,170 +476,6 @@ function SourceStat({ label, value, warning = false }: { label: string; value: n
     <div className="rounded-md border border-border bg-surface p-4">
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className={cn('mt-1 text-2xl font-semibold text-foreground', warning && 'text-zinc-200')}>{value}</p>
-    </div>
-  );
-}
-
-function BackgroundWorkHealthPanel({ onError }: { onError: (title: string, description?: string) => void }) {
-  const [health, setHealth] = useState<BackgroundWorkHealth | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  async function loadHealth() {
-    setLoading(true);
-    try {
-      setHealth(await fetchBackgroundWorkHealth());
-      setLoadError(null);
-    } catch (error) {
-      const message = messageForError(error, 'Background work health could not be loaded.');
-      setLoadError(message);
-      onError('Background work health could not be loaded', message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadHealth();
-  }, []);
-
-  if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading background work health...</p>;
-  }
-
-  if (loadError || health === null) {
-    return <Alert>{loadError ?? 'Background work health could not be loaded.'}</Alert>;
-  }
-
-  const totalVisibleJobs = health.queues.reduce((total, queue) => total + queue.count, 0);
-  const failedJobs = health.queues
-    .filter((queue) => queue.status === 'failed' || queue.status === 'dead_letter')
-    .reduce((total, queue) => total + queue.count, 0);
-  const watcherHealthy = health.watcher.status === 'healthy' || health.watcher.status === 'started';
-
-  return (
-    <div className="grid gap-6">
-      <section aria-label="Background work totals" className="grid gap-3 md:grid-cols-3">
-        <SourceStat label="Tracked jobs" value={totalVisibleJobs} />
-        <SourceStat label="Recent problems" value={health.recentProblems.length} warning={failedJobs > 0} />
-        <div className="rounded-md border border-border bg-surface p-4">
-          <p className="text-sm text-muted-foreground">Watcher</p>
-          <p className="mt-2">
-            <Badge variant={watcherHealthy ? 'success' : 'warning'}>{formatQueueStatus(health.watcher.status)}</Badge>
-          </p>
-        </div>
-      </section>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Queue health</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {health.queues.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No background jobs are currently visible.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Job type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Count</TableHead>
-                    <TableHead>Oldest queued</TableHead>
-                    <TableHead>Latest update</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {health.queues.map((queue) => (
-                    <TableRow key={`${queue.jobType}-${queue.status}`}>
-                      <TableCell className="font-mono text-xs">{queue.jobType}</TableCell>
-                      <TableCell>
-                        <Badge variant={queue.status === 'failed' || queue.status === 'dead_letter' ? 'warning' : 'secondary'}>
-                          {formatQueueStatus(queue.status)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{queue.count}</TableCell>
-                      <TableCell>{formatOptionalTimestamp(queue.oldestCreatedAt)}</TableCell>
-                      <TableCell>{formatOptionalTimestamp(queue.latestUpdatedAt)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Filesystem watcher</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <dl className="grid gap-3 text-sm md:grid-cols-3">
-            <div className="grid gap-0.5">
-              <dt className="text-muted-foreground">Registered roots</dt>
-              <dd className="text-foreground">{health.watcher.registeredRootCount}</dd>
-            </div>
-            <div className="grid gap-0.5">
-              <dt className="text-muted-foreground">Watched folders</dt>
-              <dd className="text-foreground">{health.watcher.registeredDirectoryCount}</dd>
-            </div>
-            <div className="grid gap-0.5">
-              <dt className="text-muted-foreground">Last refresh</dt>
-              <dd className="text-foreground">{formatOptionalTimestamp(health.watcher.lastRegistrationRefreshAt)}</dd>
-            </div>
-          </dl>
-          {health.watcher.lastErrorMessage && (
-            <Alert>
-              {formatQueueStatus(health.watcher.lastErrorCode ?? 'watcher_error')}: {health.watcher.lastErrorMessage}
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent problems</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {health.recentProblems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No recent queue problems.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Job type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Attempts</TableHead>
-                    <TableHead>Error</TableHead>
-                    <TableHead>Updated</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {health.recentProblems.map((problem) => (
-                    <TableRow key={problem.id}>
-                      <TableCell className="font-mono text-xs">{problem.jobType}</TableCell>
-                      <TableCell>
-                        <Badge variant="warning">{formatQueueStatus(problem.status)}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {problem.attempts}/{problem.maxAttempts}
-                      </TableCell>
-                      <TableCell className="max-w-md">
-                        <span className="block truncate">
-                          {problem.lastErrorMessage ?? formatQueueStatus(problem.lastErrorCode ?? 'unknown_error')}
-                        </span>
-                      </TableCell>
-                      <TableCell>{formatOptionalTimestamp(problem.updatedAt)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -1294,14 +1141,6 @@ function formatSourceCount(count: number) {
 
 function formatUnavailableReason(reason: string) {
   return reason.replaceAll('_', ' ');
-}
-
-function formatQueueStatus(status: string) {
-  return status.replaceAll('_', ' ');
-}
-
-function formatOptionalTimestamp(value: string | null) {
-  return value ? formatScanTimestamp(value) : 'Never';
 }
 
 function messageForError(error: unknown, fallback: string) {

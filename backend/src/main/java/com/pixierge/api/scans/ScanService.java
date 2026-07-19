@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pixierge.api.background.BackgroundJobCreate;
 import com.pixierge.api.background.BackgroundJobService;
 import com.pixierge.api.libraries.LibraryRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Service
@@ -30,6 +32,7 @@ public class ScanService {
 
     private static final int OBSERVATION_BATCH_SIZE = 100;
     private static final int CATALOG_BATCH_SIZE = 500;
+    private static final int DEFAULT_IDENTITY_BATCH_SIZE = 100;
 
     private final LibraryRepository libraryRepository;
     private final ScanRepository scanRepository;
@@ -37,6 +40,7 @@ public class ScanService {
     private final BackgroundJobService backgroundJobService;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
+    private final int identityBatchSize;
     private final Map<UUID, Semaphore> libraryScanSlots = new ConcurrentHashMap<>();
 
     public ScanService(
@@ -45,7 +49,8 @@ public class ScanService {
             FileHasher fileHasher,
             BackgroundJobService backgroundJobService,
             TransactionTemplate transactionTemplate,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            @Value("${pixierge.background-jobs.identity-batch-size:" + DEFAULT_IDENTITY_BATCH_SIZE + "}") int identityBatchSize
     ) {
         this.libraryRepository = libraryRepository;
         this.scanRepository = scanRepository;
@@ -53,6 +58,7 @@ public class ScanService {
         this.backgroundJobService = backgroundJobService;
         this.transactionTemplate = transactionTemplate;
         this.objectMapper = objectMapper;
+        this.identityBatchSize = Math.max(1, identityBatchSize);
     }
 
     public ScanRunResponse scanLibrary(UUID libraryId, UUID requestedBy) {
@@ -521,29 +527,44 @@ public class ScanService {
             String subtreePath,
             OffsetDateTime now
     ) {
-        for (HashWorkItem item : hashQueue) {
-            backgroundJobService.enqueue(identityJob(scanRunId, libraryId, item, subtreePath, now));
+        for (int start = 0, batchIndex = 0; start < hashQueue.size(); start += identityBatchSize, batchIndex++) {
+            int end = Math.min(start + identityBatchSize, hashQueue.size());
+            backgroundJobService.enqueue(identityJob(
+                    scanRunId,
+                    libraryId,
+                    batchIndex,
+                    hashQueue.subList(start, end),
+                    subtreePath,
+                    now
+            ));
         }
     }
 
     private BackgroundJobCreate identityJob(
             UUID scanRunId,
             UUID libraryId,
-            HashWorkItem item,
+            int batchIndex,
+            List<HashWorkItem> items,
             String subtreePath,
             OffsetDateTime now
     ) {
         try {
+            UUID rootId = sharedRootId(items);
             ScanIdentityJobPayload payload = new ScanIdentityJobPayload(
                     scanRunId,
                     libraryId,
-                    item.rootId(),
-                    item.assetFileId(),
-                    item.path(),
-                    item.normalizedPath(),
-                    item.fileName(),
-                    item.size(),
-                    item.modifiedAt(),
+                    rootId,
+                    items.stream()
+                            .map(item -> new ScanIdentityJobPayload.ScanIdentityJobItem(
+                                    item.rootId(),
+                                    item.assetFileId(),
+                                    item.path(),
+                                    item.normalizedPath(),
+                                    item.fileName(),
+                                    item.size(),
+                                    item.modifiedAt()
+                            ))
+                            .toList(),
                     subtreePath
             );
             String payloadJson = objectMapper.writeValueAsString(payload);
@@ -553,20 +574,24 @@ public class ScanService {
                     0,
                     3,
                     now,
-                    ScanJobTypes.ASSET_IDENTITY_BACKFILL + ":size:" + item.size(),
-                    identityDedupeKey(scanRunId, item)
+                    ScanJobTypes.ASSET_IDENTITY_BACKFILL + ":" + scanRunId + ":batch:" + batchIndex,
+                    identityDedupeKey(scanRunId, batchIndex)
             );
         } catch (JsonProcessingException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not create identity job", exception);
         }
     }
 
-    private String identityDedupeKey(UUID scanRunId, HashWorkItem item) {
-        return ScanJobTypes.ASSET_IDENTITY_BACKFILL
-                + ":" + scanRunId
-                + ":" + item.assetFileId()
-                + ":" + item.size()
-                + ":" + item.modifiedAt().toInstant().toEpochMilli();
+    private UUID sharedRootId(List<HashWorkItem> items) {
+        if (items.isEmpty()) {
+            return null;
+        }
+        UUID rootId = items.getFirst().rootId();
+        return items.stream().allMatch(item -> item.rootId().equals(rootId)) ? rootId : null;
+    }
+
+    private String identityDedupeKey(UUID scanRunId, int batchIndex) {
+        return ScanJobTypes.ASSET_IDENTITY_BACKFILL + ":" + scanRunId + ":batch:" + batchIndex;
     }
 
     void executeIdentityJob(ScanIdentityJobPayload payload, UUID jobId) {
@@ -575,72 +600,99 @@ public class ScanService {
             return;
         }
         ensureActive(library);
-        LibraryRepository.LibraryRootRecord root = library.roots().stream()
-                .filter(candidate -> candidate.id().equals(payload.rootId()))
-                .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Source path not found"));
+        Map<UUID, LibraryRepository.LibraryRootRecord> rootsById = library.roots().stream()
+                .collect(Collectors.toMap(LibraryRepository.LibraryRootRecord::id, root -> root));
 
-        ScanRepository.AssetFileRecord candidate = transactionTemplate.execute(status ->
-                scanRepository.findAssetFile(payload.assetFileId()).orElse(null));
-        if (candidate == null || !identityPayloadMatches(payload, candidate)) {
+        List<IdentityHashResult> results = new ArrayList<>();
+        for (ScanIdentityJobPayload.ScanIdentityJobItem item : payload.identityItems()) {
+            if (!rootsById.containsKey(item.rootId())) {
+                continue;
+            }
+            ScanRepository.AssetFileRecord candidate = transactionTemplate.execute(status ->
+                    scanRepository.findAssetFile(item.assetFileId()).orElse(null));
+            if (candidate == null || !identityPayloadMatches(payload, item, candidate)) {
+                continue;
+            }
+            try {
+                results.add(new IdentityHashResult(item, fileHasher.hash(Path.of(item.normalizedPath())), null));
+            } catch (IOException | SecurityException exception) {
+                results.add(new IdentityHashResult(item, null, exception.getMessage()));
+            }
+        }
+        if (results.isEmpty()) {
             return;
         }
 
-        ScanCounts counts = new ScanCounts();
-        List<ScanRepository.ObservationInsert> pendingObservations = new ArrayList<>();
-        try {
-            FileHasher.Hashes hashes = fileHasher.hash(Path.of(payload.normalizedPath()));
-            transactionTemplate.executeWithoutResult(status -> {
-                ScanRepository.AssetFileRecord current = scanRepository.findAssetFile(payload.assetFileId()).orElse(null);
-                if (current == null || !identityPayloadMatches(payload, current)) {
-                    return;
+        transactionTemplate.executeWithoutResult(status -> {
+            ScanCounts counts = new ScanCounts();
+            List<ScanRepository.ObservationInsert> pendingObservations = new ArrayList<>();
+            for (IdentityHashResult result : results) {
+                ScanIdentityJobPayload.ScanIdentityJobItem item = result.item();
+                LibraryRepository.LibraryRootRecord root = rootsById.get(item.rootId());
+                if (root == null) {
+                    continue;
+                }
+                ScanRepository.AssetFileRecord current = scanRepository.findAssetFile(item.assetFileId()).orElse(null);
+                if (current == null || !identityPayloadMatches(payload, item, current)) {
+                    continue;
+                }
+                if (result.errorMessage() != null) {
+                    recordError(
+                            payload.scanRunId(),
+                            payload.libraryId(),
+                            item.rootId(),
+                            item.normalizedPath(),
+                            "file_failed",
+                            result.errorMessage(),
+                            counts
+                    );
+                    continue;
                 }
                 reconcileHashes(
                         payload.scanRunId(),
                         root,
                         new HashWorkItem(
-                                payload.rootId(),
-                                payload.assetFileId(),
-                                payload.path(),
-                                payload.normalizedPath(),
-                                payload.fileName(),
-                                payload.size(),
-                                payload.modifiedAt(),
+                                item.rootId(),
+                                item.assetFileId(),
+                                item.path(),
+                                item.normalizedPath(),
+                                item.fileName(),
+                                item.size(),
+                                item.modifiedAt(),
                                 current
                         ),
-                        hashes,
+                        result.hashes(),
                         counts,
                         pendingObservations
                 );
-                scanRepository.createObservations(pendingObservations);
-                scanRepository.incrementScanRunCounts(payload.scanRunId(), counts);
-            });
-        } catch (IOException | SecurityException exception) {
-            transactionTemplate.executeWithoutResult(status -> {
-                ScanRepository.AssetFileRecord current = scanRepository.findAssetFile(payload.assetFileId()).orElse(null);
-                if (current != null && identityPayloadMatches(payload, current)) {
-                    recordError(
-                            payload.scanRunId(),
-                            payload.libraryId(),
-                            payload.rootId(),
-                            payload.normalizedPath(),
-                            "file_failed",
-                            exception.getMessage(),
-                            counts
-                    );
-                    scanRepository.incrementScanRunCounts(payload.scanRunId(), counts);
+                if (pendingObservations.size() >= OBSERVATION_BATCH_SIZE) {
+                    scanRepository.createObservations(pendingObservations);
+                    pendingObservations.clear();
                 }
-            });
-        }
+            }
+            scanRepository.createObservations(pendingObservations);
+            scanRepository.incrementScanRunCounts(payload.scanRunId(), counts);
+        });
     }
 
-    private boolean identityPayloadMatches(ScanIdentityJobPayload payload, ScanRepository.AssetFileRecord current) {
+    private boolean identityPayloadMatches(
+            ScanIdentityJobPayload payload,
+            ScanIdentityJobPayload.ScanIdentityJobItem item,
+            ScanRepository.AssetFileRecord current
+    ) {
         return "active".equals(current.status())
                 && current.libraryId().equals(payload.libraryId())
-                && current.rootId().equals(payload.rootId())
-                && current.normalizedPath().equals(payload.normalizedPath())
-                && current.sizeBytes() == payload.size()
-                && current.modifiedAt().toInstant().toEpochMilli() == payload.modifiedAt().toInstant().toEpochMilli();
+                && current.rootId().equals(item.rootId())
+                && current.normalizedPath().equals(item.normalizedPath())
+                && current.sizeBytes() == item.size()
+                && current.modifiedAt().toInstant().toEpochMilli() == item.modifiedAt().toInstant().toEpochMilli();
+    }
+
+    private record IdentityHashResult(
+            ScanIdentityJobPayload.ScanIdentityJobItem item,
+            FileHasher.Hashes hashes,
+            String errorMessage
+    ) {
     }
 
     private void reconcileHashes(
@@ -929,7 +981,7 @@ public class ScanService {
             return;
         }
         LibraryRepository.LibraryRootRecord root = library.roots().stream()
-                .filter(candidate -> candidate.id().equals(payload.rootId()))
+                .filter(candidate -> candidate.id().equals(payload.completionRootId()))
                 .findFirst()
                 .orElse(null);
         tryCompleteScanIfReady(

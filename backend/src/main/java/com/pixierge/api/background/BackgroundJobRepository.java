@@ -271,6 +271,17 @@ public class BackgroundJobRepository {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<BackgroundJobRecord> latestJobs(int limit) {
+        return selectJobs()
+                .orderBy(JOBS.updatedAt.desc())
+                .limit(Math.max(1, limit))
+                .fetch()
+                .stream()
+                .map(this::toRecord)
+                .toList();
+    }
+
     private com.querydsl.sql.SQLQuery<Tuple> selectJobs() {
         return queryFactory
                 .select(

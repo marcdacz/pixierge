@@ -8,7 +8,7 @@ import { AlbumsHome } from '@/features/albums/albums-home';
 import { SearchHome } from '@/features/search/search-home';
 import { StarredHome } from '@/features/starred/starred-home';
 import { ScanActivityProvider } from '@/features/scans/scan-activity-context';
-import { SettingsPage } from '@/features/settings/settings-page';
+import { SettingsPage, type SettingsView } from '@/features/settings/settings-page';
 import { TagsHome } from '@/features/tags/tags-home';
 
 export type AppView = 'search' | 'libraries' | 'starred' | 'albums' | 'tags' | 'settings';
@@ -27,6 +27,7 @@ function initialSearchQuery() {
 
 function syncSearchUrl(query: string) {
   const url = new URL(window.location.href);
+  url.pathname = '/';
   if (query) {
     url.searchParams.set('q', query);
   } else {
@@ -35,10 +36,32 @@ function syncSearchUrl(query: string) {
   window.history.replaceState(window.history.state, '', url);
 }
 
+const settingsViews: SettingsView[] = ['configuration', 'scheduler', 'background', 'plugins', 'backups'];
+
+function settingsViewFromPath(pathname: string): SettingsView {
+  const section = pathname.split('/')[2];
+  return settingsViews.includes(section as SettingsView) ? section as SettingsView : 'configuration';
+}
+
+function appViewFromLocation() {
+  if (window.location.pathname.startsWith('/settings')) {
+    return 'settings' as AppView;
+  }
+  return initialSearchQuery() ? 'search' as AppView : 'libraries' as AppView;
+}
+
+function pushAppPath(view: AppView, settingsView: SettingsView = 'configuration') {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.pathname = view === 'settings' ? `/settings/${settingsView}` : '/';
+  window.history.pushState(window.history.state, '', url);
+}
+
 export function App() {
   const initialQuery = initialSearchQuery();
   const [appState, setAppState] = useState<AppState>({ state: 'loading' });
-  const [currentView, setCurrentView] = useState<AppView>(initialQuery ? 'search' : 'libraries');
+  const [currentView, setCurrentView] = useState<AppView>(appViewFromLocation());
+  const [currentSettingsView, setCurrentSettingsView] = useState<SettingsView>(settingsViewFromPath(window.location.pathname));
   const [libraries, setLibraries] = useState<LibrarySummary[]>([]);
   const [librariesLoading, setLibrariesLoading] = useState(false);
   const [librariesError, setLibrariesError] = useState<string | null>(null);
@@ -80,6 +103,28 @@ export function App() {
     return () => {
       toastTimeouts.current.forEach((timeout) => clearTimeout(timeout));
       toastTimeouts.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    function handlePopState() {
+      const nextView = appViewFromLocation();
+      const query = initialSearchQuery();
+      setCurrentView(nextView);
+      setCurrentSettingsView(settingsViewFromPath(window.location.pathname));
+      if (nextView === 'search') {
+        setSearchInput(query);
+        setActiveSearchQuery(query);
+        setRetainedSearchQuery(query);
+      } else {
+        setSearchInput('');
+        setActiveSearchQuery('');
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
     };
   }, []);
 
@@ -146,18 +191,22 @@ export function App() {
   const handleSearchInputChange = useCallback((value: string) => {
     setSearchInput(value);
     if (value.trim() && currentView !== 'search') {
+      pushAppPath('search');
       setCurrentView('search');
     }
   }, [currentView]);
 
   const handleValidSearchQuery = useCallback((value: string) => {
+    if (!value.trim() && currentView !== 'search') {
+      return;
+    }
     setActiveSearchQuery(value);
     setRetainedSearchQuery(value);
     syncSearchUrl(value);
     if (value.trim()) {
       setCurrentView('search');
     }
-  }, []);
+  }, [currentView]);
 
   const handleSearchPageQueryChange = useCallback((value: string) => {
     setSearchInput(value);
@@ -169,6 +218,9 @@ export function App() {
 
   const handleViewChange = useCallback((view: AppView) => {
     if (view === currentView) {
+      if (view === 'settings') {
+        pushAppPath('settings', currentSettingsView);
+      }
       return;
     }
     if (currentView === 'search' && view !== 'search') {
@@ -180,9 +232,19 @@ export function App() {
       setSearchInput(retainedSearchQuery);
       setActiveSearchQuery(retainedSearchQuery);
       syncSearchUrl(retainedSearchQuery);
+    } else {
+      pushAppPath(view, currentSettingsView);
     }
     setCurrentView(view);
-  }, [currentView, retainedSearchQuery]);
+  }, [currentSettingsView, currentView, retainedSearchQuery]);
+
+  const handleSettingsViewChange = useCallback((view: SettingsView) => {
+    setSearchInput('');
+    setActiveSearchQuery('');
+    setCurrentSettingsView(view);
+    setCurrentView('settings');
+    pushAppPath('settings', view);
+  }, []);
 
   if (appState.state === 'loading') {
     return <AppLoading />;
@@ -193,6 +255,7 @@ export function App() {
       <SetupForm
         onSetup={(auth) => {
           setCurrentView('libraries');
+          pushAppPath('libraries');
           setAppState({ state: 'app', auth });
         }}
       />
@@ -205,6 +268,7 @@ export function App() {
         notice={appState.notice}
         onLogin={(auth) => {
           setCurrentView('libraries');
+          pushAppPath('libraries');
           setAppState({ state: 'app', auth });
         }}
       />
@@ -222,7 +286,7 @@ export function App() {
           onLibrarySearchChange={handleSearchInputChange}
           onLibrarySearchQueryChange={handleValidSearchQuery}
           onLogout={() => setAppState({ state: 'login' })}
-          onOpenSettings={() => handleViewChange('settings')}
+          onOpenSettings={() => handleSettingsViewChange(currentSettingsView)}
           searchPlaceholder="Search"
           searchValue={searchInput}
           showLibrarySearch
@@ -242,7 +306,7 @@ export function App() {
               auth={appState.auth}
               libraries={libraries}
               loading={librariesLoading}
-              onConfigureSources={() => setCurrentView('settings')}
+              onConfigureSources={() => handleSettingsViewChange('configuration')}
               onError={showErrorToast}
               onRenameLibrary={async (libraryId, name) => {
                 const updated = await updateLibrary(libraryId, { name }, appState.auth.csrfToken);
@@ -256,11 +320,13 @@ export function App() {
           {currentView === 'settings' && (
             <SettingsPage
               auth={appState.auth}
+              currentView={currentSettingsView}
               error={librariesError}
               libraries={libraries}
               loading={librariesLoading}
               onError={showErrorToast}
               onLibrariesChange={loadLibraries}
+              onViewChange={handleSettingsViewChange}
             />
           )}
         </AppFrame>

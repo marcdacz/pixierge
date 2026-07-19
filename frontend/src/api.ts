@@ -306,6 +306,58 @@ export type BackgroundWorkHealth = {
   watcher: FilesystemWatcherHealth;
 };
 
+export type BackgroundActivityJob = {
+  id: string;
+  jobType: string;
+  status: string;
+  batchLabel: string;
+  fileCount: number;
+  attempts: number;
+  maxAttempts: number;
+  lockedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BackgroundFileActivity = {
+  path: string | null;
+  fileName: string;
+  status: string;
+  jobId: string | null;
+  batchLabel: string | null;
+  updatedAt: string;
+  message: string | null;
+};
+
+export type BackgroundWorkActivity = {
+  jobs: BackgroundActivityJob[];
+  files: BackgroundFileActivity[];
+};
+
+export type BackgroundFileActivityPage = {
+  items: BackgroundFileActivity[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  hasNext: boolean;
+};
+
+export type BackgroundWorkConfig = {
+  maxConcurrentJobs: number;
+  identityBatchSize: number;
+  claimBatchSize: number;
+  pollIntervalMs: number;
+};
+
+export type BackgroundFileActivityQuery = {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  statuses?: string[];
+  updatedFrom?: string;
+  updatedTo?: string;
+};
+
 export type TagSummary = {
   id: string;
   name: string;
@@ -628,6 +680,38 @@ export async function fetchSchedulerJobs(): Promise<SchedulerJob[]> {
 
 export async function fetchBackgroundWorkHealth(): Promise<BackgroundWorkHealth> {
   return requestJson<BackgroundWorkHealth>('/api/admin/background/health');
+}
+
+export async function fetchBackgroundWorkActivity(limit = 100): Promise<BackgroundWorkActivity> {
+  return requestJson<BackgroundWorkActivity>(`/api/admin/background/activity?limit=${limit}`);
+}
+
+export async function fetchBackgroundWorkFiles(
+  query: BackgroundFileActivityQuery = {}
+): Promise<BackgroundFileActivityPage> {
+  const params = new URLSearchParams();
+  params.set('page', String(query.page ?? 0));
+  params.set('pageSize', String(query.pageSize ?? 25));
+  if (query.q?.trim()) {
+    params.set('q', query.q.trim());
+  }
+  for (const status of query.statuses ?? []) {
+    const trimmed = status.trim();
+    if (trimmed) {
+      params.append('status', trimmed);
+    }
+  }
+  if (query.updatedFrom) {
+    params.set('updatedFrom', query.updatedFrom);
+  }
+  if (query.updatedTo) {
+    params.set('updatedTo', query.updatedTo);
+  }
+  return requestJson<BackgroundFileActivityPage>(`/api/admin/background/files?${params.toString()}`);
+}
+
+export async function fetchBackgroundWorkConfig(): Promise<BackgroundWorkConfig> {
+  return requestJson<BackgroundWorkConfig>('/api/admin/background/config');
 }
 
 export async function updateSchedulerJob(

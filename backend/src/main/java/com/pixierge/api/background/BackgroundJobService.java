@@ -98,6 +98,10 @@ public class BackgroundJobService {
         return transactionTemplate.execute(status -> repository.latestProblemJobs(limit));
     }
 
+    public List<BackgroundJobRecord> latestJobs(int limit) {
+        return transactionTemplate.execute(status -> repository.latestJobs(limit));
+    }
+
     private Duration retryDelay(int attempts) {
         long multiplier = 1L << Math.min(Math.max(0, attempts - 1), 6);
         Duration delay = BASE_RETRY_DELAY.multipliedBy(multiplier);

@@ -178,6 +178,47 @@ class ScanServiceTest {
     }
 
     @Test
+    void identityWorkIsEnqueuedInBatches() throws Exception {
+        UUID libraryId = UUID.randomUUID();
+        UUID rootId = UUID.randomUUID();
+        UUID scanRunId = UUID.randomUUID();
+        Files.writeString(tempDir.resolve("one.jpg"), "one");
+        Files.writeString(tempDir.resolve("two.jpg"), "two");
+        Files.writeString(tempDir.resolve("three.jpg"), "three");
+        LibraryRepository.LibraryRootRecord root = root(libraryId, rootId, tempDir);
+        LibraryRepository.LibraryRecord library = library(libraryId, root, List.of());
+        RecordingBackgroundJobService backgroundJobService = new RecordingBackgroundJobService();
+        ScanService service = service(
+                new FakeLibraryRepository(library),
+                new FakeScanRepository(List.of()),
+                new FakeFileHasher(),
+                backgroundJobService,
+                2
+        );
+
+        service.executeScan(scanRunId, library, null);
+
+        List<BackgroundJobCreate> identityJobs = backgroundJobService.enqueuedJobs.stream()
+                .filter(job -> ScanJobTypes.ASSET_IDENTITY_BACKFILL.equals(job.jobType()))
+                .toList();
+        ScanIdentityJobPayload firstPayload = objectMapper.readValue(
+                identityJobs.getFirst().payloadJson(),
+                ScanIdentityJobPayload.class
+        );
+        ScanIdentityJobPayload secondPayload = objectMapper.readValue(
+                identityJobs.get(1).payloadJson(),
+                ScanIdentityJobPayload.class
+        );
+        assertThat(identityJobs).hasSize(2);
+        assertThat(identityJobs.getFirst().concurrencyKey())
+                .isEqualTo(ScanJobTypes.ASSET_IDENTITY_BACKFILL + ":" + scanRunId + ":batch:0");
+        assertThat(identityJobs.get(1).dedupeKey())
+                .isEqualTo(ScanJobTypes.ASSET_IDENTITY_BACKFILL + ":" + scanRunId + ":batch:1");
+        assertThat(firstPayload.identityItems()).hasSize(2);
+        assertThat(secondPayload.identityItems()).hasSize(1);
+    }
+
+    @Test
     void newFileWithContentHashFromAnotherLibraryUsesExistingAsset() throws Exception {
         UUID libraryId = UUID.randomUUID();
         UUID rootId = UUID.randomUUID();
@@ -262,13 +303,24 @@ class ScanServiceTest {
             FileHasher fileHasher,
             BackgroundJobService backgroundJobService
     ) {
+        return service(libraryRepository, scanRepository, fileHasher, backgroundJobService, 100);
+    }
+
+    private ScanService service(
+            FakeLibraryRepository libraryRepository,
+            FakeScanRepository scanRepository,
+            FileHasher fileHasher,
+            BackgroundJobService backgroundJobService,
+            int identityBatchSize
+    ) {
         return new ScanService(
                 libraryRepository,
                 scanRepository,
                 fileHasher,
                 backgroundJobService,
                 new ImmediateTransactionTemplate(),
-                objectMapper
+                objectMapper,
+                identityBatchSize
         );
     }
 

@@ -122,7 +122,7 @@ export function AppFrame({
     <TooltipProvider>
       <main
         className={cn(
-          'grid min-h-screen grid-rows-[var(--shell-header-height)_minmax(0,1fr)] bg-background text-foreground',
+          'grid h-screen overflow-hidden grid-rows-[var(--shell-header-height)_minmax(0,1fr)] bg-background text-foreground',
           shellLayoutTokens
         )}
       >
@@ -139,11 +139,11 @@ export function AppFrame({
         />
         <div
           className={cn(
-            'grid min-h-0',
+            'grid min-h-0 overflow-hidden',
             effectiveNavExpanded ? shellContentColumns.expanded : shellContentColumns.collapsed
           )}
         >
-          <aside className="flex min-h-0 flex-col border-r border-border bg-sidebar px-3 py-4">
+          <aside className="flex min-h-0 flex-col overflow-y-auto border-r border-border bg-sidebar px-3 py-4">
             <nav aria-label="Primary" className="grid gap-2">
               <NavItem
                 active={currentView === 'search'}
@@ -184,10 +184,10 @@ export function AppFrame({
             </div>
           </aside>
 
-          <section className="min-w-0 overflow-auto">
+          <section className="min-h-0 min-w-0 overflow-hidden">
             <div
               className={cn(
-                'min-h-full w-full p-6 lg:p-8',
+                'h-full min-h-0 overflow-hidden p-6 lg:p-8',
                 contentMode === 'constrained' ? 'mx-auto max-w-6xl' : 'max-w-none lg:px-5'
               )}
             >

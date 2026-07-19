@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-export const BROWSE_LAYOUT_HEIGHT_CLASS =
-  'h-[calc(100vh-var(--shell-header-height)-3rem)] max-h-[calc(100vh-var(--shell-header-height)-3rem)] lg:h-[calc(100vh-var(--shell-header-height)-4rem)] lg:max-h-[calc(100vh-var(--shell-header-height)-4rem)]';
+/** Fill the AppFrame content pane so chrome stays fixed and views scroll internally. */
+export const BROWSE_LAYOUT_HEIGHT_CLASS = 'h-full max-h-full min-h-0';
 
 export const BROWSE_TREE_WIDTH_TOKEN = '[--browse-tree-width:16rem]';
 

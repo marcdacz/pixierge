@@ -173,10 +173,7 @@ describe('AssetFocus', () => {
     const surface = container.querySelector('.absolute.inset-0.overflow-hidden.bg-black');
     const image = container.querySelector('img');
 
-    expect(root).toHaveClass(
-      'h-[calc(100vh-var(--shell-header-height)-3rem)]',
-      'max-h-[calc(100vh-var(--shell-header-height)-3rem)]'
-    );
+    expect(root).toHaveClass('h-full', 'max-h-full', 'min-h-0');
     expect(surface).not.toBeNull();
     expect(image).toHaveClass('h-full', 'w-full', 'object-contain');
     expect(image).toHaveStyle({ transform: `translate(0px, 0px) scale(${ASSET_FOCUS_MIN_ZOOM})` });
