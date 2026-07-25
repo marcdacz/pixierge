@@ -1,6 +1,6 @@
 package com.pixierge.api.scheduler;
 
-import com.pixierge.api.assets.AssetService;
+import com.pixierge.api.assets.MetadataEnrichmentService;
 import com.pixierge.api.libraries.LibraryRepository;
 import com.pixierge.api.scans.ScanService;
 import org.springframework.context.annotation.Bean;
@@ -14,7 +14,6 @@ import static com.pixierge.api.scheduler.SchedulerConstants.LIBRARY_SCAN_TIMEOUT
 import static com.pixierge.api.scheduler.SchedulerConstants.METADATA_SCAN_CONCURRENCY_KEY;
 import static com.pixierge.api.scheduler.SchedulerConstants.METADATA_SCAN_CRON;
 import static com.pixierge.api.scheduler.SchedulerConstants.METADATA_SCAN_TIMEOUT_SECONDS;
-import static com.pixierge.api.scheduler.SchedulerConstants.MILLIS_PER_SECOND;
 
 @Configuration
 public class CoreSchedulerJobsConfig {
@@ -64,7 +63,7 @@ public class CoreSchedulerJobsConfig {
     }
 
     @Bean
-    SchedulerJobDefinition metadataScanJobDefinition(AssetService assetService) {
+    SchedulerJobDefinition metadataScanJobDefinition(MetadataEnrichmentService metadataEnrichmentService) {
         return new SchedulerJobDefinition(
                 METADATA_SCAN_JOB_KEY,
                 "Metadata scan",
@@ -75,19 +74,9 @@ public class CoreSchedulerJobsConfig {
                 METADATA_SCAN_TIMEOUT_SECONDS,
                 METADATA_SCAN_CONCURRENCY_KEY,
                 job -> {
-                    long deadline = System.currentTimeMillis() + job.timeoutSeconds() * MILLIS_PER_SECOND;
-                    int processed = 0;
-                    int failed = 0;
-                    while (System.currentTimeMillis() < deadline) {
-                        var batch = assetService.backfillMetadata();
-                        processed += batch.processedCount();
-                        failed += batch.failedCount();
-                        if (batch.processedCount() == 0) {
-                            break;
-                        }
-                    }
+                    var batch = metadataEnrichmentService.enqueueMetadataBackfill();
                     return new SchedulerJobResult(
-                            "{\"processedCount\":" + processed + ",\"failedCount\":" + failed + "}"
+                            "{\"processedCount\":" + batch.processedCount() + ",\"failedCount\":" + batch.failedCount() + "}"
                     );
                 }
         );

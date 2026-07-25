@@ -114,6 +114,10 @@ const backgroundWorkHealth = {
     {
       id: 'job-1',
       jobType: 'filesystem-change-event',
+      payloadJson: JSON.stringify({
+        normalizedPath: '/photos/holiday/IMG_4042.HEIC',
+        fileName: 'IMG_4042.HEIC'
+      }),
       status: 'dead_letter',
       attempts: 3,
       maxAttempts: 3,
@@ -263,11 +267,33 @@ const assetDetail = {
     capturedAt: '2026-07-04T00:00:00Z',
     width: 1200,
     height: 800,
+    orientation: null,
     fileExtension: 'jpg',
     mimeType: 'image/jpeg',
     extractionStatus: 'extracted',
     extractedAt: '2026-07-04T00:00:00Z',
-    errorMessage: null
+    errorCode: null,
+    errorMessage: null,
+    cameraMake: null,
+    cameraModel: null,
+    lensModel: null,
+    focalLength: null,
+    aperture: null,
+    exposureTime: null,
+    iso: null,
+    latitude: null,
+    longitude: null,
+    title: null,
+    description: null,
+    keywords: [],
+    durationMs: null,
+    displayRotation: null,
+    container: null,
+    videoCodec: null,
+    audioCodec: null,
+    frameRate: null,
+    bitrate: null,
+    hasAudio: null
   },
   files: [
     {
@@ -407,6 +433,10 @@ describe('App', () => {
     expect(screen.getAllByText('identity batch 8')).not.toHaveLength(0);
     expect(screen.getAllByText('dead letter')).not.toHaveLength(0);
     expect(screen.getByText(/Filesystem watcher overflow under \/photos/)).toBeInTheDocument();
+    expect(screen.getByText('/photos/holiday/IMG_4042.HEIC')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('background-problem-toggle-job-1'));
+    expect(screen.getByText('Job payload')).toBeInTheDocument();
+    expect(screen.getAllByText(/watcher_overflow: Watcher overflow under \/photos/)).not.toHaveLength(0);
     expect(screen.getByText('42')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(

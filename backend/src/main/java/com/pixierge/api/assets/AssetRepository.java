@@ -34,12 +34,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.pixierge.api.assets.AssetConstants.AVAILABILITY_AVAILABLE;
 import static com.pixierge.api.assets.AssetConstants.AVAILABILITY_MISSING;
+import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_FAILED;
+import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_PENDING;
+import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_STALE;
 import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_ACTIVE;
 import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_MISSING;
 import static com.pixierge.api.assets.AssetConstants.IMAGE_MIME_PREFIX;
@@ -289,7 +293,12 @@ class AssetRepository {
         return Optional.of(AssetDetailRow.from(rows));
     }
 
-    List<MetadataCandidateRow> listMetadataCandidates(int limit) {
+    List<MetadataCandidateRow> listMetadataCandidates(
+            int limit,
+            String extractor,
+            String extractorVersion,
+            int schemaVersion
+    ) {
         return queryFactory
                 .selectDistinct(
                         ASSETS.id,
@@ -297,13 +306,25 @@ class AssetRepository {
                         ASSET_FILES.path,
                         ASSET_FILES.normalizedPath,
                         ASSET_FILES.fileName,
+                        ASSET_FILES.sizeBytes,
                         ASSET_FILES.modifiedAt,
                         ASSETS.mediaType,
                         ASSET_FILES.lastObservedAt
                 )
                 .from(ASSET_FILES)
                 .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
-                .where(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
+                .where(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE)
+                        .and(ASSETS.contentHash.isNotNull())
+                        .and(ASSETS.contentHash.startsWith("provisional:").not())
+                        .and(ASSET_METADATA.assetId.isNull()
+                                .or(ASSET_METADATA.metadataStatus.isNull())
+                                .or(ASSET_METADATA.metadataStatus.in(EXTRACTION_STATUS_PENDING, EXTRACTION_STATUS_FAILED, EXTRACTION_STATUS_STALE))
+                                .or(ASSET_METADATA.metadataExtractor.isNull().or(ASSET_METADATA.metadataExtractor.ne(extractor)))
+                                .or(ASSET_METADATA.metadataExtractorVersion.isNull().or(ASSET_METADATA.metadataExtractorVersion.ne(extractorVersion)))
+                                .or(ASSET_METADATA.metadataSchemaVersion.isNull().or(ASSET_METADATA.metadataSchemaVersion.ne(schemaVersion)))
+                                .or(ASSET_METADATA.metadataSourceFileSize.isNull().or(ASSET_METADATA.metadataSourceFileSize.ne(ASSET_FILES.sizeBytes)))
+                                .or(ASSET_METADATA.metadataSourceModifiedAt.isNull().or(ASSET_METADATA.metadataSourceModifiedAt.ne(ASSET_FILES.modifiedAt)))))
                 .orderBy(ASSET_FILES.lastObservedAt.desc())
                 .limit(limit)
                 .fetch()
@@ -314,10 +335,46 @@ class AssetRepository {
                         row.get(ASSET_FILES.path),
                         row.get(ASSET_FILES.normalizedPath),
                         row.get(ASSET_FILES.fileName),
+                        row.get(ASSET_FILES.sizeBytes),
                         row.get(ASSET_FILES.modifiedAt),
                         row.get(ASSETS.mediaType)
                 ))
                 .toList();
+    }
+
+    Optional<MetadataCandidateRow> findActiveMetadataCandidate(UUID assetId, UUID assetFileId) {
+        Tuple row = queryFactory
+                .select(
+                        ASSETS.id,
+                        ASSET_FILES.id,
+                        ASSET_FILES.path,
+                        ASSET_FILES.normalizedPath,
+                        ASSET_FILES.fileName,
+                        ASSET_FILES.sizeBytes,
+                        ASSET_FILES.modifiedAt,
+                        ASSETS.mediaType
+                )
+                .from(ASSET_FILES)
+                .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
+                .where(ASSETS.id.eq(assetId)
+                        .and(ASSET_FILES.id.eq(assetFileId))
+                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                        .and(ASSETS.contentHash.isNotNull())
+                        .and(ASSETS.contentHash.startsWith("provisional:").not()))
+                .fetchOne();
+        if (row == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new MetadataCandidateRow(
+                row.get(ASSETS.id),
+                row.get(ASSET_FILES.id),
+                row.get(ASSET_FILES.path),
+                row.get(ASSET_FILES.normalizedPath),
+                row.get(ASSET_FILES.fileName),
+                row.get(ASSET_FILES.sizeBytes),
+                row.get(ASSET_FILES.modifiedAt),
+                row.get(ASSETS.mediaType)
+        ));
     }
 
     List<UUID> listConfirmedAssetIds() {
@@ -342,6 +399,33 @@ class AssetRepository {
                 .set(ASSET_METADATA.extractionStatus, update.extractionStatus())
                 .set(ASSET_METADATA.extractedAt, update.extractedAt())
                 .set(ASSET_METADATA.errorMessage, update.errorMessage())
+                .set(ASSET_METADATA.metadataStatus, update.extractionStatus())
+                .set(ASSET_METADATA.metadataExtractor, update.extractor())
+                .set(ASSET_METADATA.metadataExtractorVersion, update.extractorVersion())
+                .set(ASSET_METADATA.metadataSchemaVersion, update.schemaVersion())
+                .set(ASSET_METADATA.metadataSourceFileSize, update.sourceFileSize())
+                .set(ASSET_METADATA.metadataSourceModifiedAt, update.sourceModifiedAt())
+                .set(ASSET_METADATA.metadataExtractedAt, update.extractedAt())
+                .set(ASSET_METADATA.metadataErrorCode, update.errorCode())
+                .set(ASSET_METADATA.metadataErrorMessage, update.errorMessage())
+                .set(ASSET_METADATA.lensModel, update.lensModel())
+                .set(ASSET_METADATA.focalLength, update.focalLength())
+                .set(ASSET_METADATA.aperture, update.aperture())
+                .set(ASSET_METADATA.exposureTime, update.exposureTime())
+                .set(ASSET_METADATA.iso, update.iso())
+                .set(ASSET_METADATA.latitude, update.latitude())
+                .set(ASSET_METADATA.longitude, update.longitude())
+                .set(ASSET_METADATA.title, update.title())
+                .set(ASSET_METADATA.description, update.description())
+                .set(ASSET_METADATA.keywords, update.keywords())
+                .set(ASSET_METADATA.durationMs, update.durationMs())
+                .set(ASSET_METADATA.displayRotation, update.displayRotation())
+                .set(ASSET_METADATA.container, update.container())
+                .set(ASSET_METADATA.videoCodec, update.videoCodec())
+                .set(ASSET_METADATA.audioCodec, update.audioCodec())
+                .set(ASSET_METADATA.frameRate, update.frameRate())
+                .set(ASSET_METADATA.bitrate, update.bitrate())
+                .set(ASSET_METADATA.hasAudio, update.hasAudio())
                 .where(ASSET_METADATA.assetId.eq(update.assetId()))
                 .execute();
 
@@ -360,6 +444,33 @@ class AssetRepository {
                     .set(ASSET_METADATA.extractionStatus, update.extractionStatus())
                     .set(ASSET_METADATA.extractedAt, update.extractedAt())
                     .set(ASSET_METADATA.errorMessage, update.errorMessage())
+                    .set(ASSET_METADATA.metadataStatus, update.extractionStatus())
+                    .set(ASSET_METADATA.metadataExtractor, update.extractor())
+                    .set(ASSET_METADATA.metadataExtractorVersion, update.extractorVersion())
+                    .set(ASSET_METADATA.metadataSchemaVersion, update.schemaVersion())
+                    .set(ASSET_METADATA.metadataSourceFileSize, update.sourceFileSize())
+                    .set(ASSET_METADATA.metadataSourceModifiedAt, update.sourceModifiedAt())
+                    .set(ASSET_METADATA.metadataExtractedAt, update.extractedAt())
+                    .set(ASSET_METADATA.metadataErrorCode, update.errorCode())
+                    .set(ASSET_METADATA.metadataErrorMessage, update.errorMessage())
+                    .set(ASSET_METADATA.lensModel, update.lensModel())
+                    .set(ASSET_METADATA.focalLength, update.focalLength())
+                    .set(ASSET_METADATA.aperture, update.aperture())
+                    .set(ASSET_METADATA.exposureTime, update.exposureTime())
+                    .set(ASSET_METADATA.iso, update.iso())
+                    .set(ASSET_METADATA.latitude, update.latitude())
+                    .set(ASSET_METADATA.longitude, update.longitude())
+                    .set(ASSET_METADATA.title, update.title())
+                    .set(ASSET_METADATA.description, update.description())
+                    .set(ASSET_METADATA.keywords, update.keywords())
+                    .set(ASSET_METADATA.durationMs, update.durationMs())
+                    .set(ASSET_METADATA.displayRotation, update.displayRotation())
+                    .set(ASSET_METADATA.container, update.container())
+                    .set(ASSET_METADATA.videoCodec, update.videoCodec())
+                    .set(ASSET_METADATA.audioCodec, update.audioCodec())
+                    .set(ASSET_METADATA.frameRate, update.frameRate())
+                    .set(ASSET_METADATA.bitrate, update.bitrate())
+                    .set(ASSET_METADATA.hasAudio, update.hasAudio())
                     .execute();
         }
     }
@@ -421,11 +532,33 @@ class AssetRepository {
                         ASSET_METADATA.capturedAt,
                         ASSET_METADATA.width,
                         ASSET_METADATA.height,
+                        ASSET_METADATA.orientation,
                         ASSET_METADATA.fileExtension,
                         ASSET_METADATA.mimeType,
-                        ASSET_METADATA.extractionStatus,
-                        ASSET_METADATA.extractedAt,
-                        ASSET_METADATA.errorMessage
+                        ASSET_METADATA.metadataStatus,
+                        ASSET_METADATA.metadataExtractedAt,
+                        ASSET_METADATA.metadataErrorCode,
+                        ASSET_METADATA.metadataErrorMessage,
+                        ASSET_METADATA.cameraMake,
+                        ASSET_METADATA.cameraModel,
+                        ASSET_METADATA.lensModel,
+                        ASSET_METADATA.focalLength,
+                        ASSET_METADATA.aperture,
+                        ASSET_METADATA.exposureTime,
+                        ASSET_METADATA.iso,
+                        ASSET_METADATA.latitude,
+                        ASSET_METADATA.longitude,
+                        ASSET_METADATA.title,
+                        ASSET_METADATA.description,
+                        ASSET_METADATA.keywords,
+                        ASSET_METADATA.durationMs,
+                        ASSET_METADATA.displayRotation,
+                        ASSET_METADATA.container,
+                        ASSET_METADATA.videoCodec,
+                        ASSET_METADATA.audioCodec,
+                        ASSET_METADATA.frameRate,
+                        ASSET_METADATA.bitrate,
+                        ASSET_METADATA.hasAudio
                 )
                 .from(ASSET_FILES)
                 .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
@@ -725,11 +858,33 @@ class AssetRepository {
                 row.get(ASSET_METADATA.capturedAt),
                 row.get(ASSET_METADATA.width),
                 row.get(ASSET_METADATA.height),
+                row.get(ASSET_METADATA.orientation),
                 row.get(ASSET_METADATA.fileExtension),
                 row.get(ASSET_METADATA.mimeType),
-                row.get(ASSET_METADATA.extractionStatus),
-                row.get(ASSET_METADATA.extractedAt),
-                row.get(ASSET_METADATA.errorMessage)
+                row.get(ASSET_METADATA.metadataStatus),
+                row.get(ASSET_METADATA.metadataExtractedAt),
+                row.get(ASSET_METADATA.metadataErrorCode),
+                row.get(ASSET_METADATA.metadataErrorMessage),
+                row.get(ASSET_METADATA.cameraMake),
+                row.get(ASSET_METADATA.cameraModel),
+                row.get(ASSET_METADATA.lensModel),
+                row.get(ASSET_METADATA.focalLength),
+                row.get(ASSET_METADATA.aperture),
+                row.get(ASSET_METADATA.exposureTime),
+                row.get(ASSET_METADATA.iso),
+                row.get(ASSET_METADATA.latitude),
+                row.get(ASSET_METADATA.longitude),
+                row.get(ASSET_METADATA.title),
+                row.get(ASSET_METADATA.description),
+                row.get(ASSET_METADATA.keywords),
+                row.get(ASSET_METADATA.durationMs),
+                row.get(ASSET_METADATA.displayRotation),
+                row.get(ASSET_METADATA.container),
+                row.get(ASSET_METADATA.videoCodec),
+                row.get(ASSET_METADATA.audioCodec),
+                row.get(ASSET_METADATA.frameRate),
+                row.get(ASSET_METADATA.bitrate),
+                row.get(ASSET_METADATA.hasAudio)
         );
     }
 
@@ -754,6 +909,17 @@ class AssetRepository {
         }
         String normalized = mediaType.toLowerCase(Locale.ROOT);
         return normalized.equals("image") || normalized.startsWith(IMAGE_MIME_PREFIX);
+    }
+
+    private static List<String> splitKeywords(String keywords) {
+        if (keywords == null || keywords.isBlank()) {
+            return List.of();
+        }
+        return keywords.lines()
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
     }
 
     record AssetSearchCriteria(
@@ -798,11 +964,33 @@ class AssetRepository {
             OffsetDateTime capturedAt,
             Integer width,
             Integer height,
+            Integer orientation,
             String fileExtension,
             String mimeType,
             String extractionStatus,
             OffsetDateTime extractedAt,
-            String errorMessage
+            String errorCode,
+            String errorMessage,
+            String cameraMake,
+            String cameraModel,
+            String lensModel,
+            Double focalLength,
+            Double aperture,
+            String exposureTime,
+            Integer iso,
+            Double latitude,
+            Double longitude,
+            String title,
+            String description,
+            String keywords,
+            Long durationMs,
+            Integer displayRotation,
+            String container,
+            String videoCodec,
+            String audioCodec,
+            String frameRate,
+            Long bitrate,
+            Boolean hasAudio
     ) {
         String folderPath() {
             return AssetRepository.folderPath(normalizedPath);
@@ -857,11 +1045,33 @@ class AssetRepository {
                             metadataSource.capturedAt(),
                             metadataSource.width(),
                             metadataSource.height(),
+                            metadataSource.orientation(),
                             metadataSource.fileExtension(),
                             metadataSource.mimeType(),
                             metadataSource.extractionStatus(),
                             metadataSource.extractedAt(),
-                            metadataSource.errorMessage()
+                            metadataSource.errorCode(),
+                            metadataSource.errorMessage(),
+                            metadataSource.cameraMake(),
+                            metadataSource.cameraModel(),
+                            metadataSource.lensModel(),
+                            metadataSource.focalLength(),
+                            metadataSource.aperture(),
+                            metadataSource.exposureTime(),
+                            metadataSource.iso(),
+                            metadataSource.latitude(),
+                            metadataSource.longitude(),
+                            metadataSource.title(),
+                            metadataSource.description(),
+                            splitKeywords(metadataSource.keywords()),
+                            metadataSource.durationMs(),
+                            metadataSource.displayRotation(),
+                            metadataSource.container(),
+                            metadataSource.videoCodec(),
+                            metadataSource.audioCodec(),
+                            metadataSource.frameRate(),
+                            metadataSource.bitrate(),
+                            metadataSource.hasAudio()
                     ),
                     rows.stream()
                             .map(row -> new AssetDetailResponse.FileOccurrence(
@@ -886,6 +1096,7 @@ class AssetRepository {
             String path,
             String normalizedPath,
             String fileName,
+            long sizeBytes,
             OffsetDateTime modifiedAt,
             String mediaType
     ) {
@@ -904,7 +1115,31 @@ class AssetRepository {
             String sourceVersion,
             String extractionStatus,
             OffsetDateTime extractedAt,
-            String errorMessage
+            String errorCode,
+            String errorMessage,
+            String extractor,
+            String extractorVersion,
+            Integer schemaVersion,
+            Long sourceFileSize,
+            OffsetDateTime sourceModifiedAt,
+            String lensModel,
+            Double focalLength,
+            Double aperture,
+            String exposureTime,
+            Integer iso,
+            Double latitude,
+            Double longitude,
+            String title,
+            String description,
+            String keywords,
+            Long durationMs,
+            Integer displayRotation,
+            String container,
+            String videoCodec,
+            String audioCodec,
+            String frameRate,
+            Long bitrate,
+            Boolean hasAudio
     ) {
     }
 

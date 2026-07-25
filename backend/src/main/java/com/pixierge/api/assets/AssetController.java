@@ -21,9 +21,11 @@ import static com.pixierge.api.assets.AssetConstants.DEFAULT_PAGE_SIZE_PARAM;
 public class AssetController {
 
     private final AssetService assetService;
+    private final MetadataEnrichmentService metadataEnrichmentService;
 
-    public AssetController(AssetService assetService) {
+    public AssetController(AssetService assetService, MetadataEnrichmentService metadataEnrichmentService) {
         this.assetService = assetService;
+        this.metadataEnrichmentService = metadataEnrichmentService;
     }
 
     @GetMapping("/api/library-tree")
@@ -121,6 +123,6 @@ public class AssetController {
 
     @PostMapping("/api/assets/metadata/backfill")
     AdminBatchActionResponse backfillMetadata() {
-        return assetService.backfillMetadata();
+        return metadataEnrichmentService.enqueueMetadataBackfill();
     }
 }

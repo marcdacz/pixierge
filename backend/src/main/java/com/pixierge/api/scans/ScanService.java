@@ -2,6 +2,7 @@ package com.pixierge.api.scans;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pixierge.api.assets.MetadataEnrichmentService;
 import com.pixierge.api.background.BackgroundJobCreate;
 import com.pixierge.api.background.BackgroundJobService;
 import com.pixierge.api.libraries.LibraryRepository;
@@ -40,6 +41,7 @@ public class ScanService {
     private final BackgroundJobService backgroundJobService;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
+    private final MetadataEnrichmentService metadataEnrichmentService;
     private final int identityBatchSize;
     private final Map<UUID, Semaphore> libraryScanSlots = new ConcurrentHashMap<>();
 
@@ -50,6 +52,7 @@ public class ScanService {
             BackgroundJobService backgroundJobService,
             TransactionTemplate transactionTemplate,
             ObjectMapper objectMapper,
+            MetadataEnrichmentService metadataEnrichmentService,
             @Value("${pixierge.background-jobs.identity-batch-size:" + DEFAULT_IDENTITY_BATCH_SIZE + "}") int identityBatchSize
     ) {
         this.libraryRepository = libraryRepository;
@@ -58,6 +61,7 @@ public class ScanService {
         this.backgroundJobService = backgroundJobService;
         this.transactionTemplate = transactionTemplate;
         this.objectMapper = objectMapper;
+        this.metadataEnrichmentService = metadataEnrichmentService;
         this.identityBatchSize = Math.max(1, identityBatchSize);
     }
 
@@ -673,6 +677,9 @@ public class ScanService {
             scanRepository.createObservations(pendingObservations);
             scanRepository.incrementScanRunCounts(payload.scanRunId(), counts);
         });
+        if (metadataEnrichmentService != null) {
+            metadataEnrichmentService.enqueueMetadataBackfill(results.size());
+        }
     }
 
     private boolean identityPayloadMatches(

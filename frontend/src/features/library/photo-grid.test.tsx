@@ -55,11 +55,33 @@ const assetDetail: AssetDetail = {
     capturedAt: '2026-07-04T00:00:00Z',
     width: 800,
     height: 1200,
+    orientation: null,
     fileExtension: 'jpg',
     mimeType: 'image/jpeg',
     extractionStatus: 'extracted',
     extractedAt: '2026-07-04T00:00:00Z',
-    errorMessage: null
+    errorCode: null,
+    errorMessage: null,
+    cameraMake: null,
+    cameraModel: null,
+    lensModel: null,
+    focalLength: null,
+    aperture: null,
+    exposureTime: null,
+    iso: null,
+    latitude: null,
+    longitude: null,
+    title: null,
+    description: null,
+    keywords: [],
+    durationMs: null,
+    displayRotation: null,
+    container: null,
+    videoCodec: null,
+    audioCodec: null,
+    frameRate: null,
+    bitrate: null,
+    hasAudio: null
   },
   files: [
     {
@@ -179,21 +201,23 @@ describe('AssetFocus', () => {
     expect(image).toHaveStyle({ transform: `translate(0px, 0px) scale(${ASSET_FOCUS_MIN_ZOOM})` });
   });
 
-  it('zooms in and out from the toolbar controls', async () => {
-    const user = userEvent.setup();
+  it('zooms in and out from the toolbar controls', () => {
     renderFocus();
 
     const image = document.querySelector('img');
+    const zoomSlider = screen.getByRole('slider', { name: 'Zoom' });
     expect(image).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeDisabled();
+    expect(zoomSlider).toHaveValue(String(ASSET_FOCUS_MIN_ZOOM));
 
-    await user.click(screen.getByRole('button', { name: 'Zoom in' }));
+    fireEvent.change(zoomSlider, {
+      target: { value: String(ASSET_FOCUS_MIN_ZOOM + ASSET_FOCUS_ZOOM_STEP) }
+    });
     expect(image).toHaveStyle({
       transform: `translate(0px, 0px) scale(${ASSET_FOCUS_MIN_ZOOM + ASSET_FOCUS_ZOOM_STEP})`
     });
-    expect(screen.getByRole('button', { name: 'Zoom out' })).not.toBeDisabled();
+    expect(zoomSlider).toHaveValue(String(ASSET_FOCUS_MIN_ZOOM + ASSET_FOCUS_ZOOM_STEP));
 
-    await user.click(screen.getByRole('button', { name: 'Zoom out' }));
+    fireEvent.change(zoomSlider, { target: { value: String(ASSET_FOCUS_MIN_ZOOM) } });
     expect(image).toHaveStyle({ transform: `translate(0px, 0px) scale(${ASSET_FOCUS_MIN_ZOOM})` });
   });
 
@@ -213,19 +237,15 @@ describe('AssetFocus', () => {
     expect(image).toHaveStyle({ transform: `translate(0px, 0px) scale(${ASSET_FOCUS_MIN_ZOOM})` });
   });
 
-  it('clamps zoom at the maximum', async () => {
-    const user = userEvent.setup();
+  it('clamps zoom at the maximum', () => {
     renderFocus();
     const image = document.querySelector('img');
-    const zoomIn = screen.getByRole('button', { name: 'Zoom in' });
-    const steps = Math.ceil((ASSET_FOCUS_MAX_ZOOM - ASSET_FOCUS_MIN_ZOOM) / ASSET_FOCUS_ZOOM_STEP);
+    const zoomSlider = screen.getByRole('slider', { name: 'Zoom' });
 
-    for (let index = 0; index < steps; index += 1) {
-      await user.click(zoomIn);
-    }
+    fireEvent.change(zoomSlider, { target: { value: String(ASSET_FOCUS_MAX_ZOOM + 1) } });
 
     expect(image).toHaveStyle({ transform: `translate(0px, 0px) scale(${ASSET_FOCUS_MAX_ZOOM})` });
-    expect(zoomIn).toBeDisabled();
+    expect(zoomSlider).toHaveValue(String(ASSET_FOCUS_MAX_ZOOM));
   });
 
   it('opens actions from the more button and right-click', async () => {
@@ -252,6 +272,42 @@ describe('AssetFocus', () => {
 
     await user.click(screen.getByRole('button', { name: 'Close photo metadata' }));
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+  });
+
+  it('hides completed status and empty optional metadata', async () => {
+    const user = userEvent.setup();
+    renderFocus();
+
+    await user.click(screen.getByRole('button', { name: 'Show photo metadata' }));
+
+    expect(screen.queryByText('Metadata')).not.toBeInTheDocument();
+    expect(screen.queryByText('Camera')).not.toBeInTheDocument();
+    expect(screen.queryByText('Lens')).not.toBeInTheDocument();
+    expect(screen.queryByText('Exposure')).not.toBeInTheDocument();
+  });
+
+  it('shows in-progress status and only the metadata already available', async () => {
+    const user = userEvent.setup();
+    renderFocus({
+      asset: {
+        ...assetDetail,
+        metadata: {
+          ...assetDetail.metadata,
+          extractionStatus: 'processing',
+          cameraMake: 'Nikon',
+          cameraModel: 'D7100'
+        }
+      }
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Show photo metadata' }));
+
+    expect(screen.getByText('Metadata')).toBeInTheDocument();
+    expect(screen.getByText('processing')).toBeInTheDocument();
+    expect(screen.getByText('Camera')).toBeInTheDocument();
+    expect(screen.getByText('Nikon D7100')).toBeInTheDocument();
+    expect(screen.queryByText('Lens')).not.toBeInTheDocument();
+    expect(screen.queryByText('Exposure')).not.toBeInTheDocument();
   });
 
   it('shows a star badge when starred', () => {

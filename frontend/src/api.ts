@@ -207,11 +207,33 @@ export type AssetMetadata = {
   capturedAt: string | null;
   width: number | null;
   height: number | null;
+  orientation: number | null;
   fileExtension: string | null;
   mimeType: string | null;
-  extractionStatus: 'pending' | 'extracted' | 'unsupported' | 'failed' | null;
+  extractionStatus: 'pending' | 'processing' | 'extracted' | 'unsupported' | 'failed' | 'stale' | null;
   extractedAt: string | null;
+  errorCode: string | null;
   errorMessage: string | null;
+  cameraMake: string | null;
+  cameraModel: string | null;
+  lensModel: string | null;
+  focalLength: number | null;
+  aperture: number | null;
+  exposureTime: string | null;
+  iso: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  title: string | null;
+  description: string | null;
+  keywords: string[];
+  durationMs: number | null;
+  displayRotation: number | null;
+  container: string | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  frameRate: string | null;
+  bitrate: number | null;
+  hasAudio: boolean | null;
 };
 
 export type AssetDetail = {
@@ -280,6 +302,7 @@ export type BackgroundJobStatusSummary = {
 export type BackgroundJobProblemSummary = {
   id: string;
   jobType: string;
+  payloadJson: string | null;
   status: string;
   attempts: number;
   maxAttempts: number;

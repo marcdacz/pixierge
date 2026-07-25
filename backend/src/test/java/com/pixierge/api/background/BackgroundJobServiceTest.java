@@ -136,6 +136,8 @@ class BackgroundJobServiceTest {
         assertThat(service.latestProblemJobs(10))
                 .extracting(BackgroundJobProblemSummary::id)
                 .contains(retryingId, deadLetterId);
+        assertThat(service.latestProblemJobs(10))
+                .allSatisfy(summary -> assertThat(summary.payloadJson()).isEqualTo("{\"ok\":true}"));
     }
 
     private BackgroundJobCreate job(String jobType, String dedupeKey, int maxAttempts) {
@@ -394,6 +396,7 @@ class BackgroundJobServiceTest {
                     .map(job -> new BackgroundJobProblemSummary(
                             job.id(),
                             job.jobType(),
+                            job.payloadJson(),
                             job.status(),
                             job.attempts(),
                             job.maxAttempts(),

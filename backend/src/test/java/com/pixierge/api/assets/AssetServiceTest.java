@@ -252,47 +252,6 @@ class AssetServiceTest {
                         assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE));
     }
 
-    @Test
-    void backfillMetadataRecordsUnsupportedAndFailedExtractionsAndRefreshesSearchDocuments() throws Exception {
-        Path text = Files.writeString(tempDir.resolve("notes.txt"), "not an image");
-        Path corruptImage = Files.write(tempDir.resolve("corrupt.gif"), "GIF89a".getBytes());
-        assetRepository.metadataCandidates = List.of(
-                new AssetRepository.MetadataCandidateRow(
-                        READY_ASSET_ID,
-                        UUID.randomUUID(),
-                        text.toString(),
-                        text.toString(),
-                        "notes.txt",
-                        NOW,
-                        "image"
-                ),
-                new AssetRepository.MetadataCandidateRow(
-                        VIDEO_ASSET_ID,
-                        UUID.randomUUID(),
-                        corruptImage.toString(),
-                        corruptImage.toString(),
-                        "corrupt.gif",
-                        NOW,
-                        "image"
-                )
-        );
-        assetRepository.searchTextByAsset.put(READY_ASSET_ID, "notes txt");
-        assetRepository.searchTextByAsset.put(VIDEO_ASSET_ID, "missing");
-
-        AdminBatchActionResponse response = service.backfillMetadata();
-
-        assertThat(response.processedCount()).isEqualTo(2);
-        assertThat(response.failedCount()).isEqualTo(1);
-        assertThat(assetRepository.metadataUpdates)
-                .extracting(AssetRepository.MetadataUpdate::assetId, AssetRepository.MetadataUpdate::fileExtension,
-                        AssetRepository.MetadataUpdate::extractionStatus)
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(READY_ASSET_ID, "txt", "unsupported"),
-                        org.assertj.core.groups.Tuple.tuple(VIDEO_ASSET_ID, "gif", "failed")
-                );
-        assertThat(assetRepository.searchUpserts).containsExactly(READY_ASSET_ID, VIDEO_ASSET_ID);
-    }
-
     private AuthenticatedUser user() {
         return new AuthenticatedUser(USER_ID, "owner", Set.of(), Set.of(), "csrf");
     }
@@ -354,10 +313,32 @@ class AssetServiceTest {
                 NOW,
                 100,
                 100,
+                null,
                 fileName.contains(".") ? fileName.substring(fileName.lastIndexOf('.') + 1) : null,
                 fileName.endsWith(".jpg") ? "image/jpeg" : "video/mp4",
                 "extracted",
                 NOW,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null
         );
     }
@@ -376,8 +357,38 @@ class AssetServiceTest {
                 mediaType,
                 "available",
                 1,
-                new AssetDetailResponse.Metadata(first.capturedAt(), first.width(), first.height(), first.fileExtension(),
-                        first.mimeType(), first.extractionStatus(), first.extractedAt(), first.errorMessage()),
+                new AssetDetailResponse.Metadata(
+                        first.capturedAt(),
+                        first.width(),
+                        first.height(),
+                        first.orientation(),
+                        first.fileExtension(),
+                        first.mimeType(),
+                        first.extractionStatus(),
+                        first.extractedAt(),
+                        first.errorCode(),
+                        first.errorMessage(),
+                        first.cameraMake(),
+                        first.cameraModel(),
+                        first.lensModel(),
+                        first.focalLength(),
+                        first.aperture(),
+                        first.exposureTime(),
+                        first.iso(),
+                        first.latitude(),
+                        first.longitude(),
+                        first.title(),
+                        first.description(),
+                        first.keywords() == null ? List.of() : first.keywords().lines().toList(),
+                        first.durationMs(),
+                        first.displayRotation(),
+                        first.container(),
+                        first.videoCodec(),
+                        first.audioCodec(),
+                        first.frameRate(),
+                        first.bitrate(),
+                        first.hasAudio()
+                ),
                 files.stream().map(row -> new AssetDetailResponse.FileOccurrence(
                         row.fileId(),
                         row.libraryId(),
@@ -398,7 +409,6 @@ class AssetServiceTest {
         private BrowseRows tagBrowseRows = new BrowseRows(List.of(), 0);
         private List<LibraryRootRow> libraryRoots = List.of();
         private List<FolderRow> folderRows = List.of();
-        private List<MetadataCandidateRow> metadataCandidates = List.of();
         private final List<MetadataUpdate> metadataUpdates = new ArrayList<>();
         private final Map<UUID, String> searchTextByAsset = new LinkedHashMap<>();
         private final List<UUID> searchUpserts = new ArrayList<>();
@@ -462,11 +472,6 @@ class AssetServiceTest {
         @Override
         Optional<AssetDetailRow> findAsset(UUID userId, boolean admin, UUID assetId) {
             return Optional.ofNullable(details.get(assetId));
-        }
-
-        @Override
-        List<MetadataCandidateRow> listMetadataCandidates(int limit) {
-            return metadataCandidates;
         }
 
         @Override

@@ -1,5 +1,5 @@
-import { Calendar, Check, ChevronDown, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Calendar, Check, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   ApiError,
   fetchBackgroundWorkActivity,
@@ -7,6 +7,7 @@ import {
   fetchBackgroundWorkFiles,
   fetchBackgroundWorkHealth,
   type BackgroundFileActivityPage,
+  type BackgroundJobProblemSummary,
   type BackgroundWorkActivity,
   type BackgroundWorkConfig,
   type BackgroundWorkHealth
@@ -131,6 +132,7 @@ export function BackgroundWorkHealthPanel({
 function BackgroundJobsPanel({ onError }: { onError: (title: string, description?: string) => void }) {
   const [health, setHealth] = useState<BackgroundWorkHealth | null>(null);
   const [activity, setActivity] = useState<BackgroundWorkActivity | null>(null);
+  const [expandedProblemIds, setExpandedProblemIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -182,6 +184,17 @@ function BackgroundJobsPanel({ onError }: { onError: (title: string, description
     .reduce((total, queue) => total + queue.count, 0);
   const watcherHealthy = health.watcher.status === 'healthy' || health.watcher.status === 'started';
   const activeJobs = activity.jobs.filter((job) => job.status === 'pending' || job.status === 'running');
+  const toggleProblem = (problemId: string) => {
+    setExpandedProblemIds((current) => {
+      const next = new Set(current);
+      if (next.has(problemId)) {
+        next.delete(problemId);
+      } else {
+        next.add(problemId);
+      }
+      return next;
+    });
+  };
 
   return (
     <>
@@ -317,7 +330,11 @@ function BackgroundJobsPanel({ onError }: { onError: (title: string, description
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <span className="sr-only">Details</span>
+                    </TableHead>
                     <TableHead>Job type</TableHead>
+                    <TableHead>File</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Attempts</TableHead>
                     <TableHead>Error</TableHead>
@@ -325,23 +342,59 @@ function BackgroundJobsPanel({ onError }: { onError: (title: string, description
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {health.recentProblems.map((problem) => (
-                    <TableRow key={problem.id}>
-                      <TableCell className="font-mono text-xs">{problem.jobType}</TableCell>
-                      <TableCell>
-                        <Badge variant="warning">{formatQueueStatus(problem.status)}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {problem.attempts}/{problem.maxAttempts}
-                      </TableCell>
-                      <TableCell className="max-w-md">
-                        <span className="block truncate">
-                          {problem.lastErrorMessage ?? formatQueueStatus(problem.lastErrorCode ?? 'unknown_error')}
-                        </span>
-                      </TableCell>
-                      <TableCell>{formatOptionalTimestamp(problem.updatedAt)}</TableCell>
-                    </TableRow>
-                  ))}
+                  {health.recentProblems.map((problem) => {
+                    const expanded = expandedProblemIds.has(problem.id);
+                    const detailsId = `background-problem-details-${problem.id}`;
+                    return (
+                      <Fragment key={problem.id}>
+                        <TableRow>
+                          <TableCell>
+                            <Button
+                              aria-controls={detailsId}
+                              aria-expanded={expanded}
+                              aria-label={`${expanded ? 'Hide' : 'Show'} details for ${problem.jobType}`}
+                              className="h-8 w-8"
+                              data-testid={`background-problem-toggle-${problem.id}`}
+                              onClick={() => toggleProblem(problem.id)}
+                              size="icon"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <ChevronRight
+                                aria-hidden
+                                className={cn('h-4 w-4 transition-transform', expanded && 'rotate-90')}
+                              />
+                            </Button>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{problem.jobType}</TableCell>
+                          <TableCell className="max-w-xs">
+                            <span className="block truncate font-mono text-xs">
+                              {problemImpactedFile(problem)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="warning">{formatQueueStatus(problem.status)}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {problem.attempts}/{problem.maxAttempts}
+                          </TableCell>
+                          <TableCell className="min-w-80 max-w-xl">
+                            <span className="block whitespace-normal break-words">
+                              {problemErrorSummary(problem)}
+                            </span>
+                          </TableCell>
+                          <TableCell>{formatOptionalTimestamp(problem.updatedAt)}</TableCell>
+                        </TableRow>
+                        {expanded && (
+                          <TableRow className="bg-muted/30 hover:bg-muted/30" id={detailsId}>
+                            <TableCell colSpan={7}>
+                              <ProblemDetails problem={problem} />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -349,6 +402,42 @@ function BackgroundJobsPanel({ onError }: { onError: (title: string, description
         </CardContent>
       </Card>
     </>
+  );
+}
+
+function ProblemDetails({ problem }: { problem: BackgroundJobProblemSummary }) {
+  const payload = prettyJson(problem.payloadJson);
+  const error = problemErrorSummary(problem);
+
+  return (
+    <div className="grid gap-4 rounded-md border border-border bg-background p-4 text-sm">
+      <dl className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-1">
+          <dt className="text-xs font-semibold uppercase text-muted-foreground">Job id</dt>
+          <dd className="break-all font-mono text-xs">{problem.id}</dd>
+        </div>
+        <div className="grid gap-1">
+          <dt className="text-xs font-semibold uppercase text-muted-foreground">Impacted file</dt>
+          <dd className="break-all font-mono text-xs">{problemImpactedFile(problem)}</dd>
+        </div>
+        <div className="grid gap-1">
+          <dt className="text-xs font-semibold uppercase text-muted-foreground">Error type</dt>
+          <dd className="break-all font-mono text-xs">{problem.lastErrorCode ?? 'unknown_error'}</dd>
+        </div>
+        <div className="grid gap-1">
+          <dt className="text-xs font-semibold uppercase text-muted-foreground">Completed</dt>
+          <dd>{formatOptionalTimestamp(problem.completedAt)}</dd>
+        </div>
+      </dl>
+      <div className="grid gap-2">
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground">Full error</h3>
+        <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 font-mono text-xs text-foreground">{error}</pre>
+      </div>
+      <div className="grid gap-2">
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground">Job payload</h3>
+        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 font-mono text-xs text-foreground">{payload ?? 'No payload was recorded for this job.'}</pre>
+      </div>
+    </div>
   );
 }
 
@@ -1042,6 +1131,104 @@ function updatedSummary(filter: UpdatedFilter): string {
       }
       return 'Custom range';
   }
+}
+
+type JsonRecord = Record<string, unknown>;
+
+function problemErrorSummary(problem: BackgroundJobProblemSummary) {
+  const code = problem.lastErrorCode?.trim();
+  const message = problem.lastErrorMessage?.trim();
+  if (code && message) {
+    return `${code}: ${message}`;
+  }
+  return message ?? code ?? 'unknown_error';
+}
+
+function problemImpactedFile(problem: BackgroundJobProblemSummary) {
+  const payload = parseJsonRecord(problem.payloadJson);
+  if (!payload) {
+    return 'Unknown file';
+  }
+
+  const directPath =
+    stringProperty(payload, 'normalizedPath') ??
+    stringProperty(payload, 'path') ??
+    stringProperty(payload, 'displayPath') ??
+    stringProperty(payload, 'absolutePath');
+  if (directPath) {
+    return directPath;
+  }
+
+  const fileName = stringProperty(payload, 'fileName') ?? stringProperty(payload, 'name');
+  if (fileName) {
+    return fileName;
+  }
+
+  const items = arrayProperty(payload, 'identityItems') ?? arrayProperty(payload, 'items') ?? arrayProperty(payload, 'files');
+  const firstItemPath = firstItemFilePath(items);
+  if (firstItemPath && items && items.length > 1) {
+    return `${firstItemPath} (+${items.length - 1} more)`;
+  }
+  return firstItemPath ?? 'Unknown file';
+}
+
+function prettyJson(json: string | null) {
+  if (json === null || json.trim() === '') {
+    return null;
+  }
+  try {
+    return JSON.stringify(JSON.parse(json), null, 2);
+  } catch {
+    return json;
+  }
+}
+
+function parseJsonRecord(json: string | null): JsonRecord | null {
+  if (json === null || json.trim() === '') {
+    return null;
+  }
+  try {
+    return asRecord(JSON.parse(json));
+  } catch {
+    return null;
+  }
+}
+
+function firstItemFilePath(items: unknown[] | null | undefined) {
+  if (!items || items.length === 0) {
+    return null;
+  }
+  for (const item of items) {
+    const record = asRecord(item);
+    if (!record) {
+      continue;
+    }
+    const path =
+      stringProperty(record, 'normalizedPath') ??
+      stringProperty(record, 'path') ??
+      stringProperty(record, 'displayPath') ??
+      stringProperty(record, 'absolutePath') ??
+      stringProperty(record, 'fileName') ??
+      stringProperty(record, 'name');
+    if (path) {
+      return path;
+    }
+  }
+  return null;
+}
+
+function stringProperty(record: JsonRecord, key: string) {
+  const value = record[key];
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+function arrayProperty(record: JsonRecord, key: string) {
+  const value = record[key];
+  return Array.isArray(value) ? value : null;
+}
+
+function asRecord(value: unknown): JsonRecord | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as JsonRecord) : null;
 }
 
 function formatQueueStatus(status: string) {

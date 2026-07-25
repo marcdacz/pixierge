@@ -352,6 +352,7 @@ public class BackgroundJobRepository {
         return new BackgroundJobProblemSummary(
                 row.get(JOBS.id),
                 row.get(JOBS.jobType),
+                row.get(JOBS.payloadJson),
                 row.get(JOBS.status),
                 row.get(JOBS.attempts) == null ? 0 : row.get(JOBS.attempts),
                 row.get(JOBS.maxAttempts) == null ? 1 : row.get(JOBS.maxAttempts),

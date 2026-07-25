@@ -7,6 +7,7 @@ import com.pixierge.api.db.QScheduledJobs;
 import com.pixierge.api.db.QSessions;
 import com.pixierge.api.db.QUserRoles;
 import com.pixierge.api.db.QUsers;
+import com.pixierge.api.PixiergeApiApplication;
 import com.querydsl.sql.SQLQueryFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(classes = PixiergeApiApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class SchedulerIntegrationTest {
 
     private static final String ADMIN_USERNAME = "admin";

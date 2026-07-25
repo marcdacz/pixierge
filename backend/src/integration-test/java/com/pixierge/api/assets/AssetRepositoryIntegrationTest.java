@@ -189,6 +189,27 @@ class AssetRepositoryIntegrationTest {
         assertThat(missingFolderRows.assets()).isEmpty();
     }
 
+    @Test
+    void findAssetUsesTheMetadataEnrichmentStatus() {
+        UUID assetId = UUID.fromString("00000000-0000-0000-0000-000000000418");
+        transactionTemplate.executeWithoutResult(status -> {
+            user(USER_ID, "owner");
+            library(FAMILY_LIBRARY_ID, FAMILY_ROOT_ID, "Family", "/photos", USER_ID);
+            asset(assetId, "metadata-status-hash", "image/jpeg", 1);
+            assetFile(assetId, FAMILY_LIBRARY_ID, FAMILY_ROOT_ID, "/photos/metadata.jpg", "metadata.jpg", "active");
+            metadata(assetId, "jpg", "image/jpeg", OffsetDateTime.parse("2026-05-03T00:00:00Z"), "Canon", "R5");
+            queryFactory.update(QAssetMetadata.assetMetadata)
+                    .set(QAssetMetadata.assetMetadata.extractionStatus, "pending")
+                    .set(QAssetMetadata.assetMetadata.metadataStatus, "extracted")
+                    .execute();
+        });
+
+        AssetRepository.AssetDetailRow detail = transactionTemplate.execute(status ->
+                repository.findAsset(USER_ID, false, assetId).orElseThrow());
+
+        assertThat(detail.metadata().extractionStatus()).isEqualTo("extracted");
+    }
+
     private AssetRepository.AssetSearchCriteria criteria(
             SearchQuery query,
             String folder,

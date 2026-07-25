@@ -52,7 +52,7 @@ type PanOffset = { x: number; y: number };
 function clampAssetFocusZoom(value: number) {
   return Math.min(ASSET_FOCUS_MAX_ZOOM, Math.max(ASSET_FOCUS_MIN_ZOOM, Math.round(value * 100) / 100));
 }
-const THUMBNAIL_SIZE_SLIDER_WIDTH_CLASS = 'w-28';
+const RANGE_SLIDER_WIDTH_CLASS = 'w-28';
 /** Matches Tailwind `gap-1`; used by column-count tile sizes below. */
 export const ASSET_GRID_GAP = '0.25rem';
 export const ASSET_TILE_SIZE_OPTIONS = [
@@ -233,7 +233,7 @@ export function ThumbnailSizeControls({
         className={cn(
           'h-1.5 cursor-pointer appearance-none rounded-full bg-muted accent-foreground',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-          THUMBNAIL_SIZE_SLIDER_WIDTH_CLASS
+          RANGE_SLIDER_WIDTH_CLASS
         )}
         max={MAX_ASSET_TILE_SIZE_INDEX}
         min={0}
@@ -243,6 +243,39 @@ export function ThumbnailSizeControls({
         value={value}
       />
       <Image aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+    </div>
+  );
+}
+
+function AssetFocusZoomControls({
+  onChange,
+  value
+}: {
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  return (
+    <div className="flex h-10 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5" title="Zoom">
+      <Minus aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+      <input
+        aria-label="Zoom"
+        aria-valuemax={ASSET_FOCUS_MAX_ZOOM}
+        aria-valuemin={ASSET_FOCUS_MIN_ZOOM}
+        aria-valuenow={value}
+        aria-valuetext={`${Math.round(value * 100)}%`}
+        className={cn(
+          'h-1.5 cursor-pointer appearance-none rounded-full bg-muted accent-foreground',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          RANGE_SLIDER_WIDTH_CLASS
+        )}
+        max={ASSET_FOCUS_MAX_ZOOM}
+        min={ASSET_FOCUS_MIN_ZOOM}
+        onChange={(event) => onChange(Number(event.target.value))}
+        step={ASSET_FOCUS_ZOOM_STEP}
+        type="range"
+        value={value}
+      />
+      <Plus aria-hidden className="size-4 shrink-0 text-muted-foreground" />
     </div>
   );
 }
@@ -502,16 +535,6 @@ export function AssetFocus({
     }
   }
 
-  function zoomIn() {
-    applyZoom(zoom + ASSET_FOCUS_ZOOM_STEP);
-    revealControls();
-  }
-
-  function zoomOut() {
-    applyZoom(zoom - ASSET_FOCUS_ZOOM_STEP);
-    revealControls();
-  }
-
   useEffect(() => {
     setPreviewFailed(false);
   }, [asset?.id]);
@@ -693,26 +716,6 @@ export function AssetFocus({
               <Badge variant="secondary">{asset.duplicateCount} files</Badge>
             )}
             <Button
-              aria-label="Zoom out"
-              disabled={zoom <= ASSET_FOCUS_MIN_ZOOM}
-              onClick={zoomOut}
-              size="icon"
-              type="button"
-              variant="secondary"
-            >
-              <Minus className="h-4 w-4" aria-hidden />
-            </Button>
-            <Button
-              aria-label="Zoom in"
-              disabled={zoom >= ASSET_FOCUS_MAX_ZOOM}
-              onClick={zoomIn}
-              size="icon"
-              type="button"
-              variant="secondary"
-            >
-              <Plus className="h-4 w-4" aria-hidden />
-            </Button>
-            <Button
               aria-label={showMetadata ? 'Hide photo metadata' : 'Show photo metadata'}
               data-testid="photo-viewer-metadata-toggle"
               onClick={() => setShowMetadata((current) => !current)}
@@ -737,6 +740,20 @@ export function AssetFocus({
                 <MoreHorizontal className="h-4 w-4" aria-hidden />
               </Button>
             )}
+          </div>
+          <div
+            className={cn(
+              'absolute bottom-3 left-1/2 z-20 -translate-x-1/2',
+              overlayControlsClass
+            )}
+          >
+            <AssetFocusZoomControls
+              onChange={(nextZoom) => {
+                applyZoom(nextZoom);
+                revealControls();
+              }}
+              value={zoom}
+            />
           </div>
           <div
             className={cn(
@@ -815,19 +832,47 @@ export function AssetFocus({
                   </div>
                   <dl className="grid gap-3 text-sm">
                     <DetailRow label="Type" value={asset.metadata.mimeType ?? asset.mediaType} />
-                    <DetailRow
-                      label="Size"
-                      value={
-                        asset.metadata.width && asset.metadata.height
-                          ? `${asset.metadata.width} x ${asset.metadata.height}`
-                          : 'Unknown'
-                      }
+                    {asset.metadata.width != null && asset.metadata.height != null && (
+                      <DetailRow label="Size" value={`${asset.metadata.width} x ${asset.metadata.height}`} />
+                    )}
+                    {asset.metadata.capturedAt && (
+                      <DetailRow label="Captured" value={formatDate(asset.metadata.capturedAt)} />
+                    )}
+                    <MetadataStatusRow status={asset.metadata.extractionStatus} />
+                    <OptionalDetailRow
+                      label="Camera"
+                      value={[asset.metadata.cameraMake, asset.metadata.cameraModel].filter(Boolean).join(' ')}
                     />
-                    <DetailRow label="Captured" value={formatDate(asset.metadata.capturedAt)} />
-                    <DetailRow
-                      label="Metadata"
-                      value={asset.metadata.extractionStatus ?? ASSET_METADATA_PENDING_LABEL}
+                    <OptionalDetailRow label="Lens" value={asset.metadata.lensModel} />
+                    <OptionalDetailRow
+                      label="Exposure"
+                      value={[
+                        asset.metadata.exposureTime,
+                        asset.metadata.aperture != null ? `f/${asset.metadata.aperture}` : null,
+                        asset.metadata.iso != null ? `ISO ${asset.metadata.iso}` : null,
+                        asset.metadata.focalLength != null ? `${asset.metadata.focalLength}mm` : null
+                      ].filter(Boolean).join(' · ')}
                     />
+                    {asset.mediaType === 'video' && (
+                      <>
+                        {asset.metadata.durationMs != null && (
+                          <DetailRow label="Duration" value={formatDuration(asset.metadata.durationMs)} />
+                        )}
+                        <OptionalDetailRow
+                          label="Video"
+                          value={[asset.metadata.container, asset.metadata.videoCodec, asset.metadata.frameRate].filter(Boolean).join(' · ')}
+                        />
+                        {asset.metadata.hasAudio != null && (
+                          <DetailRow label="Audio" value={asset.metadata.hasAudio ? asset.metadata.audioCodec ?? 'Present' : 'None'} />
+                        )}
+                      </>
+                    )}
+                    {asset.metadata.latitude != null && asset.metadata.longitude != null && (
+                      <DetailRow
+                        label="Location"
+                        value={`${asset.metadata.latitude.toFixed(5)}, ${asset.metadata.longitude.toFixed(5)}`}
+                      />
+                    )}
                   </dl>
                   {(asset.tags ?? []).length > 0 && (
                     <div className="grid gap-2">
@@ -858,6 +903,15 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <dd className="break-words text-foreground">{value}</dd>
     </div>
   );
+}
+
+function OptionalDetailRow({ label, value }: { label: string; value: string | null }) {
+  return value ? <DetailRow label={label} value={value} /> : null;
+}
+
+function MetadataStatusRow({ status }: { status: AssetDetail['metadata']['extractionStatus'] }) {
+  const value = status ?? ASSET_METADATA_PENDING_LABEL;
+  return value === 'extracted' ? null : <DetailRow label="Metadata" value={value} />;
 }
 
 export function EmptyPanel({
@@ -927,4 +981,17 @@ function formatDate(value: string | null) {
     return 'Unknown';
   }
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
+}
+
+function formatDuration(value: number | null) {
+  if (!value) {
+    return 'Unknown';
+  }
+  const totalSeconds = Math.round(value / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    : `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }

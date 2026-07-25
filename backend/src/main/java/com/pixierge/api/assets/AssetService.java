@@ -10,9 +10,6 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,30 +17,22 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.pixierge.api.assets.AssetConstants.DEFAULT_PAGE_SIZE;
-import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_EXTRACTED;
-import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_FAILED;
-import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_UNSUPPORTED;
 import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_ACTIVE;
 import static com.pixierge.api.assets.AssetConstants.IDENTITY_STATUS_PENDING;
 import static com.pixierge.api.assets.AssetConstants.IMAGE_MIME_PREFIX;
 import static com.pixierge.api.assets.AssetConstants.MAX_PAGE_SIZE;
-import static com.pixierge.api.assets.AssetConstants.METADATA_BACKFILL_BATCH_SIZE;
 import static com.pixierge.api.libraries.LibraryConstants.PERMISSION_LIBRARY_ADMIN;
 
 @Service
 public class AssetService {
-
-    private static final String METADATA_SOURCE_VERSION = "file-basic-v1";
 
     private final AssetRepository assetRepository;
     private final ThumbnailService thumbnailService;
@@ -357,80 +346,6 @@ public class AssetService {
         return thumbnailService.purgeStale();
     }
 
-    @Transactional
-    public AdminBatchActionResponse backfillMetadata() {
-        int processed = 0;
-        int failed = 0;
-
-        for (AssetRepository.MetadataCandidateRow candidate : assetRepository.listMetadataCandidates(METADATA_BACKFILL_BATCH_SIZE)) {
-            MetadataResult result = extract(candidate);
-            assetRepository.upsertMetadata(new AssetRepository.MetadataUpdate(
-                    candidate.assetId(),
-                    result.capturedAt(),
-                    result.width(),
-                    result.height(),
-                    null,
-                    extension(candidate.fileName()),
-                    result.mimeType(),
-                    null,
-                    null,
-                    METADATA_SOURCE_VERSION,
-                    result.status(),
-                    OffsetDateTime.now(ZoneOffset.UTC),
-                    result.errorMessage()
-            ));
-            assetRepository.upsertSearchDocument(
-                    candidate.assetId(),
-                    assetRepository.searchableTextForAsset(candidate.assetId()),
-                    OffsetDateTime.now(ZoneOffset.UTC)
-            );
-            processed++;
-            if (EXTRACTION_STATUS_FAILED.equals(result.status())) {
-                failed++;
-            }
-        }
-
-        return new AdminBatchActionResponse(processed, failed);
-    }
-
-    private MetadataResult extract(AssetRepository.MetadataCandidateRow candidate) {
-        Path path = Path.of(candidate.normalizedPath()).toAbsolutePath().normalize();
-        String mimeType = null;
-        try {
-            mimeType = Files.probeContentType(path);
-            try (ImageInputStream input = ImageIO.createImageInputStream(path.toFile())) {
-                if (input == null) {
-                    return new MetadataResult(candidate.modifiedAt(), null, null, mimeType, EXTRACTION_STATUS_UNSUPPORTED, null);
-                }
-                Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
-                if (!readers.hasNext()) {
-                    return new MetadataResult(candidate.modifiedAt(), null, null, mimeType, EXTRACTION_STATUS_UNSUPPORTED, null);
-                }
-                ImageReader reader = readers.next();
-                try {
-                    reader.setInput(input, true, true);
-                    int width = reader.getWidth(0);
-                    int height = reader.getHeight(0);
-                    if (width <= 0 || height <= 0) {
-                        return new MetadataResult(candidate.modifiedAt(), null, null, mimeType, EXTRACTION_STATUS_UNSUPPORTED, null);
-                    }
-                    return new MetadataResult(
-                            candidate.modifiedAt(),
-                            width,
-                            height,
-                            mimeType,
-                            EXTRACTION_STATUS_EXTRACTED,
-                            null
-                    );
-                } finally {
-                    reader.dispose();
-                }
-            }
-        } catch (IOException | SecurityException exception) {
-            return new MetadataResult(candidate.modifiedAt(), null, null, mimeType, EXTRACTION_STATUS_FAILED, exception.getMessage());
-        }
-    }
-
     private boolean canAdminLibraries(AuthenticatedUser user) {
         return user.permissions().contains(PERMISSION_LIBRARY_ADMIN);
     }
@@ -529,14 +444,6 @@ public class AssetService {
         return path.substring(lastSlash + 1);
     }
 
-    private String extension(String fileName) {
-        int dot = fileName.lastIndexOf('.');
-        if (dot < 0 || dot == fileName.length() - 1) {
-            return null;
-        }
-        return fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
-    }
-
     private ThumbnailResponseResource toPreviewFromOriginal(AssetDetailResponse asset) {
         AssetDetailResponse.FileOccurrence activeFile = asset.files().stream()
                 .filter(file -> FILE_STATUS_ACTIVE.equals(file.status()))
@@ -564,16 +471,6 @@ public class AssetService {
                 null,
                 OffsetDateTime.now(ZoneOffset.UTC)
         );
-    }
-
-    private record MetadataResult(
-            OffsetDateTime capturedAt,
-            Integer width,
-            Integer height,
-            String mimeType,
-            String status,
-            String errorMessage
-    ) {
     }
 
     private static final class MutableTreeNode {

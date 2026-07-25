@@ -6,6 +6,7 @@ import java.util.UUID;
 public record BackgroundJobProblemSummary(
         UUID id,
         String jobType,
+        String payloadJson,
         String status,
         int attempts,
         int maxAttempts,

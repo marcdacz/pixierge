@@ -8,6 +8,9 @@ public final class AssetConstants {
     static final String DEFAULT_PAGE_SIZE_PARAM = "48";
     static final String EXTRACTION_STATUS_EXTRACTED = "extracted";
     static final String EXTRACTION_STATUS_FAILED = "failed";
+    static final String EXTRACTION_STATUS_PENDING = "pending";
+    static final String EXTRACTION_STATUS_PROCESSING = "processing";
+    static final String EXTRACTION_STATUS_STALE = "stale";
     static final String EXTRACTION_STATUS_UNSUPPORTED = "unsupported";
     public static final String FILE_STATUS_ACTIVE = "active";
     public static final String FILE_STATUS_MISSING = "missing";

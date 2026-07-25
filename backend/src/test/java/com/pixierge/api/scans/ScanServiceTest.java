@@ -320,6 +320,7 @@ class ScanServiceTest {
                 backgroundJobService,
                 new ImmediateTransactionTemplate(),
                 objectMapper,
+                null,
                 identityBatchSize
         );
     }
