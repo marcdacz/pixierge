@@ -272,6 +272,18 @@ public class BackgroundJobRepository {
     }
 
     @Transactional(readOnly = true)
+    public List<BackgroundJobRecord> deadLetterJobs(String jobType, int limit) {
+        return selectJobs()
+                .where(JOBS.jobType.eq(jobType).and(JOBS.status.eq(STATUS_DEAD_LETTER)))
+                .orderBy(JOBS.updatedAt.desc())
+                .limit(Math.max(1, limit))
+                .fetch()
+                .stream()
+                .map(this::toRecord)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<BackgroundJobRecord> latestJobs(int limit) {
         return selectJobs()
                 .orderBy(JOBS.updatedAt.desc())

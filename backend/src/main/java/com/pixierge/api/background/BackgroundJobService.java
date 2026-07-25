@@ -98,6 +98,10 @@ public class BackgroundJobService {
         return transactionTemplate.execute(status -> repository.latestProblemJobs(limit));
     }
 
+    public List<BackgroundJobRecord> deadLetterJobs(String jobType, int limit) {
+        return transactionTemplate.execute(status -> repository.deadLetterJobs(jobType, limit));
+    }
+
     public List<BackgroundJobRecord> latestJobs(int limit) {
         return transactionTemplate.execute(status -> repository.latestJobs(limit));
     }

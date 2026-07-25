@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record BackgroundFileActivitySummary(
+        UUID assetId,
         String path,
         String fileName,
         String status,

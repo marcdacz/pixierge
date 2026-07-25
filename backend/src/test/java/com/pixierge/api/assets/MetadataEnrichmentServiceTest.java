@@ -2,6 +2,7 @@ package com.pixierge.api.assets;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pixierge.api.background.BackgroundJobCreate;
+import com.pixierge.api.background.BackgroundJobRecord;
 import com.pixierge.api.background.BackgroundJobService;
 import com.pixierge.api.scans.ScanJobTypes;
 import org.junit.jupiter.api.BeforeEach;
@@ -96,6 +97,49 @@ class MetadataEnrichmentServiceTest {
         assertThat(assetRepository.searchUpserts).containsExactly(ASSET_ID);
     }
 
+    @Test
+    void recoveryRequeuesDeadLetterMetadataAndMakesItRetryable() throws Exception {
+        Path file = Files.writeString(tempDir.resolve("recover.jpg"), "not an image");
+        AssetRepository.MetadataCandidateRow candidate = candidate(file, "image");
+        assetRepository.activeCandidates.put(ASSET_FILE_ID, candidate);
+        backgroundJobService.deadLetterJobs = List.of(new BackgroundJobRecord(
+                UUID.randomUUID(),
+                ScanJobTypes.ASSET_METADATA_BACKFILL,
+                objectMapper.writeValueAsString(new AssetMetadataJobPayload(
+                        ASSET_ID,
+                        ASSET_FILE_ID,
+                        candidate.normalizedPath(),
+                        candidate.fileName(),
+                        candidate.sizeBytes(),
+                        candidate.modifiedAt(),
+                        candidate.mediaType()
+                )),
+                "dead_letter",
+                0,
+                3,
+                3,
+                MODIFIED_AT,
+                null,
+                null,
+                ScanJobTypes.ASSET_METADATA_BACKFILL,
+                "metadata:" + ASSET_ID,
+                null,
+                "NullPointerException",
+                "keywords were missing",
+                MODIFIED_AT,
+                MODIFIED_AT,
+                MODIFIED_AT
+        ));
+
+        AdminBatchActionResponse response = service.recoverDeadLetterMetadata();
+
+        assertThat(response.processedCount()).isEqualTo(1);
+        assertThat(response.failedCount()).isZero();
+        assertThat(assetRepository.failedAssetIds).containsExactly(ASSET_ID);
+        assertThat(backgroundJobService.jobs).singleElement().satisfies(job ->
+                assertThat(job.jobType()).isEqualTo(ScanJobTypes.ASSET_METADATA_BACKFILL));
+    }
+
     private AssetRepository.MetadataCandidateRow candidate(Path file, String mediaType) throws Exception {
         return new AssetRepository.MetadataCandidateRow(
                 ASSET_ID,
@@ -113,6 +157,7 @@ class MetadataEnrichmentServiceTest {
         private List<MetadataCandidateRow> candidates = List.of();
         private final Map<UUID, MetadataCandidateRow> activeCandidates = new LinkedHashMap<>();
         private final List<MetadataUpdate> metadataUpdates = new ArrayList<>();
+        private final List<UUID> failedAssetIds = new ArrayList<>();
         private final Map<UUID, String> searchTextByAsset = new LinkedHashMap<>();
         private final List<UUID> searchUpserts = new ArrayList<>();
 
@@ -141,6 +186,11 @@ class MetadataEnrichmentServiceTest {
         }
 
         @Override
+        void markMetadataFailed(UUID assetId, String errorCode, String errorMessage, OffsetDateTime now) {
+            failedAssetIds.add(assetId);
+        }
+
+        @Override
         String searchableTextForAsset(UUID assetId) {
             return searchTextByAsset.get(assetId);
         }
@@ -153,6 +203,7 @@ class MetadataEnrichmentServiceTest {
 
     private static final class RecordingBackgroundJobService extends BackgroundJobService {
         private final List<BackgroundJobCreate> jobs = new ArrayList<>();
+        private List<BackgroundJobRecord> deadLetterJobs = List.of();
 
         private RecordingBackgroundJobService() {
             super(null, new ImmediateTransactionTemplate());
@@ -162,6 +213,16 @@ class MetadataEnrichmentServiceTest {
         public UUID enqueue(BackgroundJobCreate create) {
             jobs.add(create);
             return UUID.randomUUID();
+        }
+
+        @Override
+        public List<BackgroundJobRecord> deadLetterJobs(String jobType, int limit) {
+            return deadLetterJobs;
+        }
+
+        @Override
+        public boolean hasActiveJobs(String jobType, String dedupeKeyPrefix, UUID excludedJobId) {
+            return false;
         }
     }
 

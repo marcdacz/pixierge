@@ -1,5 +1,7 @@
 package com.pixierge.api.background;
 
+import com.pixierge.api.db.QAssetFiles;
+import com.pixierge.api.db.QAssetMetadata;
 import com.pixierge.api.db.QFileObservations;
 import com.pixierge.api.db.QScanErrors;
 import com.querydsl.core.BooleanBuilder;
@@ -22,7 +24,10 @@ class BackgroundActivityRepository {
 
     private static final QFileObservations FILE_OBSERVATIONS = QFileObservations.fileObservations;
     private static final QScanErrors SCAN_ERRORS = QScanErrors.scanErrors;
+    private static final QAssetFiles ASSET_FILES = QAssetFiles.assetFiles;
+    private static final QAssetMetadata ASSET_METADATA = QAssetMetadata.assetMetadata;
     private static final String FAILED_STATUS = "failed";
+    private static final Set<String> METADATA_ACTIVITY_STATUSES = Set.of("extracted", "unsupported", FAILED_STATUS);
 
     private final SQLQueryFactory queryFactory;
 
@@ -51,6 +56,10 @@ class BackgroundActivityRepository {
         boolean includeObservations = normalizedStatuses == null
                 || normalizedStatuses.stream().anyMatch(status -> !FAILED_STATUS.equals(status));
         boolean includeErrors = normalizedStatuses == null || normalizedStatuses.contains(FAILED_STATUS);
+        List<String> metadataStatuses = normalizedStatuses == null
+                ? List.copyOf(METADATA_ACTIVITY_STATUSES)
+                : normalizedStatuses.stream().filter(METADATA_ACTIVITY_STATUSES::contains).toList();
+        boolean includeMetadata = !metadataStatuses.isEmpty();
 
         List<String> observationStatuses = normalizedStatuses == null
                 ? null
@@ -63,10 +72,12 @@ class BackgroundActivityRepository {
                 updatedTo
         );
         BooleanBuilder errorWhere = errorWhere(normalizedQuery, updatedFrom, updatedTo);
+        BooleanBuilder metadataWhere = metadataWhere(normalizedQuery, metadataStatuses, updatedFrom, updatedTo);
 
         long observationCount = includeObservations ? countObservations(observationWhere) : 0L;
         long errorCount = includeErrors ? countErrors(errorWhere) : 0L;
-        int totalCount = Math.toIntExact(observationCount + errorCount);
+        long metadataCount = includeMetadata ? countMetadata(metadataWhere) : 0L;
+        int totalCount = Math.toIntExact(observationCount + errorCount + metadataCount);
         if (totalCount == 0 || normalizedLimit == 0) {
             return new PersistedFileActivityPage(List.of(), totalCount);
         }
@@ -78,7 +89,11 @@ class BackgroundActivityRepository {
         List<BackgroundFileActivityRow> errors = includeErrors
                 ? fetchErrors(errorWhere, fetchLimit)
                 : List.of();
-        List<BackgroundFileActivityRow> pageItems = Stream.concat(observations.stream(), errors.stream())
+        List<BackgroundFileActivityRow> metadata = includeMetadata
+                ? fetchMetadata(metadataWhere, fetchLimit)
+                : List.of();
+        List<BackgroundFileActivityRow> pageItems = Stream.of(observations, errors, metadata)
+                .flatMap(Collection::stream)
                 .sorted(Comparator
                         .comparing(BackgroundFileActivityRow::observedAt, Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(row -> row.path() == null ? "" : row.path(), String.CASE_INSENSITIVE_ORDER))
@@ -104,9 +119,19 @@ class BackgroundActivityRepository {
         return count == null ? 0L : count;
     }
 
+    private long countMetadata(BooleanBuilder where) {
+        Long count = queryFactory.select(ASSET_METADATA.assetId.countDistinct())
+                .from(ASSET_METADATA)
+                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ASSET_METADATA.assetId)
+                        .and(ASSET_FILES.status.eq("active")))
+                .where(where)
+                .fetchOne();
+        return count == null ? 0L : count;
+    }
+
     private List<BackgroundFileActivityRow> fetchObservations(BooleanBuilder where, int limit) {
         return queryFactory
-                .select(FILE_OBSERVATIONS.path, FILE_OBSERVATIONS.result, FILE_OBSERVATIONS.observedAt)
+                .select(FILE_OBSERVATIONS.assetId, FILE_OBSERVATIONS.path, FILE_OBSERVATIONS.result, FILE_OBSERVATIONS.observedAt)
                 .from(FILE_OBSERVATIONS)
                 .where(where)
                 .orderBy(FILE_OBSERVATIONS.observedAt.desc(), FILE_OBSERVATIONS.path.asc())
@@ -114,6 +139,7 @@ class BackgroundActivityRepository {
                 .fetch()
                 .stream()
                 .map(row -> new BackgroundFileActivityRow(
+                        row.get(FILE_OBSERVATIONS.assetId),
                         row.get(FILE_OBSERVATIONS.path),
                         row.get(FILE_OBSERVATIONS.result),
                         row.get(FILE_OBSERVATIONS.observedAt),
@@ -171,8 +197,63 @@ class BackgroundActivityRepository {
         return where;
     }
 
+    private BooleanBuilder metadataWhere(
+            String q,
+            List<String> statuses,
+            OffsetDateTime updatedFrom,
+            OffsetDateTime updatedTo
+    ) {
+        BooleanBuilder where = new BooleanBuilder(ASSET_METADATA.metadataStatus.in(statuses)
+                .and(ASSET_METADATA.metadataExtractedAt.isNotNull())
+                .and(ASSET_FILES.status.eq("active")));
+        if (q != null) {
+            where.and(ASSET_FILES.path.lower().contains(q));
+        }
+        if (updatedFrom != null) {
+            where.and(ASSET_METADATA.metadataExtractedAt.goe(updatedFrom));
+        }
+        if (updatedTo != null) {
+            where.and(ASSET_METADATA.metadataExtractedAt.lt(updatedTo));
+        }
+        return where;
+    }
+
+    private List<BackgroundFileActivityRow> fetchMetadata(BooleanBuilder where, int limit) {
+        return queryFactory
+                .select(
+                        ASSET_METADATA.assetId,
+                        ASSET_FILES.path.min(),
+                        ASSET_METADATA.metadataStatus,
+                        ASSET_METADATA.metadataExtractedAt,
+                        ASSET_METADATA.metadataErrorMessage
+                )
+                .from(ASSET_METADATA)
+                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ASSET_METADATA.assetId)
+                        .and(ASSET_FILES.status.eq("active")))
+                .where(where)
+                .groupBy(
+                        ASSET_METADATA.assetId,
+                        ASSET_METADATA.metadataStatus,
+                        ASSET_METADATA.metadataExtractedAt,
+                        ASSET_METADATA.metadataErrorMessage
+                )
+                .orderBy(ASSET_METADATA.metadataExtractedAt.desc(), ASSET_FILES.path.min().asc())
+                .limit(limit)
+                .fetch()
+                .stream()
+                .map(row -> new BackgroundFileActivityRow(
+                        row.get(ASSET_METADATA.assetId),
+                        row.get(ASSET_FILES.path.min()),
+                        row.get(ASSET_METADATA.metadataStatus),
+                        row.get(ASSET_METADATA.metadataExtractedAt),
+                        row.get(ASSET_METADATA.metadataErrorMessage)
+                ))
+                .toList();
+    }
+
     private BackgroundFileActivityRow toErrorRow(Tuple row) {
         return new BackgroundFileActivityRow(
+                null,
                 row.get(SCAN_ERRORS.path),
                 FAILED_STATUS,
                 row.get(SCAN_ERRORS.createdAt),

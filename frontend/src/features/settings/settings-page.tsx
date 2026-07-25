@@ -160,7 +160,7 @@ export function SettingsPage({
           : 'grid-cols-[var(--settings-nav-width)_minmax(0,1fr)]'
       )}
     >
-      <aside className="min-h-0 overflow-y-auto border-r border-border pr-4">
+      <aside className="min-h-0 overflow-y-auto overscroll-y-contain border-r border-border pr-4">
         <div className="mb-4 grid gap-3">
           {effectiveNavCollapsed ? (
             <>
@@ -259,7 +259,8 @@ function SettingsContent({
   return (
     <section
       aria-labelledby="settings-page-title"
-      className="grid min-h-0 content-start gap-8 overflow-y-auto"
+      className="grid h-full min-h-0 content-start gap-8 overflow-y-auto overscroll-y-contain pr-1"
+      data-testid="settings-content-scroll"
     >
       <div className="grid gap-2">
         <div className="flex items-center gap-3">
@@ -285,7 +286,7 @@ function SettingsContent({
       ) : item.view === 'scheduler' ? (
         <SchedulerDetails auth={auth} onError={onError} />
       ) : item.view === 'background' ? (
-        <BackgroundWorkHealthPanel onError={onError} />
+        <BackgroundWorkHealthPanel auth={auth} onError={onError} />
       ) : (
         <EmptySettingsPage label={item.label} />
       )}

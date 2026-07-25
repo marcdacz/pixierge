@@ -108,6 +108,14 @@ const backgroundWorkHealth = {
       oldestCreatedAt: '2026-07-04T00:03:00Z',
       oldestNextRunAt: '2026-07-04T00:03:00Z',
       latestUpdatedAt: '2026-07-04T00:04:00Z'
+    },
+    {
+      jobType: 'asset-metadata-backfill',
+      status: 'dead_letter',
+      count: 2,
+      oldestCreatedAt: '2026-07-04T00:03:00Z',
+      oldestNextRunAt: '2026-07-04T00:03:00Z',
+      latestUpdatedAt: '2026-07-04T00:04:00Z'
     }
   ],
   recentProblems: [
@@ -160,6 +168,7 @@ const backgroundWorkActivity = {
 const backgroundWorkFiles = {
   items: [
     {
+      assetId: 'asset-1',
       path: '/photos/family/IMG_3001.HEIC',
       fileName: 'IMG_3001.HEIC',
       status: 'processing',
@@ -169,6 +178,7 @@ const backgroundWorkFiles = {
       message: null
     },
     {
+      assetId: 'asset-2',
       path: '/photos/family/IMG_2999.HEIC',
       fileName: 'IMG_2999.HEIC',
       status: 'added',
@@ -434,10 +444,14 @@ describe('App', () => {
     expect(screen.getAllByText('dead letter')).not.toHaveLength(0);
     expect(screen.getByText(/Filesystem watcher overflow under \/photos/)).toBeInTheDocument();
     expect(screen.getByText('/photos/holiday/IMG_4042.HEIC')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry failed metadata' }));
+    expect(await screen.findByText('2 metadata jobs were queued for retry.')).toBeInTheDocument();
     await userEvent.click(screen.getByTestId('background-problem-toggle-job-1'));
     expect(screen.getByText('Job payload')).toBeInTheDocument();
     expect(screen.getAllByText(/watcher_overflow: Watcher overflow under \/photos/)).not.toHaveLength(0);
     expect(screen.getByText('42')).toBeInTheDocument();
+    expect(screen.getByText('Running jobs')).toBeInTheDocument();
+    expect(screen.getByText('Running jobs').parentElement).toHaveTextContent('0');
     expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/admin/background/health',
@@ -455,6 +469,16 @@ describe('App', () => {
     expect(screen.getByTestId('background-file-updated')).toHaveTextContent('Any date');
     expect(screen.getByText('IMG_3001.HEIC')).toBeInTheDocument();
     expect(screen.getByText('IMG_2999.HEIC')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Open IMG_3001.HEIC' }));
+    expect(await screen.findByRole('button', { name: 'Show photo metadata' })).toBeInTheDocument();
+    await userEvent.keyboard('{ArrowRight}');
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8080/api/assets/asset-2',
+        expect.objectContaining({ credentials: 'include', method: 'GET' })
+      );
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Close photo viewer' }));
     expect(screen.getByTestId('background-file-page-size')).toHaveValue('25');
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/api/admin/background/files?'),
@@ -1325,8 +1349,21 @@ function mockFetch(responses: MockResponse[]) {
     if (url.includes('/api/admin/background/files?')) {
       return jsonResponse(200, backgroundWorkFiles);
     }
+    if (url.endsWith('/api/assets/asset-1')) {
+      return jsonResponse(200, assetDetail);
+    }
+    if (url.endsWith('/api/assets/asset-2')) {
+      return jsonResponse(200, {
+        ...assetDetail,
+        id: 'asset-2',
+        files: [{ ...assetDetail.files[0], id: 'file-2', fileName: 'IMG_2999.HEIC', path: '/photos/family/IMG_2999.HEIC' }]
+      });
+    }
     if (url.endsWith('/api/admin/background/config')) {
       return jsonResponse(200, backgroundWorkConfig);
+    }
+    if (url.endsWith('/api/assets/metadata/recover-dead-letters')) {
+      return jsonResponse(200, { processedCount: 2, failedCount: 0 });
     }
     if (url.includes('/api/search/parse')) {
       const query = new URL(url).searchParams.get('q') ?? '';

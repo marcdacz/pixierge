@@ -45,7 +45,7 @@ class LibraryFilesystemWatcherTest {
         );
         assertThat(job.jobType()).isEqualTo(ScanJobTypes.FILESYSTEM_CHANGE_EVENT);
         assertThat(job.priority()).isEqualTo(10);
-        assertThat(job.maxAttempts()).isEqualTo(3);
+        assertThat(job.maxAttempts()).isEqualTo(25);
         assertThat(job.concurrencyKey()).isEqualTo("filesystem-change:" + libraryId);
         assertThat(job.dedupeKey()).isEqualTo(ScanJobTypes.FILESYSTEM_CHANGE_EVENT + ":" + rootId + ":" + path);
         assertThat(payload.libraryId()).isEqualTo(libraryId);

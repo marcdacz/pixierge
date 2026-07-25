@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ScanServiceTest {
 
@@ -283,6 +284,26 @@ class ScanServiceTest {
         assertThat(scanRepository.markedStatuses).doesNotContain(outsideAssetFileId + ":missing");
         assertThat(scanRepository.completedCounts.missingCount()).isZero();
         assertThat(scanRepository.completedCounts.addedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void filesystemChangeScanDefersWhenLibraryScanIsAlreadyActive() throws Exception {
+        UUID libraryId = UUID.randomUUID();
+        UUID rootId = UUID.randomUUID();
+        LibraryRepository.LibraryRootRecord root = root(libraryId, rootId, tempDir);
+        LibraryRepository.LibraryRecord library = library(libraryId, root, List.of());
+        FakeScanRepository scanRepository = new FakeScanRepository(List.of());
+        ScanService service = service(
+                new FakeLibraryRepository(library),
+                scanRepository,
+                new FakeFileHasher(),
+                new RecordingBackgroundJobService()
+        );
+        scanRepository.createScanRun(libraryId, rootId, null, OffsetDateTime.now());
+
+        assertThatThrownBy(() -> service.enqueueFilesystemChangeScan(libraryId, rootId, tempDir.toString()))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("A scan is already running for library " + libraryId);
     }
 
     private ScanService service(FakeScanRepository scanRepository, FileHasher fileHasher) {

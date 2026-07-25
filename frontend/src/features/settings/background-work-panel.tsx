@@ -1,16 +1,20 @@
-import { Calendar, Check, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Calendar, Check, ChevronDown, ChevronRight, Maximize2, X } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   ApiError,
+  fetchAsset,
   fetchBackgroundWorkActivity,
   fetchBackgroundWorkConfig,
   fetchBackgroundWorkFiles,
   fetchBackgroundWorkHealth,
+  recoverDeadLetterMetadata,
+  type AuthResponse,
   type BackgroundFileActivityPage,
   type BackgroundJobProblemSummary,
   type BackgroundWorkActivity,
   type BackgroundWorkConfig,
-  type BackgroundWorkHealth
+  type BackgroundWorkHealth,
+  type AssetDetail
 } from '@/api';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +37,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { formatScanTimestamp } from '@/features/scans/scan-utils';
+import { AssetFocus } from '@/features/library/photo-grid';
 import { cn } from '@/lib/utils';
 
 type BackgroundTab = 'jobs' | 'files' | 'configuration';
@@ -52,6 +57,9 @@ const SEARCH_DEBOUNCE_MS = 300;
 const FILE_STATUS_OPTIONS = [
   { value: 'pending', label: 'Pending' },
   { value: 'processing', label: 'Processing' },
+  { value: 'extracted', label: 'Extracted' },
+  { value: 'unsupported', label: 'Unsupported' },
+  { value: 'stale', label: 'Stale' },
   { value: 'added', label: 'Added' },
   { value: 'unchanged', label: 'Unchanged' },
   { value: 'moved', label: 'Moved' },
@@ -77,8 +85,10 @@ type UpdatedFilter =
   | { mode: 'range'; from: string; to: string };
 
 export function BackgroundWorkHealthPanel({
+  auth,
   onError
 }: {
+  auth?: AuthResponse;
   onError: (title: string, description?: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState<BackgroundTab>('jobs');
@@ -118,7 +128,7 @@ export function BackgroundWorkHealthPanel({
         role="tabpanel"
       >
         {activeTab === 'jobs' ? (
-          <BackgroundJobsPanel onError={onError} />
+          <BackgroundJobsPanel auth={auth} onError={onError} />
         ) : activeTab === 'files' ? (
           <BackgroundFileActivityPanel onError={onError} />
         ) : (
@@ -129,12 +139,20 @@ export function BackgroundWorkHealthPanel({
   );
 }
 
-function BackgroundJobsPanel({ onError }: { onError: (title: string, description?: string) => void }) {
+function BackgroundJobsPanel({
+  auth,
+  onError
+}: {
+  auth?: AuthResponse;
+  onError: (title: string, description?: string) => void;
+}) {
   const [health, setHealth] = useState<BackgroundWorkHealth | null>(null);
   const [activity, setActivity] = useState<BackgroundWorkActivity | null>(null);
   const [expandedProblemIds, setExpandedProblemIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
 
   async function loadJobs(options: { showLoading?: boolean } = {}) {
     if (options.showLoading) {
@@ -178,12 +196,16 @@ function BackgroundJobsPanel({ onError }: { onError: (title: string, description
     return <Alert>{loadError ?? 'Background work health could not be loaded.'}</Alert>;
   }
 
-  const totalVisibleJobs = health.queues.reduce((total, queue) => total + queue.count, 0);
+  const runningJobs = health.queues
+    .filter((queue) => queue.status === 'running')
+    .reduce((total, queue) => total + queue.count, 0);
   const failedJobs = health.queues
     .filter((queue) => queue.status === 'failed' || queue.status === 'dead_letter')
     .reduce((total, queue) => total + queue.count, 0);
   const watcherHealthy = health.watcher.status === 'healthy' || health.watcher.status === 'started';
   const activeJobs = activity.jobs.filter((job) => job.status === 'pending' || job.status === 'running');
+  const hasDeadLetterMetadata = health.queues.some((queue) =>
+    queue.jobType === 'asset-metadata-backfill' && queue.status === 'dead_letter' && queue.count > 0);
   const toggleProblem = (problemId: string) => {
     setExpandedProblemIds((current) => {
       const next = new Set(current);
@@ -196,10 +218,32 @@ function BackgroundJobsPanel({ onError }: { onError: (title: string, description
     });
   };
 
+  async function recoverMetadata() {
+    if (!auth) {
+      return;
+    }
+    setRecovering(true);
+    setRecoveryMessage(null);
+    try {
+      const result = await recoverDeadLetterMetadata(auth.csrfToken);
+      setRecoveryMessage(
+        result.processedCount === 0
+          ? 'No dead-letter metadata jobs were ready to retry.'
+          : `${result.processedCount} metadata ${result.processedCount === 1 ? 'job was' : 'jobs were'} queued for retry.`
+      );
+      await loadJobs();
+    } catch (error) {
+      const message = messageForError(error, 'Metadata recovery could not be started.');
+      onError('Metadata recovery could not be started', message);
+    } finally {
+      setRecovering(false);
+    }
+  }
+
   return (
     <>
       <section aria-label="Background work totals" className="grid gap-3 md:grid-cols-3">
-        <SourceStat label="Total jobs" value={totalVisibleJobs} />
+        <SourceStat label="Running jobs" value={runningJobs} />
         <SourceStat label="Recent problems" value={health.recentProblems.length} warning={failedJobs > 0} />
         <div className="rounded-md border border-border bg-surface p-4">
           <p className="text-sm text-muted-foreground">Watcher</p>
@@ -323,6 +367,20 @@ function BackgroundJobsPanel({ onError }: { onError: (title: string, description
           <CardTitle>Recent problems</CardTitle>
         </CardHeader>
         <CardContent>
+          {hasDeadLetterMetadata && auth && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">Retry metadata files that stopped after all attempts were used.</p>
+              <Button
+                disabled={recovering}
+                onClick={() => void recoverMetadata()}
+                type="button"
+                variant="secondary"
+              >
+                {recovering ? 'Retrying metadata...' : 'Retry failed metadata'}
+              </Button>
+            </div>
+          )}
+          {recoveryMessage && <Alert className="mb-4">{recoveryMessage}</Alert>}
           {health.recentProblems.length === 0 ? (
             <p className="text-sm text-muted-foreground">No recent queue problems.</p>
           ) : (
@@ -453,6 +511,8 @@ function BackgroundFileActivityPanel({
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<FileActivityPageSize>(DEFAULT_FILE_ACTIVITY_PAGE_SIZE);
   const [activity, setActivity] = useState<BackgroundFileActivityPage | null>(null);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [selectedAsset, setSelectedAsset] = useState<AssetDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -508,9 +568,68 @@ function BackgroundFileActivityPanel({
     return () => window.clearInterval(timer);
   }, [page, pageSize, debouncedQuery, statusesKey, updatedKey]);
 
+  useEffect(() => {
+    if (!selectedAssetId) {
+      setSelectedAsset(null);
+      return;
+    }
+    let ignore = false;
+    setSelectedAsset(null);
+    void fetchAsset(selectedAssetId)
+      .then((asset) => {
+        if (!ignore) {
+          setSelectedAsset(asset);
+        }
+      })
+      .catch((error) => {
+        if (!ignore) {
+          const message = messageForError(error, 'Photo could not be loaded.');
+          setSelectedAssetId(null);
+          onError('Photo could not be loaded', message);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [onError, selectedAssetId]);
+
   const totalPages = activity ? Math.max(1, Math.ceil(activity.totalCount / pageSize)) : 1;
+  const viewerItems = activity?.items.filter((item) => item.assetId !== null) ?? [];
+  const viewerIndex = selectedAssetId ? viewerItems.findIndex((item) => item.assetId === selectedAssetId) : -1;
+  const showPrevious = viewerIndex > 0;
+  const showNext = viewerIndex >= 0 && viewerIndex < viewerItems.length - 1;
+
+  function openViewer(assetId: string) {
+    setSelectedAssetId(assetId);
+  }
+
+  function showPreviousAsset() {
+    if (viewerIndex > 0) {
+      setSelectedAssetId(viewerItems[viewerIndex - 1].assetId!);
+    }
+  }
+
+  function showNextAsset() {
+    if (viewerIndex >= 0 && viewerIndex < viewerItems.length - 1) {
+      setSelectedAssetId(viewerItems[viewerIndex + 1].assetId!);
+    }
+  }
 
   return (
+    <>
+    {selectedAssetId && (
+      <div className="fixed inset-0 z-50 bg-background">
+        <AssetFocus
+          asset={selectedAsset}
+          hasNext={showNext}
+          hasPrevious={showPrevious}
+          loading={selectedAsset === null}
+          onClose={() => setSelectedAssetId(null)}
+          onNext={showNextAsset}
+          onPrevious={showPreviousAsset}
+        />
+      </div>
+    )}
     <Card>
       <CardHeader>
         <CardTitle>Recent file activity</CardTitle>
@@ -581,15 +700,17 @@ function BackgroundFileActivityPanel({
               <p className="text-sm text-muted-foreground">No file activity matches the current filters.</p>
             ) : (
               <div className="overflow-x-auto">
-                <Table className="table-fixed min-w-[48rem]">
+                <Table className="table-fixed min-w-[50rem]">
                   <colgroup>
-                    <col className="w-[50%]" />
+                    <col className="w-[6%]" />
+                    <col className="w-[47%]" />
                     <col className="w-[15%]" />
-                    <col className="w-[15%]" />
-                    <col className="w-[20%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[18%]" />
                   </colgroup>
                   <TableHeader>
                     <TableRow>
+                      <TableHead><span className="sr-only">View photo</span></TableHead>
                       <TableHead>File</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Batch</TableHead>
@@ -599,6 +720,21 @@ function BackgroundFileActivityPanel({
                   <TableBody>
                     {activity.items.map((file, index) => (
                       <TableRow key={`${file.path ?? file.fileName}-${file.status}-${file.updatedAt}-${index}`}>
+                        <TableCell className="align-top">
+                          {file.assetId && (
+                            <Button
+                              aria-label={`Open ${file.fileName}`}
+                              className="h-8 w-8"
+                              onClick={() => openViewer(file.assetId!)}
+                              size="icon"
+                              title="Open photo"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <Maximize2 aria-hidden className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </TableCell>
                         <TableCell className="min-w-[18rem] align-top">
                           <span className="block break-words">{file.fileName}</span>
                           {file.path && (
@@ -682,6 +818,7 @@ function BackgroundFileActivityPanel({
         )}
       </CardContent>
     </Card>
+    </>
   );
 }
 

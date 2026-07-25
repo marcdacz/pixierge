@@ -78,3 +78,39 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   await admin.logout();
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
+
+test('settings keeps scroll inside the app shell', async ({ page }) => {
+  await mockPixiergeApi(page);
+  const admin = new AdminShellPage(page);
+
+  await admin.goto();
+  await admin.createAdmin('admin', 'correct horse battery staple');
+  await admin.openSettings();
+  await admin.openSettingsSection('background');
+
+  await expect(page.getByRole('heading', { name: 'Background work' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Queue health' })).toBeVisible();
+
+  const documentMetrics = await page.evaluate(() => ({
+    bodyOverflowY: getComputedStyle(document.body).overflowY,
+    documentOverflowY: getComputedStyle(document.documentElement).overflowY,
+    rootClientHeight: document.documentElement.clientHeight,
+    rootScrollHeight: document.documentElement.scrollHeight,
+    scrollY: window.scrollY
+  }));
+  expect(documentMetrics).toEqual({
+    bodyOverflowY: 'hidden',
+    documentOverflowY: 'hidden',
+    rootClientHeight: documentMetrics.rootClientHeight,
+    rootScrollHeight: documentMetrics.rootClientHeight,
+    scrollY: 0
+  });
+
+  const settingsScroll = page.getByTestId('settings-content-scroll');
+  await expect(settingsScroll).toBeVisible();
+  await expect(settingsScroll).toHaveCSS('overscroll-behavior-y', 'contain');
+  await expect(settingsScroll).toHaveCSS('overflow-y', 'auto');
+
+  await page.mouse.wheel(0, 4000);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+});

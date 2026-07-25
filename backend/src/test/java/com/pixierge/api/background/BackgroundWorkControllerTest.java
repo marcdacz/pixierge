@@ -1,6 +1,7 @@
 package com.pixierge.api.background;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pixierge.api.assets.AssetMetadataJobPayload;
 import com.pixierge.api.filesystem.FilesystemWatcherHealth;
 import com.pixierge.api.scans.ScanIdentityJobPayload;
 import com.pixierge.api.scans.ScanJobTypes;
@@ -40,7 +41,7 @@ class BackgroundWorkControllerTest {
     @Test
     void filesReturnsPaginatedPersistedActivity() {
         StubActivityRepository activityRepository = new StubActivityRepository(
-                List.of(new BackgroundFileActivityRow("/photos/a.jpg", "added", NOW, null)),
+                List.of(new BackgroundFileActivityRow(UUID.randomUUID(), "/photos/a.jpg", "added", NOW, null)),
                 51
         );
         BackgroundWorkController controller = new BackgroundWorkController(
@@ -160,6 +161,60 @@ class BackgroundWorkControllerTest {
         assertThat(activityRepository.lastUpdatedFrom)
                 .isEqualTo(OffsetDateTime.of(2026, 7, 19, 11, 0, 0, 0, ZoneOffset.UTC));
         assertThat(activityRepository.lastUpdatedTo).isNull();
+    }
+
+    @Test
+    void filesIncludesActiveMetadataExtraction() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        UUID assetId = UUID.randomUUID();
+        String payload = objectMapper.writeValueAsString(new AssetMetadataJobPayload(
+                assetId,
+                UUID.randomUUID(),
+                "/photos/metadata.jpg",
+                "metadata.jpg",
+                1L,
+                NOW,
+                "image/jpeg"
+        ));
+        BackgroundJobRecord job = new BackgroundJobRecord(
+                UUID.randomUUID(),
+                ScanJobTypes.ASSET_METADATA_BACKFILL,
+                payload,
+                BackgroundJobRepository.STATUS_RUNNING,
+                0,
+                1,
+                3,
+                NOW,
+                NOW.plusMinutes(5),
+                "worker",
+                ScanJobTypes.ASSET_METADATA_BACKFILL,
+                "metadata:" + assetId,
+                null,
+                null,
+                null,
+                NOW,
+                NOW,
+                null
+        );
+        BackgroundWorkController controller = new BackgroundWorkController(
+                new StubJobService(List.of(job)),
+                new StubActivityRepository(List.of(), 0),
+                new FilesystemWatcherHealth(),
+                objectMapper,
+                2,
+                100,
+                25,
+                2000L
+        );
+
+        BackgroundFileActivityPage page = controller.files(0, 25, null, null, null, null);
+
+        assertThat(page.items()).singleElement().satisfies(item -> {
+            assertThat(item.assetId()).isEqualTo(assetId);
+            assertThat(item.fileName()).isEqualTo("metadata.jpg");
+            assertThat(item.status()).isEqualTo("processing");
+            assertThat(item.batchLabel()).isEqualTo("Metadata extraction");
+        });
     }
 
     private static final class StubJobService extends BackgroundJobService {

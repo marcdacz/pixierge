@@ -338,7 +338,7 @@ export function App() {
 
 function AppLoading() {
   return (
-    <main className="grid min-h-screen place-items-center bg-background p-6 text-foreground">
+    <main className="grid min-h-dvh overflow-y-auto place-items-center bg-background p-6 text-foreground">
       <div className="grid gap-2 text-center">
         <p className="text-xs font-medium uppercase text-muted-foreground">pixierge</p>
         <h1 className="text-2xl font-semibold">Preparing workspace</h1>

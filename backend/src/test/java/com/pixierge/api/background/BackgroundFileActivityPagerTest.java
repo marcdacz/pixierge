@@ -105,6 +105,7 @@ class BackgroundFileActivityPagerTest {
         String path = pathOrName.contains("/") ? pathOrName : "/photos/" + pathOrName;
         String fileName = path.substring(path.lastIndexOf('/') + 1);
         return new BackgroundFileActivitySummary(
+                UUID.randomUUID(),
                 path,
                 fileName,
                 status,
@@ -116,6 +117,6 @@ class BackgroundFileActivityPagerTest {
     }
 
     private static BackgroundFileActivityRow row(String path, String result, OffsetDateTime observedAt) {
-        return new BackgroundFileActivityRow(path, result, observedAt, null);
+        return new BackgroundFileActivityRow(UUID.randomUUID(), path, result, observedAt, null);
     }
 }

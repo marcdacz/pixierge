@@ -19,6 +19,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pixierge.api.background.BackgroundJobCreate;
+import com.pixierge.api.background.BackgroundJobRecord;
 import com.pixierge.api.background.BackgroundJobService;
 import com.pixierge.api.scans.ScanJobTypes;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +42,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -119,7 +121,18 @@ public class MetadataEnrichmentService {
             return;
         }
 
-        MetadataResult result = extract(candidate);
+        MetadataResult result;
+        try {
+            result = extract(candidate);
+        } catch (RuntimeException exception) {
+            transactionTemplate.executeWithoutResult(status -> assetRepository.markMetadataFailed(
+                    candidate.assetId(),
+                    exception.getClass().getSimpleName(),
+                    exception.getMessage(),
+                    OffsetDateTime.now(ZoneOffset.UTC)
+            ));
+            throw exception;
+        }
         transactionTemplate.executeWithoutResult(status -> {
             OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
             assetRepository.upsertMetadata(toUpdate(candidate, result, now));
@@ -131,19 +144,72 @@ public class MetadataEnrichmentService {
         });
     }
 
+    public AdminBatchActionResponse recoverDeadLetterMetadata() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        int recovered = 0;
+        int failed = 0;
+        for (BackgroundJobRecord job : backgroundJobService.deadLetterJobs(ScanJobTypes.ASSET_METADATA_BACKFILL, DEFAULT_BACKFILL_BATCH_SIZE)) {
+            AssetMetadataJobPayload payload = metadataPayload(job);
+            AssetRepository.MetadataCandidateRow candidate = transactionTemplate.execute(status -> recoveryCandidate(payload, now));
+            if (candidate == null) {
+                failed++;
+                continue;
+            }
+            String dedupeKeyPrefix = ScanJobTypes.ASSET_METADATA_BACKFILL + ":" + candidate.assetId() + ":";
+            if (backgroundJobService.hasActiveJobs(ScanJobTypes.ASSET_METADATA_BACKFILL, dedupeKeyPrefix, null)) {
+                continue;
+            }
+            try {
+                backgroundJobService.enqueue(metadataJob(candidate, now));
+                recovered++;
+            } catch (RuntimeException exception) {
+                failed++;
+            }
+        }
+        return new AdminBatchActionResponse(recovered, failed);
+    }
+
     private AssetRepository.MetadataCandidateRow claim(AssetMetadataJobPayload payload) {
         AssetRepository.MetadataCandidateRow candidate = assetRepository
                 .findActiveMetadataCandidate(payload.assetId(), payload.assetFileId())
                 .orElse(null);
-        if (candidate == null
-                || !candidate.normalizedPath().equals(payload.normalizedPath())
-                || !candidate.fileName().equals(payload.fileName())
-                || candidate.sizeBytes() != payload.sizeBytes()
-                || !sameInstant(candidate.modifiedAt(), payload.modifiedAt())) {
+        if (!matchesPayload(candidate, payload)) {
             return null;
         }
         assetRepository.upsertMetadata(toProcessingUpdate(candidate, OffsetDateTime.now(ZoneOffset.UTC)));
         return candidate;
+    }
+
+    private AssetRepository.MetadataCandidateRow recoveryCandidate(AssetMetadataJobPayload payload, OffsetDateTime now) {
+        AssetRepository.MetadataCandidateRow candidate = assetRepository
+                .findActiveMetadataCandidate(payload.assetId(), payload.assetFileId())
+                .orElse(null);
+        if (!matchesPayload(candidate, payload)) {
+            return null;
+        }
+        assetRepository.markMetadataFailed(
+                candidate.assetId(),
+                "metadata_recovery",
+                "Requeued after a dead-letter metadata extraction",
+                now
+        );
+        return candidate;
+    }
+
+    private boolean matchesPayload(AssetRepository.MetadataCandidateRow candidate, AssetMetadataJobPayload payload) {
+        return candidate != null
+                && candidate.normalizedPath().equals(payload.normalizedPath())
+                && candidate.fileName().equals(payload.fileName())
+                && candidate.sizeBytes() == payload.sizeBytes()
+                && sameInstant(candidate.modifiedAt(), payload.modifiedAt());
+    }
+
+    private AssetMetadataJobPayload metadataPayload(BackgroundJobRecord job) {
+        try {
+            return objectMapper.readValue(job.payloadJson(), AssetMetadataJobPayload.class);
+        } catch (JsonProcessingException exception) {
+            return new AssetMetadataJobPayload(null, null, null, null, 0L, null, null);
+        }
     }
 
     private BackgroundJobCreate metadataJob(AssetRepository.MetadataCandidateRow candidate, OffsetDateTime now) {
@@ -532,8 +598,9 @@ public class MetadataEnrichmentService {
     private List<String> keywords(IptcDirectory iptc, PhotoText xmp) {
         Set<String> values = new LinkedHashSet<>();
         values.addAll(xmp.keywords());
-        if (iptc != null) {
-            values.addAll(iptc.getKeywords());
+        Collection<String> iptcKeywords = iptc == null ? null : iptc.getKeywords();
+        if (iptcKeywords != null) {
+            values.addAll(iptcKeywords);
         }
         return values.stream()
                 .map(this::blankToNull)

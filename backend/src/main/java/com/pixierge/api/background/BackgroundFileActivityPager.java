@@ -69,6 +69,7 @@ final class BackgroundFileActivityPager {
 
     private static BackgroundFileActivitySummary toSummary(BackgroundFileActivityRow row) {
         return new BackgroundFileActivitySummary(
+                row.assetId(),
                 row.path(),
                 fileName(row.path()),
                 row.result(),

@@ -201,7 +201,7 @@ public class ScanService {
 
         return transactionTemplate.execute(status -> {
             if (scanRepository.hasActiveScanRun(library.id())) {
-                return null;
+                throw new ScanAlreadyActiveException(library.id());
             }
             OffsetDateTime now = OffsetDateTime.now();
             UUID scanRunId = scanRepository.createScanRun(library.id(), root.id(), null, now);
@@ -214,6 +214,13 @@ public class ScanService {
             ));
             return scanRunId;
         });
+    }
+
+    private static final class ScanAlreadyActiveException extends RuntimeException {
+
+        private ScanAlreadyActiveException(UUID libraryId) {
+            super("A scan is already running for library " + libraryId);
+        }
     }
 
     private Path normalizeSubtree(Path rootPath, String changedPath) {

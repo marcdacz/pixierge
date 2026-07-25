@@ -343,6 +343,7 @@ export type BackgroundActivityJob = {
 };
 
 export type BackgroundFileActivity = {
+  assetId: string | null;
   path: string | null;
   fileName: string;
   status: string;
@@ -786,6 +787,13 @@ export async function addAssetTags(tagIds: string[], items: AssetAssignmentItem[
 
 export async function backfillAssetMetadata(csrfToken: string): Promise<{ processedCount: number; failedCount: number }> {
   return requestJson<{ processedCount: number; failedCount: number }>('/api/assets/metadata/backfill', {
+    method: 'POST',
+    csrfToken
+  });
+}
+
+export async function recoverDeadLetterMetadata(csrfToken: string): Promise<{ processedCount: number; failedCount: number }> {
+  return requestJson<{ processedCount: number; failedCount: number }>('/api/assets/metadata/recover-dead-letters', {
     method: 'POST',
     csrfToken
   });

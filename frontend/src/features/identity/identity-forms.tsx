@@ -113,7 +113,7 @@ function AuthCard({
   title: string;
 }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-background p-6 text-foreground">
+    <main className="grid min-h-dvh overflow-y-auto place-items-center bg-background p-6 text-foreground">
       <Card className="w-full max-w-md">
         <CardHeader>
           <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">

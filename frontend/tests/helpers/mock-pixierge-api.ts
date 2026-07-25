@@ -439,6 +439,59 @@ export async function mockPixiergeApi(page: Page) {
       return;
     }
 
+    if (path === '/api/admin/background/health' && request.method() === 'GET') {
+      await route.fulfill({
+        json: {
+          queues: [
+            {
+              jobType: 'asset-metadata-backfill',
+              status: 'dead_letter',
+              count: 3,
+              oldestCreatedAt: '2026-07-25T10:34:19Z',
+              oldestNextRunAt: '2026-07-25T10:34:19Z',
+              latestUpdatedAt: '2026-07-25T10:34:27Z'
+            }
+          ],
+          recentProblems: Array.from({ length: 8 }, (_, index) => ({
+            id: `background-problem-${index + 1}`,
+            jobType: 'asset-metadata-backfill',
+            payloadJson: JSON.stringify({
+              normalizedPath: `/photos/pixierge/janeen/file_${String(index + 10).padStart(3, '0')}.jpg`,
+              fileName: `file_${String(index + 10).padStart(3, '0')}.jpg`
+            }),
+            status: 'dead_letter',
+            attempts: 3,
+            maxAttempts: 3,
+            lastErrorCode: 'metadata_error',
+            lastErrorMessage: 'NullPointerException: Cannot invoke "java.util.Collection.iterator()" because "<parameter1>" is null',
+            updatedAt: '2026-07-25T10:34:27Z',
+            completedAt: '2026-07-25T10:34:27Z'
+          })),
+          watcher: {
+            status: 'healthy',
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            lastErrorAt: null,
+            lastOverflowAt: null,
+            lastRegistrationRefreshAt: '2026-07-25T10:30:00Z',
+            registeredRootCount: 1,
+            registeredDirectoryCount: 12
+          }
+        }
+      });
+      return;
+    }
+
+    if (path === '/api/admin/background/activity' && request.method() === 'GET') {
+      await route.fulfill({
+        json: {
+          jobs: [],
+          files: []
+        }
+      });
+      return;
+    }
+
     const schedulerRunMatch = path.match(/^\/api\/admin\/scheduler\/jobs\/([^/]+)\/run$/);
     if (schedulerRunMatch && request.method() === 'POST') {
       const jobId = schedulerRunMatch[1];

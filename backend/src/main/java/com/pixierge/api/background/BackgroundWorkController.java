@@ -2,6 +2,7 @@ package com.pixierge.api.background;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pixierge.api.assets.AssetMetadataJobPayload;
 import com.pixierge.api.filesystem.FilesystemWatcherHealth;
 import com.pixierge.api.scans.ScanIdentityJobPayload;
 import com.pixierge.api.scans.ScanJobTypes;
@@ -154,27 +155,48 @@ class BackgroundWorkController {
     }
 
     private List<BackgroundFileActivitySummary> activeFileRows(BackgroundJobRecord job, int limit) {
-        if (!ScanJobTypes.ASSET_IDENTITY_BACKFILL.equals(job.jobType())
-                || !(BackgroundJobRepository.STATUS_PENDING.equals(job.status())
+        if (!(BackgroundJobRepository.STATUS_PENDING.equals(job.status())
                 || BackgroundJobRepository.STATUS_RUNNING.equals(job.status()))) {
             return List.of();
         }
-        return identityPayload(job).identityItems().stream()
-                .limit(Math.max(0, limit))
-                .map(item -> new BackgroundFileActivitySummary(
-                        item.path(),
-                        fileName(item.path()),
-                        BackgroundJobRepository.STATUS_RUNNING.equals(job.status()) ? "processing" : "pending",
-                        job.id(),
-                        batchLabel(job),
-                        job.updatedAt(),
-                        null
-                ))
-                .toList();
+        String status = BackgroundJobRepository.STATUS_RUNNING.equals(job.status()) ? "processing" : "pending";
+        if (ScanJobTypes.ASSET_IDENTITY_BACKFILL.equals(job.jobType())) {
+            return identityPayload(job).identityItems().stream()
+                    .limit(Math.max(0, limit))
+                    .map(item -> new BackgroundFileActivitySummary(
+                            null,
+                            item.path(),
+                            fileName(item.path()),
+                            status,
+                            job.id(),
+                            batchLabel(job),
+                            job.updatedAt(),
+                            null
+                    ))
+                    .toList();
+        }
+        if (ScanJobTypes.ASSET_METADATA_BACKFILL.equals(job.jobType())) {
+            AssetMetadataJobPayload payload = metadataPayload(job);
+            if (payload.assetId() == null || payload.normalizedPath() == null) {
+                return List.of();
+            }
+            return List.of(new BackgroundFileActivitySummary(
+                    payload.assetId(),
+                    payload.normalizedPath(),
+                    payload.fileName() == null ? fileName(payload.normalizedPath()) : payload.fileName(),
+                    status,
+                    job.id(),
+                    "Metadata extraction",
+                    job.updatedAt(),
+                    null
+            ));
+        }
+        return List.of();
     }
 
     private BackgroundFileActivitySummary toFileSummary(BackgroundFileActivityRow row) {
         return new BackgroundFileActivitySummary(
+                row.assetId(),
                 row.path(),
                 fileName(row.path()),
                 row.result(),
@@ -186,6 +208,9 @@ class BackgroundWorkController {
     }
 
     private int fileCount(BackgroundJobRecord job) {
+        if (ScanJobTypes.ASSET_METADATA_BACKFILL.equals(job.jobType())) {
+            return 1;
+        }
         if (!ScanJobTypes.ASSET_IDENTITY_BACKFILL.equals(job.jobType())) {
             return 0;
         }
@@ -197,6 +222,14 @@ class BackgroundWorkController {
             return objectMapper.readValue(job.payloadJson(), ScanIdentityJobPayload.class);
         } catch (JsonProcessingException exception) {
             return new ScanIdentityJobPayload(null, null, null, List.of(), null);
+        }
+    }
+
+    private AssetMetadataJobPayload metadataPayload(BackgroundJobRecord job) {
+        try {
+            return objectMapper.readValue(job.payloadJson(), AssetMetadataJobPayload.class);
+        } catch (JsonProcessingException exception) {
+            return new AssetMetadataJobPayload(null, null, null, null, 0L, null, null);
         }
     }
 

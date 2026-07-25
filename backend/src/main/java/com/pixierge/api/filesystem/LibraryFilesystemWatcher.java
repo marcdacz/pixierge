@@ -233,7 +233,7 @@ class LibraryFilesystemWatcher implements DisposableBean {
                     ScanJobTypes.FILESYSTEM_CHANGE_EVENT,
                     payload,
                     10,
-                    3,
+                    25,
                     OffsetDateTime.now().plus(debounce),
                     "filesystem-change:" + libraryId,
                     ScanJobTypes.FILESYSTEM_CHANGE_EVENT + ":" + rootId + ":" + changed

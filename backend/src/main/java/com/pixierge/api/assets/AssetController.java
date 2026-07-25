@@ -125,4 +125,9 @@ public class AssetController {
     AdminBatchActionResponse backfillMetadata() {
         return metadataEnrichmentService.enqueueMetadataBackfill();
     }
+
+    @PostMapping("/api/assets/metadata/recover-dead-letters")
+    AdminBatchActionResponse recoverDeadLetterMetadata() {
+        return metadataEnrichmentService.recoverDeadLetterMetadata();
+    }
 }

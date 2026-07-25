@@ -475,6 +475,19 @@ class AssetRepository {
         }
     }
 
+    void markMetadataFailed(UUID assetId, String errorCode, String errorMessage, OffsetDateTime now) {
+        queryFactory.update(ASSET_METADATA)
+                .set(ASSET_METADATA.extractionStatus, EXTRACTION_STATUS_FAILED)
+                .set(ASSET_METADATA.metadataStatus, EXTRACTION_STATUS_FAILED)
+                .set(ASSET_METADATA.extractedAt, now)
+                .set(ASSET_METADATA.metadataExtractedAt, now)
+                .set(ASSET_METADATA.errorMessage, errorMessage)
+                .set(ASSET_METADATA.metadataErrorCode, errorCode)
+                .set(ASSET_METADATA.metadataErrorMessage, errorMessage)
+                .where(ASSET_METADATA.assetId.eq(assetId))
+                .execute();
+    }
+
     void upsertSearchDocument(UUID assetId, String searchableText, OffsetDateTime now) {
         long updated = queryFactory.update(SEARCH_DOCUMENTS)
                 .set(SEARCH_DOCUMENTS.searchableText, searchableText)
