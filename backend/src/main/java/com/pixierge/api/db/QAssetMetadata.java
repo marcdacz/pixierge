@@ -59,6 +59,7 @@ public class QAssetMetadata extends RelationalPathBase<QAssetMetadata> {
     public final StringPath frameRate = createString("frameRate");
     public final NumberPath<Long> bitrate = createNumber("bitrate", Long.class);
     public final BooleanPath hasAudio = createBoolean("hasAudio");
+    public final NumberPath<Long> metadataExtractionDurationMs = createNumber("metadataExtractionDurationMs", Long.class);
 
     public QAssetMetadata(String variable) {
         super(QAssetMetadata.class, forVariable(variable), null, "asset_metadata");
@@ -106,6 +107,7 @@ public class QAssetMetadata extends RelationalPathBase<QAssetMetadata> {
         addMetadata(frameRate, ColumnMetadata.named("frame_rate").withIndex(38).ofType(Types.VARCHAR));
         addMetadata(bitrate, ColumnMetadata.named("bitrate").withIndex(39).ofType(Types.BIGINT));
         addMetadata(hasAudio, ColumnMetadata.named("has_audio").withIndex(40).ofType(Types.BOOLEAN));
+        addMetadata(metadataExtractionDurationMs, ColumnMetadata.named("metadata_extraction_duration_ms").withIndex(41).ofType(Types.BIGINT));
     }
 
     @Override

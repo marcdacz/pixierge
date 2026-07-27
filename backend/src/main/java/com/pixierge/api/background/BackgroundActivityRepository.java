@@ -131,7 +131,13 @@ class BackgroundActivityRepository {
 
     private List<BackgroundFileActivityRow> fetchObservations(BooleanBuilder where, int limit) {
         return queryFactory
-                .select(FILE_OBSERVATIONS.assetId, FILE_OBSERVATIONS.path, FILE_OBSERVATIONS.result, FILE_OBSERVATIONS.observedAt)
+                .select(
+                        FILE_OBSERVATIONS.assetId,
+                        FILE_OBSERVATIONS.path,
+                        FILE_OBSERVATIONS.result,
+                        FILE_OBSERVATIONS.observedAt,
+                        FILE_OBSERVATIONS.processingDurationMs
+                )
                 .from(FILE_OBSERVATIONS)
                 .where(where)
                 .orderBy(FILE_OBSERVATIONS.observedAt.desc(), FILE_OBSERVATIONS.path.asc())
@@ -143,7 +149,8 @@ class BackgroundActivityRepository {
                         row.get(FILE_OBSERVATIONS.path),
                         row.get(FILE_OBSERVATIONS.result),
                         row.get(FILE_OBSERVATIONS.observedAt),
-                        null
+                        null,
+                        row.get(FILE_OBSERVATIONS.processingDurationMs)
                 ))
                 .toList();
     }
@@ -225,7 +232,8 @@ class BackgroundActivityRepository {
                         ASSET_FILES.path.min(),
                         ASSET_METADATA.metadataStatus,
                         ASSET_METADATA.metadataExtractedAt,
-                        ASSET_METADATA.metadataErrorMessage
+                        ASSET_METADATA.metadataErrorMessage,
+                        ASSET_METADATA.metadataExtractionDurationMs
                 )
                 .from(ASSET_METADATA)
                 .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ASSET_METADATA.assetId)
@@ -235,7 +243,8 @@ class BackgroundActivityRepository {
                         ASSET_METADATA.assetId,
                         ASSET_METADATA.metadataStatus,
                         ASSET_METADATA.metadataExtractedAt,
-                        ASSET_METADATA.metadataErrorMessage
+                        ASSET_METADATA.metadataErrorMessage,
+                        ASSET_METADATA.metadataExtractionDurationMs
                 )
                 .orderBy(ASSET_METADATA.metadataExtractedAt.desc(), ASSET_FILES.path.min().asc())
                 .limit(limit)
@@ -246,7 +255,8 @@ class BackgroundActivityRepository {
                         row.get(ASSET_FILES.path.min()),
                         row.get(ASSET_METADATA.metadataStatus),
                         row.get(ASSET_METADATA.metadataExtractedAt),
-                        row.get(ASSET_METADATA.metadataErrorMessage)
+                        row.get(ASSET_METADATA.metadataErrorMessage),
+                        row.get(ASSET_METADATA.metadataExtractionDurationMs)
                 ))
                 .toList();
     }

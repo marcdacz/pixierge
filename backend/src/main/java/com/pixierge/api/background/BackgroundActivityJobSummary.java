@@ -13,6 +13,8 @@ public record BackgroundActivityJobSummary(
         int maxAttempts,
         String lockedBy,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt
+        OffsetDateTime updatedAt,
+        OffsetDateTime startedAt,
+        OffsetDateTime completedAt
 ) {
 }

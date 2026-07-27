@@ -12,6 +12,8 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.OffsetDateTime;
@@ -64,7 +66,7 @@ class MetadataEnrichmentServiceTest {
         assertThat(response.failedCount()).isZero();
         BackgroundJobCreate job = backgroundJobService.jobs.getFirst();
         assertThat(job.jobType()).isEqualTo(ScanJobTypes.ASSET_METADATA_BACKFILL);
-        assertThat(job.concurrencyKey()).isEqualTo(ScanJobTypes.ASSET_METADATA_BACKFILL);
+        assertThat(job.concurrencyKey()).isEqualTo(ScanJobTypes.ASSET_METADATA_BACKFILL + ":" + ASSET_ID);
         AssetMetadataJobPayload payload = objectMapper.readValue(job.payloadJson(), AssetMetadataJobPayload.class);
         assertThat(payload.assetId()).isEqualTo(ASSET_ID);
         assertThat(payload.assetFileId()).isEqualTo(ASSET_FILE_ID);
@@ -94,7 +96,34 @@ class MetadataEnrichmentServiceTest {
         AssetRepository.MetadataUpdate update = assetRepository.metadataUpdates.get(1);
         assertThat(update.errorCode()).isEqualTo("unsupported_media");
         assertThat(update.sourceFileSize()).isEqualTo(Files.size(file));
+        assertThat(update.metadataExtractionDurationMs()).isNotNull().isGreaterThanOrEqualTo(0L);
         assertThat(assetRepository.searchUpserts).containsExactly(ASSET_ID);
+    }
+
+    @Test
+    void queuedPhotoWithoutExifDimensionsUsesImageIoFallback() throws Exception {
+        Path file = tempDir.resolve("without-exif.jpg");
+        BufferedImage image = new BufferedImage(7, 5, BufferedImage.TYPE_INT_RGB);
+        assertThat(ImageIO.write(image, "jpg", file.toFile())).isTrue();
+        AssetRepository.MetadataCandidateRow candidate = candidate(file, "image");
+        assetRepository.activeCandidates.put(ASSET_FILE_ID, candidate);
+
+        service.extractQueuedMetadata(new AssetMetadataJobPayload(
+                ASSET_ID,
+                ASSET_FILE_ID,
+                candidate.normalizedPath(),
+                candidate.fileName(),
+                candidate.sizeBytes(),
+                candidate.modifiedAt(),
+                candidate.mediaType()
+        ));
+
+        assertThat(assetRepository.metadataUpdates)
+                .extracting(AssetRepository.MetadataUpdate::extractionStatus)
+                .containsExactly("processing", "extracted");
+        AssetRepository.MetadataUpdate update = assetRepository.metadataUpdates.get(1);
+        assertThat(update.width()).isEqualTo(7);
+        assertThat(update.height()).isEqualTo(5);
     }
 
     @Test

@@ -76,7 +76,8 @@ final class BackgroundFileActivityPager {
                 null,
                 null,
                 row.observedAt(),
-                row.message()
+                row.message(),
+                row.durationMs()
         );
     }
 

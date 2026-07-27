@@ -8,6 +8,10 @@ record BackgroundFileActivityRow(
         String path,
         String result,
         OffsetDateTime observedAt,
-        String message
+        String message,
+        Long durationMs
 ) {
+    BackgroundFileActivityRow(UUID assetId, String path, String result, OffsetDateTime observedAt, String message) {
+        this(assetId, path, result, observedAt, message, null);
+    }
 }

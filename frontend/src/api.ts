@@ -340,6 +340,8 @@ export type BackgroundActivityJob = {
   lockedBy: string | null;
   createdAt: string;
   updatedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
 };
 
 export type BackgroundFileActivity = {
@@ -351,6 +353,7 @@ export type BackgroundFileActivity = {
   batchLabel: string | null;
   updatedAt: string;
   message: string | null;
+  durationMs: number | null;
 };
 
 export type BackgroundWorkActivity = {
@@ -368,6 +371,7 @@ export type BackgroundFileActivityPage = {
 
 export type BackgroundWorkConfig = {
   maxConcurrentJobs: number;
+  maxConcurrentMetadataJobs: number;
   identityBatchSize: number;
   claimBatchSize: number;
   pollIntervalMs: number;

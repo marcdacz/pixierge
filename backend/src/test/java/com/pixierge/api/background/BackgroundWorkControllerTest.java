@@ -30,18 +30,19 @@ class BackgroundWorkControllerTest {
                 new FilesystemWatcherHealth(),
                 new ObjectMapper(),
                 4,
+                3,
                 80,
                 15,
                 1500L
         );
 
-        assertThat(controller.config()).isEqualTo(new BackgroundWorkConfigResponse(4, 80, 15, 1500L));
+        assertThat(controller.config()).isEqualTo(new BackgroundWorkConfigResponse(4, 3, 80, 15, 1500L));
     }
 
     @Test
     void filesReturnsPaginatedPersistedActivity() {
         StubActivityRepository activityRepository = new StubActivityRepository(
-                List.of(new BackgroundFileActivityRow(UUID.randomUUID(), "/photos/a.jpg", "added", NOW, null)),
+                List.of(new BackgroundFileActivityRow(UUID.randomUUID(), "/photos/a.jpg", "added", NOW, null, 240L)),
                 51
         );
         BackgroundWorkController controller = new BackgroundWorkController(
@@ -61,6 +62,7 @@ class BackgroundWorkControllerTest {
         assertThat(page.hasNext()).isTrue();
         assertThat(page.items()).hasSize(1);
         assertThat(page.items().getFirst().fileName()).isEqualTo("a.jpg");
+        assertThat(page.items().getFirst().durationMs()).isEqualTo(240L);
         assertThat(activityRepository.lastOffset).isZero();
         assertThat(activityRepository.lastLimit).isEqualTo(50);
     }

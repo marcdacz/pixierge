@@ -36,6 +36,7 @@ public class QBackgroundJobs extends RelationalPathBase<QBackgroundJobs> {
     public final DateTimePath<OffsetDateTime> createdAt = createDateTime("createdAt", OffsetDateTime.class);
     public final DateTimePath<OffsetDateTime> updatedAt = createDateTime("updatedAt", OffsetDateTime.class);
     public final DateTimePath<OffsetDateTime> completedAt = createDateTime("completedAt", OffsetDateTime.class);
+    public final DateTimePath<OffsetDateTime> startedAt = createDateTime("startedAt", OffsetDateTime.class);
 
     public QBackgroundJobs(String variable) {
         super(QBackgroundJobs.class, forVariable(variable), null, "background_jobs");
@@ -61,6 +62,7 @@ public class QBackgroundJobs extends RelationalPathBase<QBackgroundJobs> {
         addMetadata(createdAt, ColumnMetadata.named("created_at").withIndex(16).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
         addMetadata(updatedAt, ColumnMetadata.named("updated_at").withIndex(17).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
         addMetadata(completedAt, ColumnMetadata.named("completed_at").withIndex(18).ofType(Types.TIMESTAMP_WITH_TIMEZONE));
+        addMetadata(startedAt, ColumnMetadata.named("started_at").withIndex(19).ofType(Types.TIMESTAMP_WITH_TIMEZONE));
     }
 
     @Override

@@ -66,13 +66,32 @@ public class BackgroundJobRepository {
             OffsetDateTime now,
             OffsetDateTime leaseUntil
     ) {
-        List<Tuple> rows = selectJobs()
-                .where(JOBS.attempts.lt(JOBS.maxAttempts)
+        return claimReadyJobs(limit, workerId, now, leaseUntil, null, null);
+    }
+
+    @Transactional
+    public List<BackgroundJobRecord> claimReadyJobs(
+            int limit,
+            String workerId,
+            OffsetDateTime now,
+            OffsetDateTime leaseUntil,
+            String includedJobType,
+            String excludedJobType
+    ) {
+        var claimable = JOBS.attempts.lt(JOBS.maxAttempts)
                         .and(JOBS.status.eq(STATUS_PENDING)
                                 .and(JOBS.nextRunAt.loe(now))
                                 .or(JOBS.status.eq(STATUS_RUNNING)
                                         .and(JOBS.leaseUntil.isNotNull())
-                                        .and(JOBS.leaseUntil.loe(now)))))
+                                        .and(JOBS.leaseUntil.loe(now))));
+        if (includedJobType != null) {
+            claimable = claimable.and(JOBS.jobType.eq(includedJobType));
+        }
+        if (excludedJobType != null) {
+            claimable = claimable.and(JOBS.jobType.ne(excludedJobType));
+        }
+        List<Tuple> rows = selectJobs()
+                .where(claimable)
                 .orderBy(JOBS.priority.desc(), JOBS.nextRunAt.asc(), JOBS.createdAt.asc())
                 .limit(Math.max(1, limit) * 4L)
                 .addFlag(QueryFlag.Position.END, " FOR UPDATE SKIP LOCKED")
@@ -87,6 +106,7 @@ public class BackgroundJobRepository {
                     .set(JOBS.attempts, attempts == null ? 1 : attempts + 1)
                     .set(JOBS.lockedBy, workerId)
                     .set(JOBS.leaseUntil, leaseUntil)
+                    .set(JOBS.startedAt, now)
                     .set(JOBS.updatedAt, now)
                     .where(JOBS.id.eq(id))
                     .execute();
@@ -99,6 +119,7 @@ public class BackgroundJobRepository {
                         workerId,
                         leaseUntil,
                         (row.get(JOBS.attempts) == null ? 0 : row.get(JOBS.attempts)) + 1,
+                        now,
                         now
                 ))
                 .toList();
@@ -146,6 +167,7 @@ public class BackgroundJobRepository {
                 .set(JOBS.status, STATUS_SUCCEEDED)
                 .setNull(JOBS.leaseUntil)
                 .setNull(JOBS.lockedBy)
+                .setNull(JOBS.startedAt)
                 .set(JOBS.progressJson, progressJson)
                 .set(JOBS.completedAt, now)
                 .set(JOBS.updatedAt, now)
@@ -314,7 +336,8 @@ public class BackgroundJobRepository {
                         JOBS.lastErrorMessage,
                         JOBS.createdAt,
                         JOBS.updatedAt,
-                        JOBS.completedAt
+                        JOBS.completedAt,
+                        JOBS.startedAt
                 )
                 .from(JOBS);
     }
@@ -326,7 +349,8 @@ public class BackgroundJobRepository {
                 row.get(JOBS.lockedBy),
                 row.get(JOBS.leaseUntil),
                 row.get(JOBS.attempts) == null ? 0 : row.get(JOBS.attempts),
-                row.get(JOBS.updatedAt)
+                row.get(JOBS.updatedAt),
+                row.get(JOBS.startedAt)
         );
     }
 
@@ -336,7 +360,8 @@ public class BackgroundJobRepository {
             String lockedBy,
             OffsetDateTime leaseUntil,
             int attempts,
-            OffsetDateTime updatedAt
+            OffsetDateTime updatedAt,
+            OffsetDateTime startedAt
     ) {
         return new BackgroundJobRecord(
                 row.get(JOBS.id),
@@ -356,7 +381,8 @@ public class BackgroundJobRepository {
                 row.get(JOBS.lastErrorMessage),
                 row.get(JOBS.createdAt),
                 updatedAt,
-                row.get(JOBS.completedAt)
+                row.get(JOBS.completedAt),
+                startedAt
         );
     }
 

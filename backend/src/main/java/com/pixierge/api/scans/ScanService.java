@@ -34,6 +34,8 @@ public class ScanService {
     private static final int OBSERVATION_BATCH_SIZE = 100;
     private static final int CATALOG_BATCH_SIZE = 500;
     private static final int DEFAULT_IDENTITY_BATCH_SIZE = 100;
+    private static final ThreadLocal<Long> OBSERVATION_DURATION_BASE_MS = new ThreadLocal<>();
+    private static final ThreadLocal<Long> OBSERVATION_DURATION_STARTED_AT = new ThreadLocal<>();
 
     private final LibraryRepository libraryRepository;
     private final ScanRepository scanRepository;
@@ -402,6 +404,7 @@ public class ScanService {
                     candidates.stream().map(FileCandidate::normalizedPath).toList()
             );
             for (FileCandidate candidate : candidates) {
+                beginObservationTiming(0L);
                 counts.scanned();
                 ScanRepository.AssetFileRecord existing = existingByPath.get(candidate.normalizedPath());
                 if (existing == null) {
@@ -434,6 +437,7 @@ public class ScanService {
                             pendingObservations
                     );
                 }
+                clearObservationTiming();
                 progress.maybeUpdate();
             }
         });
@@ -625,9 +629,15 @@ public class ScanService {
                 continue;
             }
             try {
-                results.add(new IdentityHashResult(item, fileHasher.hash(Path.of(item.normalizedPath())), null));
+                long hashStartedAt = System.nanoTime();
+                results.add(new IdentityHashResult(
+                        item,
+                        fileHasher.hash(Path.of(item.normalizedPath())),
+                        null,
+                        elapsedMillis(hashStartedAt)
+                ));
             } catch (IOException | SecurityException exception) {
-                results.add(new IdentityHashResult(item, null, exception.getMessage()));
+                results.add(new IdentityHashResult(item, null, exception.getMessage(), null));
             }
         }
         if (results.isEmpty()) {
@@ -659,23 +669,28 @@ public class ScanService {
                     );
                     continue;
                 }
-                reconcileHashes(
-                        payload.scanRunId(),
-                        root,
-                        new HashWorkItem(
-                                item.rootId(),
-                                item.assetFileId(),
-                                item.path(),
-                                item.normalizedPath(),
-                                item.fileName(),
-                                item.size(),
-                                item.modifiedAt(),
-                                current
-                        ),
-                        result.hashes(),
-                        counts,
-                        pendingObservations
-                );
+                beginObservationTiming(result.hashDurationMs());
+                try {
+                    reconcileHashes(
+                            payload.scanRunId(),
+                            root,
+                            new HashWorkItem(
+                                    item.rootId(),
+                                    item.assetFileId(),
+                                    item.path(),
+                                    item.normalizedPath(),
+                                    item.fileName(),
+                                    item.size(),
+                                    item.modifiedAt(),
+                                    current
+                            ),
+                            result.hashes(),
+                            counts,
+                            pendingObservations
+                    );
+                } finally {
+                    clearObservationTiming();
+                }
                 if (pendingObservations.size() >= OBSERVATION_BATCH_SIZE) {
                     scanRepository.createObservations(pendingObservations);
                     pendingObservations.clear();
@@ -705,7 +720,8 @@ public class ScanService {
     private record IdentityHashResult(
             ScanIdentityJobPayload.ScanIdentityJobItem item,
             FileHasher.Hashes hashes,
-            String errorMessage
+            String errorMessage,
+            Long hashDurationMs
     ) {
     }
 
@@ -1143,8 +1159,32 @@ public class ScanService {
                 modifiedAt,
                 partialHash,
                 contentHash,
-                result
+                result,
+                observationDurationMs()
         );
+    }
+
+    private static void beginObservationTiming(Long baseDurationMs) {
+        OBSERVATION_DURATION_BASE_MS.set(baseDurationMs == null ? 0L : Math.max(0L, baseDurationMs));
+        OBSERVATION_DURATION_STARTED_AT.set(System.nanoTime());
+    }
+
+    private static void clearObservationTiming() {
+        OBSERVATION_DURATION_BASE_MS.remove();
+        OBSERVATION_DURATION_STARTED_AT.remove();
+    }
+
+    private static Long observationDurationMs() {
+        Long startedAt = OBSERVATION_DURATION_STARTED_AT.get();
+        if (startedAt == null) {
+            return null;
+        }
+        Long baseDurationMs = OBSERVATION_DURATION_BASE_MS.get();
+        return Math.max(0L, baseDurationMs == null ? 0L : baseDurationMs) + elapsedMillis(startedAt);
+    }
+
+    private static long elapsedMillis(long startedAt) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
     }
 
     private void recordError(

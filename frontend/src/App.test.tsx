@@ -159,7 +159,9 @@ const backgroundWorkActivity = {
       maxAttempts: 3,
       lockedBy: 'pixierge-worker',
       createdAt: '2026-07-04T00:03:00Z',
-      updatedAt: '2026-07-04T00:04:00Z'
+      updatedAt: '2026-07-04T00:04:00Z',
+      startedAt: '2026-07-04T00:03:01Z',
+      completedAt: null
     }
   ],
   files: []
@@ -175,7 +177,8 @@ const backgroundWorkFiles = {
       jobId: 'job-identity-8',
       batchLabel: 'identity batch 8',
       updatedAt: '2026-07-04T00:04:00Z',
-      message: null
+      message: null,
+      durationMs: null
     },
     {
       assetId: 'asset-2',
@@ -185,7 +188,8 @@ const backgroundWorkFiles = {
       jobId: null,
       batchLabel: null,
       updatedAt: '2026-07-04T00:03:00Z',
-      message: null
+      message: null,
+      durationMs: 1500
     }
   ],
   page: 0,
@@ -196,6 +200,7 @@ const backgroundWorkFiles = {
 
 const backgroundWorkConfig = {
   maxConcurrentJobs: 3,
+  maxConcurrentMetadataJobs: 2,
   identityBatchSize: 100,
   claimBatchSize: 25,
   pollIntervalMs: 1000
@@ -469,6 +474,8 @@ describe('App', () => {
     expect(screen.getByTestId('background-file-updated')).toHaveTextContent('Any date');
     expect(screen.getByText('IMG_3001.HEIC')).toBeInTheDocument();
     expect(screen.getByText('IMG_2999.HEIC')).toBeInTheDocument();
+    expect(screen.getByText('Duration')).toBeInTheDocument();
+    expect(screen.getByText('1.5 s')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Open IMG_3001.HEIC' }));
     expect(await screen.findByRole('button', { name: 'Show photo metadata' })).toBeInTheDocument();
     await userEvent.keyboard('{ArrowRight}');

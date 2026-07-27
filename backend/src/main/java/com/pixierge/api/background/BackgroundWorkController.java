@@ -7,6 +7,7 @@ import com.pixierge.api.filesystem.FilesystemWatcherHealth;
 import com.pixierge.api.scans.ScanIdentityJobPayload;
 import com.pixierge.api.scans.ScanJobTypes;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -32,16 +34,19 @@ class BackgroundWorkController {
     private final FilesystemWatcherHealth watcherHealth;
     private final ObjectMapper objectMapper;
     private final int maxConcurrentJobs;
+    private final int maxConcurrentMetadataJobs;
     private final int identityBatchSize;
     private final int claimBatchSize;
     private final long pollIntervalMs;
 
+    @Autowired
     BackgroundWorkController(
             BackgroundJobService backgroundJobService,
             BackgroundActivityRepository activityRepository,
             FilesystemWatcherHealth watcherHealth,
             ObjectMapper objectMapper,
             @Value("${pixierge.background-jobs.max-concurrent-jobs:2}") int maxConcurrentJobs,
+            @Value("${pixierge.background-jobs.max-concurrent-metadata-jobs:2}") int maxConcurrentMetadataJobs,
             @Value("${pixierge.background-jobs.identity-batch-size:100}") int identityBatchSize,
             @Value("${pixierge.background-jobs.claim-batch-size:25}") int claimBatchSize,
             @Value("${pixierge.background-jobs.poll-interval-ms:2000}") long pollIntervalMs
@@ -51,9 +56,26 @@ class BackgroundWorkController {
         this.watcherHealth = watcherHealth;
         this.objectMapper = objectMapper;
         this.maxConcurrentJobs = Math.max(1, maxConcurrentJobs);
+        this.maxConcurrentMetadataJobs = Math.max(1, maxConcurrentMetadataJobs);
         this.identityBatchSize = Math.max(1, identityBatchSize);
         this.claimBatchSize = Math.max(1, claimBatchSize);
         this.pollIntervalMs = Math.max(1L, pollIntervalMs);
+    }
+
+    BackgroundWorkController(
+            BackgroundJobService backgroundJobService,
+            BackgroundActivityRepository activityRepository,
+            FilesystemWatcherHealth watcherHealth,
+            ObjectMapper objectMapper,
+            int maxConcurrentJobs,
+            int identityBatchSize,
+            int claimBatchSize,
+            long pollIntervalMs
+    ) {
+        this(
+                backgroundJobService, activityRepository, watcherHealth, objectMapper, maxConcurrentJobs,
+                maxConcurrentJobs, identityBatchSize, claimBatchSize, pollIntervalMs
+        );
     }
 
     @GetMapping("/api/admin/background/health")
@@ -133,6 +155,7 @@ class BackgroundWorkController {
     BackgroundWorkConfigResponse config() {
         return new BackgroundWorkConfigResponse(
                 maxConcurrentJobs,
+                maxConcurrentMetadataJobs,
                 identityBatchSize,
                 claimBatchSize,
                 pollIntervalMs
@@ -150,7 +173,9 @@ class BackgroundWorkController {
                 job.maxAttempts(),
                 job.lockedBy(),
                 job.createdAt(),
-                job.updatedAt()
+                job.updatedAt(),
+                job.startedAt(),
+                job.completedAt()
         );
     }
 
@@ -188,7 +213,8 @@ class BackgroundWorkController {
                     job.id(),
                     "Metadata extraction",
                     job.updatedAt(),
-                    null
+                    null,
+                    metadataDuration(job)
             ));
         }
         return List.of();
@@ -203,8 +229,16 @@ class BackgroundWorkController {
                 null,
                 null,
                 row.observedAt(),
-                row.message()
+                row.message(),
+                row.durationMs()
         );
+    }
+
+    private Long metadataDuration(BackgroundJobRecord job) {
+        if (!BackgroundJobRepository.STATUS_RUNNING.equals(job.status()) || job.startedAt() == null) {
+            return null;
+        }
+        return Math.max(0L, Duration.between(job.startedAt(), OffsetDateTime.now(ZoneOffset.UTC)).toMillis());
     }
 
     private int fileCount(BackgroundJobRecord job) {

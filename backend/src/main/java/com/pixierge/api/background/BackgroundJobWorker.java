@@ -2,11 +2,10 @@ package com.pixierge.api.background;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.task.TaskExecutor;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
@@ -16,7 +15,6 @@ import java.util.concurrent.Semaphore;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-@Service
 public class BackgroundJobWorker {
 
     private static final Logger log = LoggerFactory.getLogger(BackgroundJobWorker.class);
@@ -25,23 +23,31 @@ public class BackgroundJobWorker {
     private final Map<String, BackgroundJobHandler> handlers;
     private final TaskExecutor taskExecutor;
     private final Semaphore workerSlots;
+    private final String includedJobType;
+    private final String excludedJobType;
+    private final ApplicationEventPublisher eventPublisher;
 
-    @Autowired
     public BackgroundJobWorker(
             BackgroundJobService jobService,
             List<BackgroundJobHandler> handlers,
-            @Qualifier("backgroundJobTaskExecutor") TaskExecutor taskExecutor,
-            @Value("${pixierge.background-jobs.max-concurrent-jobs:2}") int maxConcurrentJobs
+            TaskExecutor taskExecutor,
+            int maxConcurrentJobs,
+            String includedJobType,
+            String excludedJobType,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.jobService = jobService;
         this.handlers = handlers.stream()
                 .collect(Collectors.toMap(BackgroundJobHandler::jobType, Function.identity()));
         this.taskExecutor = taskExecutor;
         this.workerSlots = new Semaphore(Math.max(1, maxConcurrentJobs));
+        this.includedJobType = includedJobType;
+        this.excludedJobType = excludedJobType;
+        this.eventPublisher = eventPublisher;
     }
 
     BackgroundJobWorker(BackgroundJobService jobService, List<BackgroundJobHandler> handlers) {
-        this(jobService, handlers, Runnable::run, 1);
+        this(jobService, handlers, Runnable::run, 1, null, null, null);
     }
 
     public int pollBatch(int limit) {
@@ -50,7 +56,12 @@ public class BackgroundJobWorker {
             return 0;
         }
         String workerId = "pixierge-" + UUID.randomUUID();
-        List<BackgroundJobRecord> jobs = jobService.claimReadyJobs(claimLimit, workerId);
+        List<BackgroundJobRecord> jobs = jobService.claimReadyJobs(
+                claimLimit,
+                workerId,
+                includedJobType,
+                excludedJobType
+        );
         for (BackgroundJobRecord job : jobs) {
             if (!workerSlots.tryAcquire()) {
                 break;
@@ -61,6 +72,7 @@ public class BackgroundJobWorker {
                         handle(job, workerId);
                     } finally {
                         workerSlots.release();
+                        notifyWorkers();
                     }
                 });
             } catch (RejectedExecutionException exception) {
@@ -93,6 +105,12 @@ public class BackgroundJobWorker {
                     exception.getClass().getSimpleName(),
                     exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()
             );
+        }
+    }
+
+    private void notifyWorkers() {
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new BackgroundJobEnqueuedEvent());
         }
     }
 }

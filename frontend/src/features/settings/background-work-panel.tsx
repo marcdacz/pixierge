@@ -700,12 +700,13 @@ function BackgroundFileActivityPanel({
               <p className="text-sm text-muted-foreground">No file activity matches the current filters.</p>
             ) : (
               <div className="overflow-x-auto">
-                <Table className="table-fixed min-w-[50rem]">
+                <Table className="table-fixed min-w-[56rem]">
                   <colgroup>
                     <col className="w-[6%]" />
-                    <col className="w-[47%]" />
+                    <col className="w-[41%]" />
                     <col className="w-[15%]" />
-                    <col className="w-[14%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[12%]" />
                     <col className="w-[18%]" />
                   </colgroup>
                   <TableHeader>
@@ -714,6 +715,7 @@ function BackgroundFileActivityPanel({
                       <TableHead>File</TableHead>
                       <TableHead className="whitespace-nowrap">Status</TableHead>
                       <TableHead className="whitespace-nowrap">Batch</TableHead>
+                      <TableHead className="whitespace-nowrap">Duration</TableHead>
                       <TableHead className="whitespace-nowrap">Updated</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -752,6 +754,7 @@ function BackgroundFileActivityPanel({
                           </Badge>
                         </TableCell>
                         <TableCell className="whitespace-nowrap align-top">{file.batchLabel ?? '-'}</TableCell>
+                        <TableCell className="whitespace-nowrap align-top">{formatDuration(file.durationMs)}</TableCell>
                         <TableCell className="whitespace-nowrap align-top">
                           {formatOptionalTimestamp(file.updatedAt)}
                         </TableCell>
@@ -878,13 +881,15 @@ function BackgroundConfigurationPanel({
       <CardContent className="grid gap-5">
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <ConfigStat label="Max concurrent jobs" value={String(config.maxConcurrentJobs)} />
+          <ConfigStat label="Max metadata jobs" value={String(config.maxConcurrentMetadataJobs)} />
           <ConfigStat label="Identity batch size" value={String(config.identityBatchSize)} />
           <ConfigStat label="Claim batch size" value={String(config.claimBatchSize)} />
           <ConfigStat label="Poll interval" value={`${config.pollIntervalMs} ms`} />
         </dl>
         <Alert data-testid="background-config-advice">
           These values are read-only here. Set them with environment variables such as
-          `PIXIERGE_BACKGROUND_JOBS_MAX_CONCURRENT_JOBS`, `PIXIERGE_BACKGROUND_JOBS_IDENTITY_BATCH_SIZE`,
+          `PIXIERGE_BACKGROUND_JOBS_MAX_CONCURRENT_JOBS`, `PIXIERGE_BACKGROUND_JOBS_MAX_CONCURRENT_METADATA_JOBS`,
+          `PIXIERGE_BACKGROUND_JOBS_IDENTITY_BATCH_SIZE`,
           `PIXIERGE_BACKGROUND_JOBS_CLAIM_BATCH_SIZE`, and `PIXIERGE_BACKGROUND_JOBS_POLL_INTERVAL_MS` in
           `.env` or `docker-compose.yml`, then restart the API for changes to take effect.
         </Alert>
@@ -1374,6 +1379,16 @@ function formatQueueStatus(status: string) {
 
 function formatOptionalTimestamp(value: string | null) {
   return value ? formatScanTimestamp(value) : 'Never';
+}
+
+function formatDuration(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  if (value < 1000) {
+    return `${Math.max(0, Math.round(value))} ms`;
+  }
+  return `${(value / 1000).toFixed(1)} s`;
 }
 
 function messageForError(error: unknown, fallback: string) {

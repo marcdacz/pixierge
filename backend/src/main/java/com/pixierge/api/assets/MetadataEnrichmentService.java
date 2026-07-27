@@ -122,6 +122,7 @@ public class MetadataEnrichmentService {
         }
 
         MetadataResult result;
+        long extractionStartedAt = System.nanoTime();
         try {
             result = extract(candidate);
         } catch (RuntimeException exception) {
@@ -135,7 +136,12 @@ public class MetadataEnrichmentService {
         }
         transactionTemplate.executeWithoutResult(status -> {
             OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-            assetRepository.upsertMetadata(toUpdate(candidate, result, now));
+            assetRepository.upsertMetadata(toUpdate(
+                    candidate,
+                    result,
+                    now,
+                    java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - extractionStartedAt)
+            ));
             assetRepository.upsertSearchDocument(
                     candidate.assetId(),
                     assetRepository.searchableTextForAsset(candidate.assetId()),
@@ -229,7 +235,7 @@ public class MetadataEnrichmentService {
                     -10,
                     3,
                     now,
-                    ScanJobTypes.ASSET_METADATA_BACKFILL,
+                    ScanJobTypes.ASSET_METADATA_BACKFILL + ":" + candidate.assetId(),
                     ScanJobTypes.ASSET_METADATA_BACKFILL + ":" + candidate.assetId()
                             + ":" + candidate.sizeBytes()
                             + ":" + candidate.modifiedAt().toInstant().toEpochMilli()
@@ -261,8 +267,10 @@ public class MetadataEnrichmentService {
             ExifSubIFDDirectory subIfd = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
             IptcDirectory iptc = metadata.getFirstDirectoryOfType(IptcDirectory.class);
             PhotoText xmp = xmpText(metadata);
-            ImageDimensions fallbackDimensions = imageIoDimensions(path);
-            ImageDimensions dimensions = dimensions(ifd0, subIfd, fallbackDimensions);
+            ImageDimensions dimensions = dimensions(ifd0, subIfd, null);
+            if (dimensions.width() == null || dimensions.height() == null) {
+                dimensions = dimensions(ifd0, subIfd, imageIoDimensions(path));
+            }
             GpsDirectory gps = metadata.getFirstDirectoryOfType(GpsDirectory.class);
             GeoLocation location = gps == null ? null : gps.getGeoLocation();
             List<String> keywords = keywords(iptc, xmp);
@@ -473,6 +481,7 @@ public class MetadataEnrichmentService {
                 null,
                 null,
                 null,
+                null,
                 null
         );
     }
@@ -480,7 +489,8 @@ public class MetadataEnrichmentService {
     private AssetRepository.MetadataUpdate toUpdate(
             AssetRepository.MetadataCandidateRow candidate,
             MetadataResult result,
-            OffsetDateTime now
+            OffsetDateTime now,
+            long extractionDurationMs
     ) {
         return new AssetRepository.MetadataUpdate(
                 candidate.assetId(),
@@ -519,7 +529,8 @@ public class MetadataEnrichmentService {
                 result.audioCodec(),
                 result.frameRate(),
                 result.bitrate(),
-                result.hasAudio()
+                result.hasAudio(),
+                extractionDurationMs
         );
     }
 
@@ -540,7 +551,10 @@ public class MetadataEnrichmentService {
         if (height == null) {
             height = integer(ifd0, ExifDirectoryBase.TAG_IMAGE_HEIGHT);
         }
-        return new ImageDimensions(width == null ? fallback.width() : width, height == null ? fallback.height() : height);
+        return new ImageDimensions(
+                width == null && fallback != null ? fallback.width() : width,
+                height == null && fallback != null ? fallback.height() : height
+        );
     }
 
     private ImageDimensions imageIoDimensions(Path path) {

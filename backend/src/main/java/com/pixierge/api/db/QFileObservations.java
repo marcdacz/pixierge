@@ -32,6 +32,7 @@ public class QFileObservations extends RelationalPathBase<QFileObservations> {
     public final StringPath contentHash = createString("contentHash");
     public final StringPath result = createString("result");
     public final DateTimePath<OffsetDateTime> observedAt = createDateTime("observedAt", OffsetDateTime.class);
+    public final NumberPath<Long> processingDurationMs = createNumber("processingDurationMs", Long.class);
 
     public QFileObservations(String variable) {
         super(QFileObservations.class, forVariable(variable), null, "file_observations");
@@ -53,6 +54,7 @@ public class QFileObservations extends RelationalPathBase<QFileObservations> {
         addMetadata(contentHash, ColumnMetadata.named("content_hash").withIndex(12).ofType(Types.VARCHAR));
         addMetadata(result, ColumnMetadata.named("result").withIndex(13).ofType(Types.VARCHAR).notNull());
         addMetadata(observedAt, ColumnMetadata.named("observed_at").withIndex(14).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
+        addMetadata(processingDurationMs, ColumnMetadata.named("processing_duration_ms").withIndex(15).ofType(Types.BIGINT));
     }
 
     @Override

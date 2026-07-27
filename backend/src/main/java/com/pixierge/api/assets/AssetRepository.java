@@ -426,6 +426,7 @@ class AssetRepository {
                 .set(ASSET_METADATA.frameRate, update.frameRate())
                 .set(ASSET_METADATA.bitrate, update.bitrate())
                 .set(ASSET_METADATA.hasAudio, update.hasAudio())
+                .set(ASSET_METADATA.metadataExtractionDurationMs, update.metadataExtractionDurationMs())
                 .where(ASSET_METADATA.assetId.eq(update.assetId()))
                 .execute();
 
@@ -471,6 +472,7 @@ class AssetRepository {
                     .set(ASSET_METADATA.frameRate, update.frameRate())
                     .set(ASSET_METADATA.bitrate, update.bitrate())
                     .set(ASSET_METADATA.hasAudio, update.hasAudio())
+                    .set(ASSET_METADATA.metadataExtractionDurationMs, update.metadataExtractionDurationMs())
                     .execute();
         }
     }
@@ -1152,7 +1154,8 @@ class AssetRepository {
             String audioCodec,
             String frameRate,
             Long bitrate,
-            Boolean hasAudio
+            Boolean hasAudio,
+            Long metadataExtractionDurationMs
     ) {
     }
 

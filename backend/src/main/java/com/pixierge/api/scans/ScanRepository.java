@@ -439,6 +439,27 @@ class ScanRepository {
             String contentHash,
             String result
     ) {
+        createObservation(
+                scanRunId, libraryId, rootId, assetId, assetFileId, path, normalizedPath, sizeBytes, modifiedAt,
+                partialHash, contentHash, result, null
+        );
+    }
+
+    void createObservation(
+            UUID scanRunId,
+            UUID libraryId,
+            UUID rootId,
+            UUID assetId,
+            UUID assetFileId,
+            String path,
+            String normalizedPath,
+            Long sizeBytes,
+            OffsetDateTime modifiedAt,
+            String partialHash,
+            String contentHash,
+            String result,
+            Long processingDurationMs
+    ) {
         queryFactory.insert(FILE_OBSERVATIONS)
                 .set(FILE_OBSERVATIONS.id, UUID.randomUUID())
                 .set(FILE_OBSERVATIONS.scanRunId, scanRunId)
@@ -453,6 +474,7 @@ class ScanRepository {
                 .set(FILE_OBSERVATIONS.partialHash, partialHash)
                 .set(FILE_OBSERVATIONS.contentHash, contentHash)
                 .set(FILE_OBSERVATIONS.result, result)
+                .set(FILE_OBSERVATIONS.processingDurationMs, processingDurationMs)
                 .execute();
     }
 
@@ -470,7 +492,8 @@ class ScanRepository {
                     observation.modifiedAt(),
                     observation.partialHash(),
                     observation.contentHash(),
-                    observation.result()
+                    observation.result(),
+                    observation.processingDurationMs()
             );
         }
     }
@@ -589,7 +612,8 @@ class ScanRepository {
             OffsetDateTime modifiedAt,
             String partialHash,
             String contentHash,
-            String result
+            String result,
+            Long processingDurationMs
     ) {
     }
 

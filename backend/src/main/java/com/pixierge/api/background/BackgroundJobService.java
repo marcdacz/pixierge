@@ -3,6 +3,7 @@ package com.pixierge.api.background;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -20,26 +21,68 @@ public class BackgroundJobService {
     private final BackgroundJobRepository repository;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Autowired
+    public BackgroundJobService(
+            BackgroundJobRepository repository,
+            TransactionTemplate transactionTemplate,
+            ApplicationEventPublisher eventPublisher
+    ) {
+        this(repository, transactionTemplate, Clock.systemUTC(), eventPublisher);
+    }
+
     public BackgroundJobService(BackgroundJobRepository repository, TransactionTemplate transactionTemplate) {
-        this(repository, transactionTemplate, Clock.systemUTC());
+        this(repository, transactionTemplate, Clock.systemUTC(), null);
     }
 
     BackgroundJobService(BackgroundJobRepository repository, TransactionTemplate transactionTemplate, Clock clock) {
+        this(repository, transactionTemplate, clock, null);
+    }
+
+    BackgroundJobService(
+            BackgroundJobRepository repository,
+            TransactionTemplate transactionTemplate,
+            Clock clock,
+            ApplicationEventPublisher eventPublisher
+    ) {
         this.repository = repository;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
+        this.eventPublisher = eventPublisher;
     }
 
     public UUID enqueue(BackgroundJobCreate create) {
         OffsetDateTime now = now();
-        return transactionTemplate.execute(status -> repository.enqueue(create, now));
+        UUID id = transactionTemplate.execute(status -> repository.enqueue(create, now));
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new BackgroundJobEnqueuedEvent());
+        }
+        return id;
     }
 
     public List<BackgroundJobRecord> claimReadyJobs(int limit, String workerId) {
+        return claimReadyJobs(limit, workerId, null, null);
+    }
+
+    public List<BackgroundJobRecord> claimReadyJobs(
+            int limit,
+            String workerId,
+            String includedJobType,
+            String excludedJobType
+    ) {
         OffsetDateTime now = now();
-        return repository.claimReadyJobs(limit, workerId, now, now.plus(DEFAULT_LEASE_DURATION));
+        if (includedJobType == null && excludedJobType == null) {
+            return repository.claimReadyJobs(limit, workerId, now, now.plus(DEFAULT_LEASE_DURATION));
+        }
+        return repository.claimReadyJobs(
+                limit,
+                workerId,
+                now,
+                now.plus(DEFAULT_LEASE_DURATION),
+                includedJobType,
+                excludedJobType
+        );
     }
 
     public void heartbeat(UUID jobId, String workerId) {
