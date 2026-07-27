@@ -209,11 +209,11 @@ class SearchRepositoryIntegrationTest {
     @Test
     void enumSuggestionsFilterByPrefixAndLimitResults() {
         List<SearchSuggestionResponse> suggestions =
-                repository.suggest(SearchField.IS, "m", 1, USER_ID, false);
+                repository.suggest(SearchField.IS, "d", 1, USER_ID, false);
 
         assertThat(suggestions)
                 .extracting(SearchSuggestionResponse::value, SearchSuggestionResponse::label)
-                .containsExactly(tuple("missing", "missing"));
+                .containsExactly(tuple("duplicate", "duplicate"));
     }
 
     private void user(UUID userId, String username) {

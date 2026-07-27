@@ -113,6 +113,43 @@ class AssetRepositoryIntegrationTest {
     }
 
     @Test
+    void missingFilesAreExcludedFromLibraryAndCollectionViews() {
+        UUID activeAssetId = UUID.fromString("00000000-0000-0000-0000-000000000419");
+        UUID missingAssetId = UUID.fromString("00000000-0000-0000-0000-000000000420");
+        UUID albumId = UUID.fromString("00000000-0000-0000-0000-000000000421");
+        UUID tagId = UUID.fromString("00000000-0000-0000-0000-000000000422");
+        transactionTemplate.executeWithoutResult(status -> {
+            user(USER_ID, "owner");
+            library(FAMILY_LIBRARY_ID, FAMILY_ROOT_ID, "Family", "/photos", USER_ID);
+            asset(activeAssetId, "active-hash", "image/jpeg", 1);
+            assetFile(activeAssetId, FAMILY_LIBRARY_ID, FAMILY_ROOT_ID, "/photos/visible.jpg", "visible.jpg", "active");
+            asset(missingAssetId, "missing-hash", "image/jpeg", 0);
+            assetFile(missingAssetId, FAMILY_LIBRARY_ID, FAMILY_ROOT_ID, "/photos/removed.jpg", "removed.jpg", "missing");
+            album(albumId, USER_ID, "Family", AlbumKind.USER);
+            albumItem(albumId, missingAssetId, FAMILY_LIBRARY_ID, 1);
+            tag(tagId, USER_ID, "Missing");
+            assetTag(tagId, missingAssetId, FAMILY_LIBRARY_ID, USER_ID);
+        });
+
+        transactionTemplate.executeWithoutResult(status -> {
+            AssetRepository.BrowseRows libraryRows = repository.browse(
+                    USER_ID, false, criteria(SearchQuery.empty(), null, null, null, false));
+            AssetRepository.BrowseRows albumRows = repository.browseAlbumAssets(USER_ID, false, albumId, 0, 20);
+            AssetRepository.BrowseRows tagRows = repository.browseTagAssets(USER_ID, false, tagId, 0, 20);
+
+            assertThat(libraryRows.assets()).extracting(AssetRepository.AssetSummaryRow::assetId)
+                    .containsExactly(activeAssetId);
+            assertThat(repository.listFolders(USER_ID, false, FAMILY_LIBRARY_ID))
+                    .extracting(AssetRepository.FolderRow::assetId)
+                    .containsExactly(activeAssetId);
+            assertThat(repository.findAsset(USER_ID, false, missingAssetId)).isEmpty();
+            assertThat(repository.canReadAsset(USER_ID, false, missingAssetId)).isFalse();
+            assertThat(albumRows.totalCount()).isZero();
+            assertThat(tagRows.totalCount()).isZero();
+        });
+    }
+
+    @Test
     void structuredSearchCombinesFolderDatesStarredAndCameraPredicates() {
         UUID matchedAsset = UUID.fromString("00000000-0000-0000-0000-000000000411");
         UUID wrongFolderAsset = UUID.fromString("00000000-0000-0000-0000-000000000412");

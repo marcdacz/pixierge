@@ -1,4 +1,4 @@
-import { Calendar, Check, ChevronDown, ChevronRight, Maximize2, X } from 'lucide-react';
+import { Calendar, Check, ChevronDown, ChevronRight, Maximize2, Trash2, X } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   ApiError,
@@ -6,6 +6,7 @@ import {
   fetchBackgroundWorkActivity,
   fetchBackgroundWorkConfig,
   fetchBackgroundWorkFiles,
+  clearBackgroundWorkFiles,
   fetchBackgroundWorkHealth,
   recoverDeadLetterMetadata,
   type AuthResponse,
@@ -130,7 +131,7 @@ export function BackgroundWorkHealthPanel({
         {activeTab === 'jobs' ? (
           <BackgroundJobsPanel auth={auth} onError={onError} />
         ) : activeTab === 'files' ? (
-          <BackgroundFileActivityPanel onError={onError} />
+          <BackgroundFileActivityPanel auth={auth} onError={onError} />
         ) : (
           <BackgroundConfigurationPanel onError={onError} />
         )}
@@ -500,8 +501,10 @@ function ProblemDetails({ problem }: { problem: BackgroundJobProblemSummary }) {
 }
 
 function BackgroundFileActivityPanel({
+  auth,
   onError
 }: {
+  auth?: AuthResponse;
   onError: (title: string, description?: string) => void;
 }) {
   const [searchInput, setSearchInput] = useState('');
@@ -515,6 +518,8 @@ function BackgroundFileActivityPanel({
   const [selectedAsset, setSelectedAsset] = useState<AssetDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     const nextQuery = searchInput.trim();
@@ -615,6 +620,22 @@ function BackgroundFileActivityPanel({
     }
   }
 
+  async function clearActivity() {
+    if (!auth?.csrfToken) return;
+    setClearing(true);
+    try {
+      await clearBackgroundWorkFiles(auth.csrfToken);
+      setClearConfirmationOpen(false);
+      setPage(0);
+      await loadFiles({ showLoading: true });
+    } catch (error) {
+      const message = messageForError(error, 'Activity history could not be cleared.');
+      onError('Activity history could not be cleared', message);
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <>
     {selectedAssetId && (
@@ -632,7 +653,13 @@ function BackgroundFileActivityPanel({
     )}
     <Card>
       <CardHeader>
-        <CardTitle>Recent file activity</CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle>Recent file activity</CardTitle>
+          <Button data-testid="background-file-clear" disabled={!activity || activity.totalCount === 0} onClick={() => setClearConfirmationOpen(true)} size="sm" type="button" variant="ghost">
+            <Trash2 aria-hidden className="h-4 w-4" />
+            Clear history
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid gap-3">
@@ -821,6 +848,20 @@ function BackgroundFileActivityPanel({
         )}
       </CardContent>
     </Card>
+    {clearConfirmationOpen && (
+      <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+        <div aria-modal="true" aria-labelledby="clear-file-activity-title" className="grid w-full max-w-md gap-4 rounded-md border border-border bg-surface p-5 text-foreground shadow-lg" role="dialog">
+          <div className="grid gap-2">
+            <h2 className="text-lg font-semibold" id="clear-file-activity-title">Clear activity history?</h2>
+            <p className="text-sm text-muted-foreground">This permanently removes completed file activity. Active processing will remain visible.</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button disabled={clearing} onClick={() => setClearConfirmationOpen(false)} type="button" variant="ghost">Cancel</Button>
+            <Button disabled={clearing} onClick={() => void clearActivity()} type="button" variant="secondary">Clear history</Button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }

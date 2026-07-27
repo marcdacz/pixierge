@@ -24,7 +24,7 @@ class SearchParserTest {
     @Test
     void acceptsRepeatedRelationStateAndExtensionFieldsButRejectsRepeatedScalarFields() {
         assertThat(parser.parse(
-                "library:Events library:Japan tag:family tag:holiday is:starred -is:missing extension:jpg,png"
+                "library:Events library:Japan tag:family tag:holiday is:starred -is:available extension:jpg,png"
         ).clauses()).hasSize(8);
         assertThat(parser.parse("extension:jpg extension:png").clauses()).hasSize(2);
         assertThat(parser.parse("library:Events,Japan album:Summer,Winter tag:family,holiday").clauses())
@@ -52,10 +52,12 @@ class SearchParserTest {
         SearchParseResponse unavailable = parser.parseResponse("person:Alice");
         SearchParseResponse malformed = parser.parseResponse("album:\"Japan 2025");
         SearchParseResponse invalidDate = parser.parseResponse("on:11/07/2026");
+        SearchParseResponse missing = parser.parseResponse("is:missing");
 
         assertThat(unavailable.errors().getFirst().message()).contains("unavailable until a plugin");
         assertThat(malformed.errors().getFirst().code()).isEqualTo("MALFORMED_TOKEN");
         assertThat(invalidDate.errors().getFirst().code()).isEqualTo("INVALID_DATE");
+        assertThat(missing.errors().getFirst().code()).isEqualTo("INVALID_VALUE");
         assertThatThrownBy(() -> parser.parse("camera::sony"))
                 .isInstanceOf(SearchValidationException.class)
                 .hasMessageContaining("requires a value");

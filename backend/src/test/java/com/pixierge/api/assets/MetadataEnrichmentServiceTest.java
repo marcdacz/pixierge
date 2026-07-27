@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pixierge.api.background.BackgroundJobCreate;
 import com.pixierge.api.background.BackgroundJobRecord;
 import com.pixierge.api.background.BackgroundJobService;
+import com.pixierge.api.background.FileActivityService;
 import com.pixierge.api.scans.ScanJobTypes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,7 @@ class MetadataEnrichmentServiceTest {
         service = new MetadataEnrichmentService(
                 assetRepository,
                 backgroundJobService,
+                FileActivityService.noop(),
                 new ImmediateTransactionTemplate(),
                 objectMapper,
                 "missing-ffprobe-for-test",

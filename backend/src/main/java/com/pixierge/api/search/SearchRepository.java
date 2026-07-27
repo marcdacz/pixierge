@@ -21,7 +21,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_ACTIVE;
-import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_MISSING;
 import static com.pixierge.api.libraries.LibraryConstants.STATUS_ACTIVE;
 
 @Repository
@@ -68,7 +67,7 @@ class SearchRepository {
             case TAG -> commaAwareNamedSuggestions(
                     namedSuggestionValues(TAGS.name, TAGS.ownerUserId.eq(userId), lastCommaPartial(normalized), limit),
                     rawPartial);
-            case IS -> enumSuggestions(List.of("available", "missing", "duplicate", "starred"), normalized, limit);
+            case IS -> enumSuggestions(List.of("available", "duplicate", "starred"), normalized, limit);
             case EXTENSION -> {
                 int lastComma = normalized.lastIndexOf(',');
                 String completedPrefix = lastComma >= 0 ? normalized.substring(0, lastComma + 1) : "";
@@ -194,7 +193,7 @@ class SearchRepository {
 
     private BooleanBuilder readableAssetSuggestionWhere(UUID userId, boolean admin) {
         BooleanBuilder where = new BooleanBuilder(LIBRARIES.status.eq(STATUS_ACTIVE))
-                .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING));
+                .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE));
         if (!admin) {
             where.and(LIBRARY_MEMBERS.userId.eq(userId));
         }

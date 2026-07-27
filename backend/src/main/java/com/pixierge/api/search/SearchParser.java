@@ -13,7 +13,7 @@ import java.util.Set;
 @Component
 public class SearchParser {
 
-    private static final Set<String> IS_VALUES = Set.of("available", "missing", "duplicate", "starred");
+    private static final Set<String> IS_VALUES = Set.of("available", "duplicate", "starred");
     private static final Set<SearchField> DATE_FIELDS = EnumSet.of(SearchField.AFTER, SearchField.BEFORE, SearchField.ON);
     private static final Set<SearchField> COMMA_VALUE_FIELDS = EnumSet.of(
             SearchField.LIBRARY,
@@ -125,7 +125,7 @@ public class SearchParser {
                 }
                 if (field == SearchField.IS && !IS_VALUES.contains(part.toLowerCase(Locale.ROOT))) {
                     errors.add(new SearchParseResponse.Error(
-                            "INVALID_VALUE", "Supported is: values are available, missing, duplicate, and starred",
+                            "INVALID_VALUE", "Supported is: values are available, duplicate, and starred",
                             token.start(), token.end()));
                     invalid = true;
                     break;

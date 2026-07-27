@@ -1,6 +1,7 @@
 package com.pixierge.api.scheduler;
 
 import com.pixierge.api.assets.MetadataEnrichmentService;
+import com.pixierge.api.background.FileActivityService;
 import com.pixierge.api.libraries.LibraryRepository;
 import com.pixierge.api.scans.ScanService;
 import org.springframework.context.annotation.Bean;
@@ -14,12 +15,16 @@ import static com.pixierge.api.scheduler.SchedulerConstants.LIBRARY_SCAN_TIMEOUT
 import static com.pixierge.api.scheduler.SchedulerConstants.METADATA_SCAN_CONCURRENCY_KEY;
 import static com.pixierge.api.scheduler.SchedulerConstants.METADATA_SCAN_CRON;
 import static com.pixierge.api.scheduler.SchedulerConstants.METADATA_SCAN_TIMEOUT_SECONDS;
+import static com.pixierge.api.scheduler.SchedulerConstants.FILE_ACTIVITY_RETENTION_CRON;
+import static com.pixierge.api.scheduler.SchedulerConstants.FILE_ACTIVITY_RETENTION_CONCURRENCY_KEY;
+import static com.pixierge.api.scheduler.SchedulerConstants.FILE_ACTIVITY_RETENTION_TIMEOUT_SECONDS;
 
 @Configuration
 public class CoreSchedulerJobsConfig {
 
     public static final String LIBRARY_SCAN_JOB_KEY = "core.library-scan";
     public static final String METADATA_SCAN_JOB_KEY = "core.metadata-scan";
+    public static final String FILE_ACTIVITY_RETENTION_JOB_KEY = "core.file-activity-retention";
 
     @Bean
     SchedulerJobDefinition libraryScanJobDefinition(ScanService scanService, LibraryRepository libraryRepository) {
@@ -79,6 +84,21 @@ public class CoreSchedulerJobsConfig {
                             "{\"processedCount\":" + batch.processedCount() + ",\"failedCount\":" + batch.failedCount() + "}"
                     );
                 }
+        );
+    }
+
+    @Bean
+    SchedulerJobDefinition fileActivityRetentionJobDefinition(FileActivityService fileActivityService) {
+        return new SchedulerJobDefinition(
+                FILE_ACTIVITY_RETENTION_JOB_KEY,
+                "File activity retention",
+                "Deletes file activity history older than the configured retention period.",
+                FILE_ACTIVITY_RETENTION_CRON,
+                DEFAULT_TIMEZONE,
+                true,
+                FILE_ACTIVITY_RETENTION_TIMEOUT_SECONDS,
+                FILE_ACTIVITY_RETENTION_CONCURRENCY_KEY,
+                job -> new SchedulerJobResult("{\"deletedCount\":" + fileActivityService.deleteExpired() + "}")
         );
     }
 }

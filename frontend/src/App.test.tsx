@@ -476,6 +476,17 @@ describe('App', () => {
     expect(screen.getByText('IMG_2999.HEIC')).toBeInTheDocument();
     expect(screen.getByText('Duration')).toBeInTheDocument();
     expect(screen.getByText('1.5 s')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('background-file-clear'));
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Clear activity history?');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(screen.getByTestId('background-file-clear'));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Clear history' }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8080/api/admin/background/files',
+        expect.objectContaining({ credentials: 'include', method: 'DELETE' })
+      );
+    });
     await userEvent.click(screen.getByRole('button', { name: 'Open IMG_3001.HEIC' }));
     expect(await screen.findByRole('button', { name: 'Show photo metadata' })).toBeInTheDocument();
     await userEvent.keyboard('{ArrowRight}');
@@ -1342,7 +1353,7 @@ function installIntersectionObserverMock() {
 }
 
 function mockFetch(responses: MockResponse[]) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.endsWith('/api/scans/active')) {
       return jsonResponse(200, []);
@@ -1355,6 +1366,9 @@ function mockFetch(responses: MockResponse[]) {
     }
     if (url.includes('/api/admin/background/files?')) {
       return jsonResponse(200, backgroundWorkFiles);
+    }
+    if (url.endsWith('/api/admin/background/files') && init?.method === 'DELETE') {
+      return jsonResponse(200, { deletedCount: 2 });
     }
     if (url.endsWith('/api/assets/asset-1')) {
       return jsonResponse(200, assetDetail);

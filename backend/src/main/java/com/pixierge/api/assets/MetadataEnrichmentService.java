@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pixierge.api.background.BackgroundJobCreate;
 import com.pixierge.api.background.BackgroundJobRecord;
 import com.pixierge.api.background.BackgroundJobService;
+import com.pixierge.api.background.FileActivityService;
 import com.pixierge.api.scans.ScanJobTypes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -73,6 +74,7 @@ public class MetadataEnrichmentService {
 
     private final AssetRepository assetRepository;
     private final BackgroundJobService backgroundJobService;
+    private final FileActivityService fileActivityService;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
     private final String ffprobePath;
@@ -81,6 +83,7 @@ public class MetadataEnrichmentService {
     public MetadataEnrichmentService(
             AssetRepository assetRepository,
             BackgroundJobService backgroundJobService,
+            FileActivityService fileActivityService,
             TransactionTemplate transactionTemplate,
             ObjectMapper objectMapper,
             @Value("${pixierge.metadata.ffprobe.path:ffprobe}") String ffprobePath,
@@ -88,6 +91,7 @@ public class MetadataEnrichmentService {
     ) {
         this.assetRepository = assetRepository;
         this.backgroundJobService = backgroundJobService;
+        this.fileActivityService = fileActivityService;
         this.transactionTemplate = transactionTemplate;
         this.objectMapper = objectMapper;
         this.ffprobePath = ffprobePath == null || ffprobePath.isBlank() ? "ffprobe" : ffprobePath;
@@ -115,7 +119,7 @@ public class MetadataEnrichmentService {
         return new AdminBatchActionResponse(enqueued, failed);
     }
 
-    public void extractQueuedMetadata(AssetMetadataJobPayload payload) {
+    public void extractQueuedMetadata(AssetMetadataJobPayload payload, UUID jobId) {
         AssetRepository.MetadataCandidateRow candidate = transactionTemplate.execute(status -> claim(payload));
         if (candidate == null) {
             return;
@@ -132,6 +136,8 @@ public class MetadataEnrichmentService {
                     exception.getMessage(),
                     OffsetDateTime.now(ZoneOffset.UTC)
             ));
+            fileActivityService.record(candidate.assetId(), candidate.normalizedPath(), EXTRACTION_STATUS_FAILED,
+                    OffsetDateTime.now(ZoneOffset.UTC), exception.getMessage(), null, jobId, "Metadata extraction");
             throw exception;
         }
         transactionTemplate.executeWithoutResult(status -> {
@@ -147,7 +153,14 @@ public class MetadataEnrichmentService {
                     assetRepository.searchableTextForAsset(candidate.assetId()),
                     now
             );
+            fileActivityService.record(candidate.assetId(), candidate.normalizedPath(), result.status(), now,
+                    result.errorMessage(), java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - extractionStartedAt),
+                    jobId, "Metadata extraction");
         });
+    }
+
+    public void extractQueuedMetadata(AssetMetadataJobPayload payload) {
+        extractQueuedMetadata(payload, null);
     }
 
     public AdminBatchActionResponse recoverDeadLetterMetadata() {

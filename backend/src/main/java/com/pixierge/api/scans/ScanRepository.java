@@ -2,7 +2,7 @@ package com.pixierge.api.scans;
 
 import com.pixierge.api.db.QAssetFiles;
 import com.pixierge.api.db.QAssets;
-import com.pixierge.api.db.QFileObservations;
+import com.pixierge.api.db.QFileActivityEvents;
 import com.pixierge.api.db.QLibraries;
 import com.pixierge.api.db.QLibraryRoots;
 import com.pixierge.api.db.QScanErrors;
@@ -24,7 +24,7 @@ class ScanRepository {
 
     private static final QAssets ASSETS = QAssets.assets;
     private static final QAssetFiles ASSET_FILES = QAssetFiles.assetFiles;
-    private static final QFileObservations FILE_OBSERVATIONS = QFileObservations.fileObservations;
+    private static final QFileActivityEvents FILE_ACTIVITY_EVENTS = QFileActivityEvents.fileActivityEvents;
     private static final QScanRuns SCAN_RUNS = QScanRuns.scanRuns;
     private static final QScanErrors SCAN_ERRORS = QScanErrors.scanErrors;
     private static final QLibraries LIBRARIES = QLibraries.libraries;
@@ -460,21 +460,16 @@ class ScanRepository {
             String result,
             Long processingDurationMs
     ) {
-        queryFactory.insert(FILE_OBSERVATIONS)
-                .set(FILE_OBSERVATIONS.id, UUID.randomUUID())
-                .set(FILE_OBSERVATIONS.scanRunId, scanRunId)
-                .set(FILE_OBSERVATIONS.libraryId, libraryId)
-                .set(FILE_OBSERVATIONS.rootId, rootId)
-                .set(FILE_OBSERVATIONS.assetId, assetId)
-                .set(FILE_OBSERVATIONS.assetFileId, assetFileId)
-                .set(FILE_OBSERVATIONS.path, path)
-                .set(FILE_OBSERVATIONS.normalizedPath, normalizedPath)
-                .set(FILE_OBSERVATIONS.sizeBytes, sizeBytes)
-                .set(FILE_OBSERVATIONS.modifiedAt, modifiedAt)
-                .set(FILE_OBSERVATIONS.partialHash, partialHash)
-                .set(FILE_OBSERVATIONS.contentHash, contentHash)
-                .set(FILE_OBSERVATIONS.result, result)
-                .set(FILE_OBSERVATIONS.processingDurationMs, processingDurationMs)
+        if ("unchanged".equals(result)) {
+            return;
+        }
+        queryFactory.insert(FILE_ACTIVITY_EVENTS)
+                .set(FILE_ACTIVITY_EVENTS.id, UUID.randomUUID())
+                .set(FILE_ACTIVITY_EVENTS.assetId, assetId)
+                .set(FILE_ACTIVITY_EVENTS.path, path)
+                .set(FILE_ACTIVITY_EVENTS.status, result)
+                .set(FILE_ACTIVITY_EVENTS.occurredAt, OffsetDateTime.now())
+                .set(FILE_ACTIVITY_EVENTS.durationMs, processingDurationMs)
                 .execute();
     }
 
@@ -499,6 +494,7 @@ class ScanRepository {
     }
 
     void createError(UUID scanRunId, UUID libraryId, UUID rootId, String path, String errorCode, String message) {
+        OffsetDateTime now = OffsetDateTime.now();
         queryFactory.insert(SCAN_ERRORS)
                 .set(SCAN_ERRORS.id, UUID.randomUUID())
                 .set(SCAN_ERRORS.scanRunId, scanRunId)
@@ -507,7 +503,14 @@ class ScanRepository {
                 .set(SCAN_ERRORS.path, path)
                 .set(SCAN_ERRORS.errorCode, errorCode)
                 .set(SCAN_ERRORS.message, message)
-                .set(SCAN_ERRORS.createdAt, OffsetDateTime.now())
+                .set(SCAN_ERRORS.createdAt, now)
+                .execute();
+        queryFactory.insert(FILE_ACTIVITY_EVENTS)
+                .set(FILE_ACTIVITY_EVENTS.id, UUID.randomUUID())
+                .set(FILE_ACTIVITY_EVENTS.path, path)
+                .set(FILE_ACTIVITY_EVENTS.status, "failed")
+                .set(FILE_ACTIVITY_EVENTS.occurredAt, now)
+                .set(FILE_ACTIVITY_EVENTS.message, message)
                 .execute();
     }
 

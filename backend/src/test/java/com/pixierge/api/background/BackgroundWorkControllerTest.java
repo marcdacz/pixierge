@@ -68,6 +68,17 @@ class BackgroundWorkControllerTest {
     }
 
     @Test
+    void clearFilesRemovesPersistedActivityOnly() {
+        StubActivityRepository activityRepository = new StubActivityRepository(List.of(), 0);
+        activityRepository.clearCount = 7;
+        BackgroundWorkController controller = new BackgroundWorkController(
+                new StubJobService(List.of()), activityRepository, new FilesystemWatcherHealth(), new ObjectMapper(), 2, 100, 25, 2000L
+        );
+
+        assertThat(controller.clearFiles()).isEqualTo(new BackgroundActivityClearResponse(7));
+    }
+
+    @Test
     void filesAppliesFiltersAndPrependsMatchingActiveRows() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         UUID jobId = UUID.randomUUID();
@@ -244,6 +255,7 @@ class BackgroundWorkControllerTest {
         private OffsetDateTime lastUpdatedTo;
         private int lastOffset = -1;
         private int lastLimit = -1;
+        private int clearCount;
 
         StubActivityRepository(List<BackgroundFileActivityRow> items, int totalCount) {
             super(null);
@@ -267,6 +279,11 @@ class BackgroundWorkControllerTest {
             lastOffset = offset;
             lastLimit = limit;
             return new PersistedFileActivityPage(items.stream().limit(Math.max(0, limit)).toList(), totalCount);
+        }
+
+        @Override
+        int clear() {
+            return clearCount;
         }
     }
 }

@@ -45,7 +45,6 @@ import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_FAILED;
 import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_PENDING;
 import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_STALE;
 import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_ACTIVE;
-import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_MISSING;
 import static com.pixierge.api.assets.AssetConstants.IMAGE_MIME_PREFIX;
 import static com.pixierge.api.libraries.LibraryConstants.STATUS_ACTIVE;
 
@@ -92,7 +91,7 @@ class AssetRepository {
 
     List<FolderRow> listFolders(UUID userId, boolean admin, UUID libraryId) {
         BooleanBuilder where = readableWhere(userId, admin, libraryId)
-                .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING));
+                .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE));
 
         return queryFactory
                 .select(
@@ -184,7 +183,7 @@ class AssetRepository {
                 .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
                 .where(ASSET_FILES.assetId.eq(assetId)
                         .and(ASSET_FILES.libraryId.eq(libraryId))
-                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
                         .and(readableWhere(userId, admin, libraryId)))
                 .fetchFirst();
         return result != null;
@@ -196,7 +195,7 @@ class AssetRepository {
                 .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
                 .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
                 .where(ASSET_FILES.assetId.eq(assetId)
-                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
                         .and(readableWhere(userId, admin, null)))
                 .fetchFirst();
         return result != null;
@@ -224,7 +223,7 @@ class AssetRepository {
                 .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
                 .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
                 .where(ALBUM_ITEMS.albumId.eq(albumId)
-                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
                         .and(readableWhere(userId, admin, null)))
                 .groupBy(ALBUM_ITEMS.assetId, ALBUM_ITEMS.sourceLibraryId, ALBUM_ITEMS.position)
                 .orderBy(ALBUM_ITEMS.position.asc())
@@ -239,7 +238,7 @@ class AssetRepository {
                 .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
                 .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
                 .where(ALBUM_ITEMS.albumId.eq(albumId)
-                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
                         .and(readableWhere(userId, admin, null)))
                 .fetchOne();
         return browseByIds(userId, admin, assetContexts, count);
@@ -254,7 +253,7 @@ class AssetRepository {
                 .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
                 .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
                 .where(ASSET_TAGS.tagId.eq(tagId)
-                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
                         .and(readableWhere(userId, admin, null)))
                 .groupBy(ASSET_TAGS.assetId, ASSET_TAGS.sourceLibraryId)
                 .orderBy(ASSET_TAGS.assetId.asc())
@@ -269,7 +268,7 @@ class AssetRepository {
                 .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
                 .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
                 .where(ASSET_TAGS.tagId.eq(tagId)
-                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
                         .and(readableWhere(userId, admin, null)))
                 .fetchOne();
         return browseByIds(userId, admin, assetContexts, count);
@@ -279,7 +278,9 @@ class AssetRepository {
         List<AssetFileRow> rows = baseFileQuery()
                 .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
                 .leftJoin(SEARCH_DOCUMENTS).on(SEARCH_DOCUMENTS.assetId.eq(ASSETS.id))
-                .where(readableWhere(userId, admin, null).and(ASSETS.id.eq(assetId)))
+                .where(readableWhere(userId, admin, null)
+                        .and(ASSETS.id.eq(assetId))
+                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE)))
                 .orderBy(ASSET_FILES.status.asc(), ASSET_FILES.normalizedPath.asc())
                 .fetch()
                 .stream()
@@ -595,7 +596,7 @@ class AssetRepository {
 
     private BooleanBuilder assetSearchWhere(UUID userId, boolean admin, AssetSearchCriteria criteria) {
         BooleanBuilder where = readableWhere(userId, admin, criteria.libraryId())
-                .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING));
+                .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE));
 
         if (criteria.folder() != null && !criteria.folder().isBlank()) {
             String normalizedFolder = criteria.folder();
@@ -742,7 +743,7 @@ class AssetRepository {
         QLibraries libraries = new QLibraries("search_libraries");
         QLibraryMembers members = new QLibraryMembers("search_library_members");
         BooleanBuilder predicate = new BooleanBuilder(files.assetId.eq(ASSETS.id))
-                .and(files.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                .and(files.status.eq(FILE_STATUS_ACTIVE))
                 .and(libraries.status.eq(STATUS_ACTIVE))
                 .and(matchesIdentifier(libraries.id, libraries.name, value));
         if (!admin) {
@@ -760,7 +761,7 @@ class AssetRepository {
         QLibraryMembers members = new QLibraryMembers("search_folder_members");
         String folder = value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
         BooleanBuilder predicate = new BooleanBuilder(files.assetId.eq(ASSETS.id))
-                .and(files.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                .and(files.status.eq(FILE_STATUS_ACTIVE))
                 .and(files.normalizedPath.startsWith(folder + "/"))
                 .and(libraries.status.eq(STATUS_ACTIVE));
         if (!admin) {
@@ -839,7 +840,7 @@ class AssetRepository {
         List<AssetFileRow> rows = baseFileQuery()
                 .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
                 .where(readableWhere(userId, admin, null)
-                        .and(ASSET_FILES.status.in(FILE_STATUS_ACTIVE, FILE_STATUS_MISSING))
+                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
                         .and(ASSETS.id.in(assetIds)))
                 .orderBy(ASSET_FILES.status.asc(), ASSET_FILES.normalizedPath.asc())
                 .fetch().stream().map(this::toAssetFileRow).toList();

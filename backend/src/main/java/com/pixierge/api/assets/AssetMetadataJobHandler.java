@@ -26,6 +26,6 @@ class AssetMetadataJobHandler implements BackgroundJobHandler {
     @Override
     public void handle(BackgroundJobRecord job) throws JsonProcessingException {
         AssetMetadataJobPayload payload = objectMapper.readValue(job.payloadJson(), AssetMetadataJobPayload.class);
-        metadataEnrichmentService.extractQueuedMetadata(payload);
+        metadataEnrichmentService.extractQueuedMetadata(payload, job.id());
     }
 }

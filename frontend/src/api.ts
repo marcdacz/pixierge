@@ -738,6 +738,10 @@ export async function fetchBackgroundWorkFiles(
   return requestJson<BackgroundFileActivityPage>(`/api/admin/background/files?${params.toString()}`);
 }
 
+export async function clearBackgroundWorkFiles(csrfToken: string): Promise<{ deletedCount: number }> {
+  return requestJson<{ deletedCount: number }>('/api/admin/background/files', { method: 'DELETE', csrfToken });
+}
+
 export async function fetchBackgroundWorkConfig(): Promise<BackgroundWorkConfig> {
   return requestJson<BackgroundWorkConfig>('/api/admin/background/config');
 }
