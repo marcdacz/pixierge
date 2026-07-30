@@ -66,6 +66,14 @@ public class SessionRepository {
                 .execute();
     }
 
+    @Transactional
+    public void revokeAllForUser(UUID userId) {
+        queryFactory.update(SESSIONS)
+                .set(SESSIONS.revokedAt, OffsetDateTime.now())
+                .where(SESSIONS.userId.eq(userId).and(SESSIONS.revokedAt.isNull()))
+                .execute();
+    }
+
     record SessionRecord(UUID userId, String csrfToken) {
     }
 }

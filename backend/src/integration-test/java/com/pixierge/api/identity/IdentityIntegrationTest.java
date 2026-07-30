@@ -144,6 +144,47 @@ class IdentityIntegrationTest {
         assertThat(missingCsrf.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
+    @Test
+    void adminCanCreateResetDeactivateAndReactivateAStandardUser() {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String cookie = cookiePair(admin);
+        String csrfToken = csrfToken(admin);
+
+        ResponseEntity<Map> created = restTemplate.exchange(
+                "/api/admin/users",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("username", "sam", "password", "a secure password")),
+                Map.class
+        );
+        String userId = (String) created.getBody().get("id");
+
+        ResponseEntity<Map> login = restTemplate.postForEntity(
+                "/api/auth/login", Map.of("username", "sam", "password", "a secure password"), Map.class);
+        ResponseEntity<Void> reset = restTemplate.exchange(
+                "/api/admin/users/" + userId + "/reset-password", HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("password", "a different secure password")), Void.class);
+        ResponseEntity<Map> revokedSession = restTemplate.exchange("/api/auth/session", HttpMethod.GET, withCookie(cookiePair(login)), Map.class);
+        ResponseEntity<Map> deactivated = restTemplate.exchange(
+                "/api/admin/users/" + userId, HttpMethod.PATCH,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("active", false)), Map.class);
+        ResponseEntity<Map> blockedLogin = restTemplate.postForEntity(
+                "/api/auth/login", Map.of("username", "sam", "password", "a different secure password"), Map.class);
+        ResponseEntity<Map> reactivated = restTemplate.exchange(
+                "/api/admin/users/" + userId, HttpMethod.PATCH,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("active", true)), Map.class);
+        ResponseEntity<Map> newLogin = restTemplate.postForEntity(
+                "/api/auth/login", Map.of("username", "sam", "password", "a different secure password"), Map.class);
+
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(created.getBody()).containsEntry("username", "sam").containsEntry("status", "active");
+        assertThat(reset.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(revokedSession.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(deactivated.getBody()).containsEntry("status", "disabled");
+        assertThat(blockedLogin.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(reactivated.getBody()).containsEntry("status", "active");
+        assertThat(newLogin.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
     private ResponseEntity<Map> createFirstAdmin() {
         return restTemplate.postForEntity("/api/setup/admin", adminSetupBody(), Map.class);
     }
@@ -166,6 +207,13 @@ class IdentityIntegrationTest {
         headers.add(HttpHeaders.COOKIE, cookie);
         headers.add(IdentityConstants.CSRF_HEADER, csrfToken);
         return new HttpEntity<>(headers);
+    }
+
+    private HttpEntity<Map<String, ?>> withCookieAndCsrf(String cookie, String csrfToken, Map<String, ?> body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.COOKIE, cookie);
+        headers.add(IdentityConstants.CSRF_HEADER, csrfToken);
+        return new HttpEntity<>(body, headers);
     }
 
     private String cookiePair(ResponseEntity<?> response) {

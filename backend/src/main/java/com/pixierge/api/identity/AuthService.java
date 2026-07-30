@@ -44,7 +44,7 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Initial admin already exists");
         }
 
-        ValidatedAccountInput input = validateAccountInput(request.username(), request.password());
+        AccountInput input = validateAccountInput(request.username(), request.password());
         UUID userId = userRepository.createUser(input.username(), passwordEncoder.encode(input.password()));
         userRepository.assignRole(userId, IdentityConstants.ROLE_ADMIN);
 
@@ -92,7 +92,7 @@ public class AuthService {
         return new CreatedSession(sessionToken, user);
     }
 
-    private ValidatedAccountInput validateAccountInput(String username, String password) {
+    static AccountInput validateAccountInput(String username, String password) {
         String normalizedUsername = UserRepository.normalizeUsername(username);
         String cleanPassword = password == null ? "" : password;
 
@@ -106,12 +106,13 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 12 characters");
         }
 
-        return new ValidatedAccountInput(normalizedUsername, cleanPassword);
+        return new AccountInput(normalizedUsername, cleanPassword);
     }
 
     record CreatedSession(String sessionToken, AuthenticatedUser user) {
     }
 
-    private record ValidatedAccountInput(String username, String password) {
-    }
+}
+
+record AccountInput(String username, String password) {
 }

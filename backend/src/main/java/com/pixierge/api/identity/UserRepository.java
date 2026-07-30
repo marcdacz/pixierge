@@ -7,6 +7,10 @@ import com.pixierge.api.db.QRoles;
 import com.pixierge.api.db.QSetupLocks;
 import com.pixierge.api.db.QUserRoles;
 import com.pixierge.api.db.QUsers;
+import com.pixierge.api.db.QAlbums;
+import com.pixierge.api.db.QTags;
+import com.pixierge.api.db.QLibraries;
+import com.pixierge.api.db.QLibraryMembers;
 import com.querydsl.core.Tuple;
 import com.querydsl.sql.SQLQueryFactory;
 import org.springframework.stereotype.Repository;
@@ -33,6 +37,10 @@ public class UserRepository {
     private static final QUserRoles USER_ROLES = QUserRoles.userRoles;
     private static final QRolePermissions ROLE_PERMISSIONS = QRolePermissions.rolePermissions;
     private static final QSetupLocks SETUP_LOCKS = QSetupLocks.setupLocks;
+    private static final QAlbums ALBUMS = QAlbums.albums;
+    private static final QTags TAGS = QTags.tags;
+    private static final QLibraries LIBRARIES = QLibraries.libraries;
+    private static final QLibraryMembers LIBRARY_MEMBERS = QLibraryMembers.libraryMembers;
 
     private final SQLQueryFactory queryFactory;
 
@@ -92,6 +100,61 @@ public class UserRepository {
                 .set(USER_ROLES.userId, userId)
                 .set(USER_ROLES.roleId, roleId)
                 .execute();
+    }
+
+    public boolean usernameExists(String username) {
+        return queryFactory.selectOne().from(USERS).where(USERS.username.eq(normalizeUsername(username))).fetchFirst() != null;
+    }
+
+    public Optional<UserRecord> findUser(UUID userId) {
+        Tuple row = queryFactory.select(USERS.id, USERS.username, USERS.status).from(USERS).where(USERS.id.eq(userId)).fetchOne();
+        return row == null ? Optional.empty() : Optional.of(new UserRecord(row.get(USERS.id), row.get(USERS.username), row.get(USERS.status), findRoleKeys(userId)));
+    }
+
+    public UserSummaryResponse requireUserSummary(UUID userId) {
+        return listUsers().stream().filter(user -> user.id().equals(userId)).findFirst()
+                .orElseThrow(() -> new IllegalStateException("User not found after mutation"));
+    }
+
+    public void updatePassword(UUID userId, String passwordHash) {
+        queryFactory.update(PASSWORD_CREDENTIALS).set(PASSWORD_CREDENTIALS.passwordHash, passwordHash)
+                .set(PASSWORD_CREDENTIALS.updatedAt, OffsetDateTime.now()).where(PASSWORD_CREDENTIALS.userId.eq(userId)).execute();
+    }
+
+    public void updateStatus(UUID userId, String status) {
+        queryFactory.update(USERS).set(USERS.status, status).set(USERS.updatedAt, OffsetDateTime.now()).where(USERS.id.eq(userId)).execute();
+    }
+
+    public boolean isLastActiveAdmin(UUID userId) {
+        Long count = queryFactory.select(USERS.id.countDistinct()).from(USERS)
+                .join(USER_ROLES).on(USER_ROLES.userId.eq(USERS.id)).join(ROLES).on(ROLES.id.eq(USER_ROLES.roleId))
+                .where(USERS.status.eq(IdentityConstants.USER_STATUS_ACTIVE).and(ROLES.roleKey.eq(IdentityConstants.ROLE_ADMIN)))
+                .fetchOne();
+        return count != null && count == 1 && findRoleKeys(userId).contains(IdentityConstants.ROLE_ADMIN);
+    }
+
+    public void transferOwnership(UUID userId, UUID replacementUserId) {
+        queryFactory.update(ALBUMS).set(ALBUMS.ownerUserId, replacementUserId).where(ALBUMS.ownerUserId.eq(userId)).execute();
+        queryFactory.update(TAGS).set(TAGS.ownerUserId, replacementUserId).set(TAGS.createdBy, replacementUserId)
+                .where(TAGS.ownerUserId.eq(userId)).execute();
+        queryFactory.update(LIBRARIES).set(LIBRARIES.createdBy, replacementUserId).where(LIBRARIES.createdBy.eq(userId)).execute();
+        List<UUID> ownedLibraryIds = queryFactory.select(LIBRARY_MEMBERS.libraryId).from(LIBRARY_MEMBERS)
+                .where(LIBRARY_MEMBERS.userId.eq(userId).and(LIBRARY_MEMBERS.memberRole.eq("owner"))).fetch();
+        for (UUID libraryId : ownedLibraryIds) {
+            long existing = queryFactory.select(LIBRARY_MEMBERS.userId.count()).from(LIBRARY_MEMBERS)
+                    .where(LIBRARY_MEMBERS.libraryId.eq(libraryId).and(LIBRARY_MEMBERS.userId.eq(replacementUserId))).fetchOne();
+            if (existing == 0) {
+                queryFactory.insert(LIBRARY_MEMBERS).set(LIBRARY_MEMBERS.libraryId, libraryId).set(LIBRARY_MEMBERS.userId, replacementUserId)
+                        .set(LIBRARY_MEMBERS.memberRole, "owner").set(LIBRARY_MEMBERS.createdAt, OffsetDateTime.now()).execute();
+            } else {
+                queryFactory.update(LIBRARY_MEMBERS).set(LIBRARY_MEMBERS.memberRole, "owner")
+                        .where(LIBRARY_MEMBERS.libraryId.eq(libraryId).and(LIBRARY_MEMBERS.userId.eq(replacementUserId))).execute();
+            }
+        }
+    }
+
+    public void deleteUser(UUID userId) {
+        queryFactory.delete(USERS).where(USERS.id.eq(userId)).execute();
     }
 
     @Transactional(readOnly = true)
@@ -238,5 +301,8 @@ public class UserRepository {
     }
 
     record LoginCredential(UUID userId, String passwordHash) {
+    }
+
+    record UserRecord(UUID id, String username, String status, Set<String> roles) {
     }
 }
