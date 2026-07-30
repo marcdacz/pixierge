@@ -31,7 +31,9 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean verify
 ## Conventions
 
 - Prefer small, focused changes that match the existing code style.
+- Each task should target at least 85% unit test coverage with a green unit-test run.
 - Tests must cover meaningful behavior, risk, or regression cases. Do not add getter/setter, DTO-only, or other coverage-padding tests just to raise a percentage.
+- Add integration, Playwright E2E, and visual regression tests when the task has behavior that can be meaningfully covered at those levels.
 - Prefer focused unit tests for business logic and boundary/error behavior; use integration tests for database, Querydsl, migration, security, and cross-layer behavior.
 - Use Maven for backend build work.
 - Use Querydsl for repository SQL access instead of handwritten SQL strings.

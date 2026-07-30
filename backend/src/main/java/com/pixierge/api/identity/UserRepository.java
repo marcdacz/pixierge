@@ -7,7 +7,9 @@ import com.pixierge.api.db.QRoles;
 import com.pixierge.api.db.QSetupLocks;
 import com.pixierge.api.db.QUserRoles;
 import com.pixierge.api.db.QUsers;
+import com.pixierge.api.db.QAlbumItems;
 import com.pixierge.api.db.QAlbums;
+import com.pixierge.api.db.QAssetTags;
 import com.pixierge.api.db.QTags;
 import com.pixierge.api.db.QLibraries;
 import com.pixierge.api.db.QLibraryMembers;
@@ -37,7 +39,9 @@ public class UserRepository {
     private static final QUserRoles USER_ROLES = QUserRoles.userRoles;
     private static final QRolePermissions ROLE_PERMISSIONS = QRolePermissions.rolePermissions;
     private static final QSetupLocks SETUP_LOCKS = QSetupLocks.setupLocks;
+    private static final QAlbumItems ALBUM_ITEMS = QAlbumItems.albumItems;
     private static final QAlbums ALBUMS = QAlbums.albums;
+    private static final QAssetTags ASSET_TAGS = QAssetTags.assetTags;
     private static final QTags TAGS = QTags.tags;
     private static final QLibraries LIBRARIES = QLibraries.libraries;
     private static final QLibraryMembers LIBRARY_MEMBERS = QLibraryMembers.libraryMembers;
@@ -135,8 +139,10 @@ public class UserRepository {
 
     public void transferOwnership(UUID userId, UUID replacementUserId) {
         queryFactory.update(ALBUMS).set(ALBUMS.ownerUserId, replacementUserId).where(ALBUMS.ownerUserId.eq(userId)).execute();
+        queryFactory.update(ALBUM_ITEMS).set(ALBUM_ITEMS.addedBy, replacementUserId).where(ALBUM_ITEMS.addedBy.eq(userId)).execute();
         queryFactory.update(TAGS).set(TAGS.ownerUserId, replacementUserId).set(TAGS.createdBy, replacementUserId)
                 .where(TAGS.ownerUserId.eq(userId)).execute();
+        queryFactory.update(ASSET_TAGS).set(ASSET_TAGS.addedBy, replacementUserId).where(ASSET_TAGS.addedBy.eq(userId)).execute();
         queryFactory.update(LIBRARIES).set(LIBRARIES.createdBy, replacementUserId).where(LIBRARIES.createdBy.eq(userId)).execute();
         List<UUID> ownedLibraryIds = queryFactory.select(LIBRARY_MEMBERS.libraryId).from(LIBRARY_MEMBERS)
                 .where(LIBRARY_MEMBERS.userId.eq(userId).and(LIBRARY_MEMBERS.memberRole.eq("owner"))).fetch();

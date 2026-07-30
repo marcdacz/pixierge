@@ -392,5 +392,6 @@ class ThumbnailServiceTest {
         void setStaleRows(List<ThumbnailRow> staleRows) {
             this.staleRows = staleRows;
         }
+
     }
 }

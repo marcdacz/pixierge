@@ -6,6 +6,7 @@ import com.pixierge.api.background.BackgroundJobRecord;
 import com.pixierge.api.background.BackgroundJobService;
 import com.pixierge.api.background.FileActivityService;
 import com.pixierge.api.scans.ScanJobTypes;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -41,6 +42,11 @@ class MetadataEnrichmentServiceTest {
     private MetadataEnrichmentService service;
     private ObjectMapper objectMapper;
 
+    @BeforeAll
+    static void useHeadlessImageProcessing() {
+        System.setProperty("java.awt.headless", "true");
+    }
+
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -73,6 +79,52 @@ class MetadataEnrichmentServiceTest {
         assertThat(payload.assetId()).isEqualTo(ASSET_ID);
         assertThat(payload.assetFileId()).isEqualTo(ASSET_FILE_ID);
         assertThat(payload.sizeBytes()).isEqualTo(Files.size(file));
+    }
+
+    @Test
+    void enqueueMetadataBackfillCountsRejectedJobs() throws Exception {
+        Path first = Files.writeString(tempDir.resolve("first.jpg"), "image");
+        Path second = Files.writeString(tempDir.resolve("second.jpg"), "image");
+        assetRepository.candidates = List.of(
+                candidate(UUID.randomUUID(), UUID.randomUUID(), first, "image"),
+                candidate(UUID.randomUUID(), UUID.randomUUID(), second, "image")
+        );
+        backgroundJobService.rejectEveryOtherJob = true;
+
+        AdminBatchActionResponse response = service.enqueueMetadataBackfill(5);
+
+        assertThat(response.processedCount()).isEqualTo(1);
+        assertThat(response.failedCount()).isEqualTo(1);
+        assertThat(backgroundJobService.jobs).hasSize(1);
+    }
+
+    @Test
+    void queuedMetadataIgnoresMissingOrStaleCandidates() throws Exception {
+        Path file = Files.writeString(tempDir.resolve("stale.txt"), "not media");
+        AssetRepository.MetadataCandidateRow candidate = candidate(file, "document");
+        assetRepository.activeCandidates.put(ASSET_FILE_ID, candidate);
+
+        service.extractQueuedMetadata(new AssetMetadataJobPayload(
+                ASSET_ID,
+                UUID.randomUUID(),
+                candidate.normalizedPath(),
+                candidate.fileName(),
+                candidate.sizeBytes(),
+                candidate.modifiedAt(),
+                candidate.mediaType()
+        ));
+        service.extractQueuedMetadata(new AssetMetadataJobPayload(
+                ASSET_ID,
+                ASSET_FILE_ID,
+                candidate.normalizedPath(),
+                candidate.fileName(),
+                candidate.sizeBytes() + 1L,
+                candidate.modifiedAt(),
+                candidate.mediaType()
+        ));
+
+        assertThat(assetRepository.metadataUpdates).isEmpty();
+        assertThat(assetRepository.searchUpserts).isEmpty();
     }
 
     @Test
@@ -171,16 +223,99 @@ class MetadataEnrichmentServiceTest {
                 assertThat(job.jobType()).isEqualTo(ScanJobTypes.ASSET_METADATA_BACKFILL));
     }
 
+    @Test
+    void recoveryCountsMalformedStaleActiveAndRejectedDeadLetterJobs() throws Exception {
+        Path staleFile = Files.writeString(tempDir.resolve("stale-recovery.jpg"), "stale");
+        Path activeFile = Files.writeString(tempDir.resolve("active-recovery.jpg"), "active");
+        Path rejectedFile = Files.writeString(tempDir.resolve("rejected-recovery.jpg"), "rejected");
+        AssetRepository.MetadataCandidateRow stale = candidate(UUID.randomUUID(), UUID.randomUUID(), staleFile, "image");
+        AssetRepository.MetadataCandidateRow active = candidate(UUID.randomUUID(), UUID.randomUUID(), activeFile, "image");
+        AssetRepository.MetadataCandidateRow rejected = candidate(UUID.randomUUID(), UUID.randomUUID(), rejectedFile, "image");
+        assetRepository.activeCandidates.put(stale.assetFileId(), stale);
+        assetRepository.activeCandidates.put(active.assetFileId(), active);
+        assetRepository.activeCandidates.put(rejected.assetFileId(), rejected);
+        backgroundJobService.activeDedupePrefixes.add(ScanJobTypes.ASSET_METADATA_BACKFILL + ":" + active.assetId() + ":");
+        backgroundJobService.rejectAllJobs = true;
+        backgroundJobService.deadLetterJobs = List.of(
+                deadLetterJob("{not-json"),
+                deadLetterJob(new AssetMetadataJobPayload(
+                        stale.assetId(),
+                        stale.assetFileId(),
+                        stale.normalizedPath(),
+                        stale.fileName(),
+                        stale.sizeBytes() + 10L,
+                        stale.modifiedAt(),
+                        stale.mediaType()
+                )),
+                deadLetterJob(new AssetMetadataJobPayload(
+                        active.assetId(),
+                        active.assetFileId(),
+                        active.normalizedPath(),
+                        active.fileName(),
+                        active.sizeBytes(),
+                        active.modifiedAt(),
+                        active.mediaType()
+                )),
+                deadLetterJob(new AssetMetadataJobPayload(
+                        rejected.assetId(),
+                        rejected.assetFileId(),
+                        rejected.normalizedPath(),
+                        rejected.fileName(),
+                        rejected.sizeBytes(),
+                        rejected.modifiedAt(),
+                        rejected.mediaType()
+                ))
+        );
+
+        AdminBatchActionResponse response = service.recoverDeadLetterMetadata();
+
+        assertThat(response.processedCount()).isZero();
+        assertThat(response.failedCount()).isEqualTo(3);
+        assertThat(assetRepository.failedAssetIds).containsExactly(active.assetId(), rejected.assetId());
+        assertThat(backgroundJobService.jobs).isEmpty();
+    }
+
     private AssetRepository.MetadataCandidateRow candidate(Path file, String mediaType) throws Exception {
+        return candidate(ASSET_ID, ASSET_FILE_ID, file, mediaType);
+    }
+
+    private AssetRepository.MetadataCandidateRow candidate(UUID assetId, UUID assetFileId, Path file, String mediaType) throws Exception {
         return new AssetRepository.MetadataCandidateRow(
-                ASSET_ID,
-                ASSET_FILE_ID,
+                assetId,
+                assetFileId,
                 file.toString(),
                 file.toString(),
                 file.getFileName().toString(),
                 Files.size(file),
                 MODIFIED_AT,
                 mediaType
+        );
+    }
+
+    private BackgroundJobRecord deadLetterJob(AssetMetadataJobPayload payload) throws Exception {
+        return deadLetterJob(objectMapper.writeValueAsString(payload));
+    }
+
+    private BackgroundJobRecord deadLetterJob(String payloadJson) {
+        return new BackgroundJobRecord(
+                UUID.randomUUID(),
+                ScanJobTypes.ASSET_METADATA_BACKFILL,
+                payloadJson,
+                "dead_letter",
+                0,
+                3,
+                3,
+                MODIFIED_AT,
+                null,
+                null,
+                ScanJobTypes.ASSET_METADATA_BACKFILL,
+                "metadata:" + UUID.randomUUID(),
+                null,
+                "error",
+                "failed",
+                MODIFIED_AT,
+                MODIFIED_AT,
+                MODIFIED_AT
         );
     }
 
@@ -234,7 +369,10 @@ class MetadataEnrichmentServiceTest {
 
     private static final class RecordingBackgroundJobService extends BackgroundJobService {
         private final List<BackgroundJobCreate> jobs = new ArrayList<>();
+        private final List<String> activeDedupePrefixes = new ArrayList<>();
         private List<BackgroundJobRecord> deadLetterJobs = List.of();
+        private boolean rejectEveryOtherJob;
+        private boolean rejectAllJobs;
 
         private RecordingBackgroundJobService() {
             super(null, new ImmediateTransactionTemplate());
@@ -242,6 +380,9 @@ class MetadataEnrichmentServiceTest {
 
         @Override
         public UUID enqueue(BackgroundJobCreate create) {
+            if (rejectAllJobs || (rejectEveryOtherJob && jobs.size() % 2 == 1)) {
+                throw new IllegalStateException("queue rejected");
+            }
             jobs.add(create);
             return UUID.randomUUID();
         }
@@ -253,7 +394,7 @@ class MetadataEnrichmentServiceTest {
 
         @Override
         public boolean hasActiveJobs(String jobType, String dedupeKeyPrefix, UUID excludedJobId) {
-            return false;
+            return activeDedupePrefixes.contains(dedupeKeyPrefix);
         }
     }
 

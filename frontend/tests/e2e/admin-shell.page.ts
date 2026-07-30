@@ -54,7 +54,7 @@ export class AdminShellPage {
     await this.page.getByTestId('app-shell-settings').click();
   }
 
-  async openSettingsSection(view: 'background' | 'backups' | 'plugins' | 'scheduler') {
+  async openSettingsSection(view: 'background' | 'backups' | 'plugins' | 'scheduler' | 'users') {
     await this.page.getByTestId(`settings-nav-${view}`).click();
   }
 

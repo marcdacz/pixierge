@@ -1020,6 +1020,8 @@ describe('App', () => {
     render(<App />);
 
     expect(await screen.findByText('2 items')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Select beach.jpg' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Select sunset.jpg' })).not.toBeInTheDocument();
 
     act(() => {
       intersectionObserver.trigger();

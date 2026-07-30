@@ -36,7 +36,7 @@ function syncSearchUrl(query: string) {
   window.history.replaceState(window.history.state, '', url);
 }
 
-const settingsViews: SettingsView[] = ['configuration', 'scheduler', 'background', 'plugins', 'backups'];
+const settingsViews: SettingsView[] = ['configuration', 'users', 'scheduler', 'background', 'plugins', 'backups'];
 
 function settingsViewFromPath(pathname: string): SettingsView {
   const section = pathname.split('/')[2];

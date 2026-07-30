@@ -3,36 +3,45 @@ package com.pixierge.api.scans;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ProvisionalIdentityTest {
 
     @Test
-    void detectsProvisionalHashes() {
-        String fingerprint = ProvisionalIdentity.fingerprint("/photos/beach.jpg", 42, OffsetDateTime.parse("2026-07-04T00:00:00Z"));
+    void identifiesProvisionalHashesAndCreatesStableFingerprints() {
+        OffsetDateTime modifiedAt = OffsetDateTime.parse("2026-07-30T00:00:00Z");
 
-        assertThat(ProvisionalIdentity.isProvisional(fingerprint)).isTrue();
-        assertThat(ProvisionalIdentity.isProvisional("deadbeef")).isFalse();
+        String first = ProvisionalIdentity.fingerprint("/photos/one.jpg", 42, modifiedAt);
+        String second = ProvisionalIdentity.fingerprint("/photos/one.jpg", 42, modifiedAt);
+
+        assertThat(first).isEqualTo(second);
+        assertThat(first).startsWith(ProvisionalIdentity.PREFIX);
+        assertThat(ProvisionalIdentity.isProvisional(first)).isTrue();
+        assertThat(ProvisionalIdentity.isProvisional("sha256")).isFalse();
+        assertThat(ProvisionalIdentity.isProvisional(null)).isFalse();
     }
 
     @Test
-    void unchangedPathComparesSizeAndModifiedTime() {
-        ScanRepository.AssetFileRecord existing = new ScanRepository.AssetFileRecord(
-                java.util.UUID.randomUUID(),
-                java.util.UUID.randomUUID(),
-                java.util.UUID.randomUUID(),
-                java.util.UUID.randomUUID(),
-                "/photos/beach.jpg",
-                "/photos/beach.jpg",
-                "beach.jpg",
+    void pathUnchangedComparesSizeAndModifiedAt() {
+        OffsetDateTime modifiedAt = OffsetDateTime.parse("2026-07-30T00:00:00Z");
+        ScanRepository.AssetFileRecord file = new ScanRepository.AssetFileRecord(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "/photos/one.jpg",
+                "/photos/one.jpg",
+                "one.jpg",
                 42,
-                OffsetDateTime.parse("2026-07-04T00:00:00Z"),
-                "confirmed-hash",
+                modifiedAt,
+                "sha256",
                 "active"
         );
 
-        assertThat(ProvisionalIdentity.pathUnchanged(existing, 42, OffsetDateTime.parse("2026-07-04T00:00:00Z"))).isTrue();
-        assertThat(ProvisionalIdentity.pathUnchanged(existing, 43, OffsetDateTime.parse("2026-07-04T00:00:00Z"))).isFalse();
+        assertThat(ProvisionalIdentity.pathUnchanged(file, 42, modifiedAt)).isTrue();
+        assertThat(ProvisionalIdentity.pathUnchanged(file, 43, modifiedAt)).isFalse();
+        assertThat(ProvisionalIdentity.pathUnchanged(file, 42, modifiedAt.plusSeconds(1))).isFalse();
     }
 }

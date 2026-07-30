@@ -1,7 +1,14 @@
 package com.pixierge.api.identity;
 
+import com.pixierge.api.db.QAlbumItems;
+import com.pixierge.api.db.QAlbums;
+import com.pixierge.api.db.QAssetTags;
+import com.pixierge.api.db.QAssets;
+import com.pixierge.api.db.QLibraries;
+import com.pixierge.api.db.QLibraryMembers;
 import com.pixierge.api.db.QPasswordCredentials;
 import com.pixierge.api.db.QSessions;
+import com.pixierge.api.db.QTags;
 import com.pixierge.api.db.QUserRoles;
 import com.pixierge.api.db.QUsers;
 import com.querydsl.sql.SQLQueryFactory;
@@ -21,8 +28,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,6 +58,13 @@ class IdentityIntegrationTest {
     @BeforeEach
     void clearUsers() {
         transactionTemplate.executeWithoutResult(status -> {
+            queryFactory.delete(QAlbumItems.albumItems).execute();
+            queryFactory.delete(QAssetTags.assetTags).execute();
+            queryFactory.delete(QAlbums.albums).execute();
+            queryFactory.delete(QTags.tags).execute();
+            queryFactory.delete(QAssets.assets).execute();
+            queryFactory.delete(QLibraryMembers.libraryMembers).execute();
+            queryFactory.delete(QLibraries.libraries).execute();
             queryFactory.delete(QSessions.sessions).execute();
             queryFactory.delete(QUserRoles.userRoles).execute();
             queryFactory.delete(QPasswordCredentials.passwordCredentials).execute();
@@ -185,8 +201,192 @@ class IdentityIntegrationTest {
         assertThat(newLogin.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
+    @Test
+    void adminUserCreationRejectsDuplicatesAndNonAdminCallers() {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String adminCookie = cookiePair(admin);
+        String adminCsrf = csrfToken(admin);
+        ResponseEntity<Map> created = createStandardUser(adminCookie, adminCsrf, "sam", "a secure password");
+        ResponseEntity<Map> duplicate = restTemplate.exchange(
+                "/api/admin/users",
+                HttpMethod.POST,
+                withCookieAndCsrf(adminCookie, adminCsrf, Map.of("username", "SAM", "password", "a secure password")),
+                Map.class
+        );
+        ResponseEntity<Map> standardLogin = restTemplate.postForEntity(
+                "/api/auth/login", Map.of("username", "sam", "password", "a secure password"), Map.class);
+        ResponseEntity<Map> nonAdminCreate = restTemplate.exchange(
+                "/api/admin/users",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookiePair(standardLogin), csrfToken(standardLogin),
+                        Map.of("username", "lee", "password", "another secure password")),
+                Map.class
+        );
+
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(created.getBody()).containsEntry("username", "sam");
+        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(nonAdminCreate.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    void deleteTransfersOwnershipAndRevokesSessions() {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String adminCookie = cookiePair(admin);
+        String adminCsrf = csrfToken(admin);
+        UUID departingUserId = UUID.fromString((String) createStandardUser(adminCookie, adminCsrf, "sam", "a secure password").getBody().get("id"));
+        UUID replacementUserId = UUID.fromString((String) createStandardUser(adminCookie, adminCsrf, "lee", "another secure password").getBody().get("id"));
+        ResponseEntity<Map> departingLogin = restTemplate.postForEntity(
+                "/api/auth/login", Map.of("username", "sam", "password", "a secure password"), Map.class);
+        String departingCookie = cookiePair(departingLogin);
+        UUID libraryId = UUID.randomUUID();
+        UUID albumId = UUID.randomUUID();
+        UUID tagId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+
+        seedOwnedCatalogRows(departingUserId, replacementUserId, libraryId, albumId, tagId, assetId);
+
+        ResponseEntity<Void> deleted = restTemplate.exchange(
+                "/api/admin/users/" + departingUserId,
+                HttpMethod.DELETE,
+                withCookieAndCsrf(adminCookie, adminCsrf, Map.of("replacementUserId", replacementUserId)),
+                Void.class
+        );
+        ResponseEntity<Map> revokedSession = restTemplate.exchange(
+                "/api/auth/session", HttpMethod.GET, withCookie(departingCookie), Map.class);
+
+        assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(revokedSession.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        transactionTemplate.executeWithoutResult(status -> {
+            assertThat(queryFactory.select(QUsers.users.id).from(QUsers.users).where(QUsers.users.id.eq(departingUserId)).fetchOne())
+                    .isNull();
+            assertThat(queryFactory.select(QLibraryMembers.libraryMembers.memberRole).from(QLibraryMembers.libraryMembers)
+                    .where(QLibraryMembers.libraryMembers.libraryId.eq(libraryId)
+                            .and(QLibraryMembers.libraryMembers.userId.eq(replacementUserId))).fetchOne())
+                    .isEqualTo("owner");
+            assertThat(queryFactory.select(QAlbums.albums.ownerUserId).from(QAlbums.albums)
+                    .where(QAlbums.albums.id.eq(albumId)).fetchOne()).isEqualTo(replacementUserId);
+            assertThat(queryFactory.select(QAlbumItems.albumItems.addedBy).from(QAlbumItems.albumItems)
+                    .where(QAlbumItems.albumItems.albumId.eq(albumId)).fetchOne()).isEqualTo(replacementUserId);
+            assertThat(queryFactory.select(QTags.tags.ownerUserId).from(QTags.tags)
+                    .where(QTags.tags.id.eq(tagId)).fetchOne()).isEqualTo(replacementUserId);
+            assertThat(queryFactory.select(QAssetTags.assetTags.addedBy).from(QAssetTags.assetTags)
+                    .where(QAssetTags.assetTags.tagId.eq(tagId)).fetchOne()).isEqualTo(replacementUserId);
+        });
+    }
+
+    @Test
+    void deleteRejectsSelfDeletionSelfReplacementAndInactiveReplacement() {
+        ResponseEntity<Map> admin = createFirstAdmin();
+        String adminCookie = cookiePair(admin);
+        String adminCsrf = csrfToken(admin);
+        UUID adminUserId = UUID.fromString((String) userBody(admin).get("id"));
+        UUID departingUserId = UUID.fromString((String) createStandardUser(adminCookie, adminCsrf, "sam", "a secure password").getBody().get("id"));
+        UUID replacementUserId = UUID.fromString((String) createStandardUser(adminCookie, adminCsrf, "lee", "another secure password").getBody().get("id"));
+
+        ResponseEntity<Map> selfDelete = restTemplate.exchange(
+                "/api/admin/users/" + adminUserId,
+                HttpMethod.DELETE,
+                withCookieAndCsrf(adminCookie, adminCsrf, Map.of("replacementUserId", replacementUserId)),
+                Map.class
+        );
+        ResponseEntity<Map> selfReplacement = restTemplate.exchange(
+                "/api/admin/users/" + departingUserId,
+                HttpMethod.DELETE,
+                withCookieAndCsrf(adminCookie, adminCsrf, Map.of("replacementUserId", departingUserId)),
+                Map.class
+        );
+        restTemplate.exchange(
+                "/api/admin/users/" + replacementUserId, HttpMethod.PATCH,
+                withCookieAndCsrf(adminCookie, adminCsrf, Map.of("active", false)), Map.class);
+        ResponseEntity<Map> inactiveReplacement = restTemplate.exchange(
+                "/api/admin/users/" + departingUserId,
+                HttpMethod.DELETE,
+                withCookieAndCsrf(adminCookie, adminCsrf, Map.of("replacementUserId", replacementUserId)),
+                Map.class
+        );
+
+        assertThat(selfDelete.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(selfReplacement.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(inactiveReplacement.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
     private ResponseEntity<Map> createFirstAdmin() {
         return restTemplate.postForEntity("/api/setup/admin", adminSetupBody(), Map.class);
+    }
+
+    private ResponseEntity<Map> createStandardUser(String cookie, String csrfToken, String username, String password) {
+        return restTemplate.exchange(
+                "/api/admin/users",
+                HttpMethod.POST,
+                withCookieAndCsrf(cookie, csrfToken, Map.of("username", username, "password", password)),
+                Map.class
+        );
+    }
+
+    private void seedOwnedCatalogRows(UUID departingUserId, UUID replacementUserId, UUID libraryId, UUID albumId, UUID tagId, UUID assetId) {
+        transactionTemplate.executeWithoutResult(status -> {
+            OffsetDateTime now = OffsetDateTime.now();
+            queryFactory.insert(QLibraries.libraries)
+                    .set(QLibraries.libraries.id, libraryId)
+                    .set(QLibraries.libraries.name, "Departing Library")
+                    .set(QLibraries.libraries.createdBy, departingUserId)
+                    .set(QLibraries.libraries.createdAt, now)
+                    .set(QLibraries.libraries.updatedAt, now)
+                    .execute();
+            queryFactory.insert(QLibraryMembers.libraryMembers)
+                    .set(QLibraryMembers.libraryMembers.libraryId, libraryId)
+                    .set(QLibraryMembers.libraryMembers.userId, departingUserId)
+                    .set(QLibraryMembers.libraryMembers.memberRole, "owner")
+                    .set(QLibraryMembers.libraryMembers.createdAt, now)
+                    .execute();
+            queryFactory.insert(QLibraryMembers.libraryMembers)
+                    .set(QLibraryMembers.libraryMembers.libraryId, libraryId)
+                    .set(QLibraryMembers.libraryMembers.userId, replacementUserId)
+                    .set(QLibraryMembers.libraryMembers.memberRole, "member")
+                    .set(QLibraryMembers.libraryMembers.createdAt, now)
+                    .execute();
+            queryFactory.insert(QAssets.assets)
+                    .set(QAssets.assets.id, assetId)
+                    .set(QAssets.assets.contentHash, "delete-transfer-content-hash")
+                    .set(QAssets.assets.mediaType, "image/jpeg")
+                    .set(QAssets.assets.availableFileCount, 1)
+                    .set(QAssets.assets.firstObservedAt, now)
+                    .set(QAssets.assets.lastObservedAt, now)
+                    .execute();
+            queryFactory.insert(QAlbums.albums)
+                    .set(QAlbums.albums.id, albumId)
+                    .set(QAlbums.albums.ownerUserId, departingUserId)
+                    .set(QAlbums.albums.name, "Departing Album")
+                    .set(QAlbums.albums.createdAt, now)
+                    .set(QAlbums.albums.updatedAt, now)
+                    .execute();
+            queryFactory.insert(QAlbumItems.albumItems)
+                    .set(QAlbumItems.albumItems.albumId, albumId)
+                    .set(QAlbumItems.albumItems.assetId, assetId)
+                    .set(QAlbumItems.albumItems.sourceLibraryId, libraryId)
+                    .set(QAlbumItems.albumItems.position, 0)
+                    .set(QAlbumItems.albumItems.addedBy, departingUserId)
+                    .set(QAlbumItems.albumItems.createdAt, now)
+                    .set(QAlbumItems.albumItems.updatedAt, now)
+                    .execute();
+            queryFactory.insert(QTags.tags)
+                    .set(QTags.tags.id, tagId)
+                    .set(QTags.tags.ownerUserId, departingUserId)
+                    .set(QTags.tags.name, "Departing Tag")
+                    .set(QTags.tags.normalizedName, "departing tag")
+                    .set(QTags.tags.createdBy, departingUserId)
+                    .set(QTags.tags.createdAt, now)
+                    .set(QTags.tags.updatedAt, now)
+                    .execute();
+            queryFactory.insert(QAssetTags.assetTags)
+                    .set(QAssetTags.assetTags.tagId, tagId)
+                    .set(QAssetTags.assetTags.assetId, assetId)
+                    .set(QAssetTags.assetTags.sourceLibraryId, libraryId)
+                    .set(QAssetTags.assetTags.addedBy, departingUserId)
+                    .set(QAssetTags.assetTags.createdAt, now)
+                    .execute();
+        });
     }
 
     private Map<String, String> adminSetupBody() {

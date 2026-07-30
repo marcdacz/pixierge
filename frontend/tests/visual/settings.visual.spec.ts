@@ -16,4 +16,21 @@ test.describe('visual', { tag: '@visual' }, () => {
       fullPage: true
     });
   });
+
+  test('users settings visual regression', async ({ page }) => {
+    await mockPixiergeApi(page);
+    await completeBrowsableLibrarySetup(page);
+    const admin = new AdminShellPage(page);
+
+    await admin.openSettings();
+    await admin.openSettingsSection('users');
+    await page.getByLabel('Username').fill('sam');
+    await page.getByLabel('Password').fill('a secure password');
+    await page.getByRole('button', { name: 'Create user' }).click();
+    await expect(page.getByText('sam created.')).toBeVisible();
+    await expect(page.getByRole('row', { name: /sam active USER/ })).toBeVisible();
+    await expect(page).toHaveScreenshot('settings-users.png', {
+      fullPage: true
+    });
+  });
 });

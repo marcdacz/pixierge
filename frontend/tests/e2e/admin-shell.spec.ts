@@ -114,3 +114,36 @@ test('settings keeps scroll inside the app shell', async ({ page }) => {
   await page.mouse.wheel(0, 4000);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 });
+
+test('admin creates and deletes local users with replacement', async ({ page }) => {
+  await mockPixiergeApi(page);
+  const admin = new AdminShellPage(page);
+
+  await admin.goto();
+  await admin.createAdmin('admin', 'correct horse battery staple');
+  await admin.openSettings();
+  await admin.openSettingsSection('users');
+
+  await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
+  await page.getByLabel('Username').fill('sam');
+  await page.getByLabel('Password').fill('a secure password');
+  await page.getByRole('button', { name: 'Create user' }).click();
+  await expect(page.getByText('sam created.')).toBeVisible();
+
+  await page.getByLabel('Username').fill('lee');
+  await page.getByLabel('Password').fill('another secure password');
+  await page.getByRole('button', { name: 'Create user' }).click();
+  await expect(page.getByText('lee created.')).toBeVisible();
+
+  const samRow = page.getByRole('row', { name: /sam active USER/ });
+  await expect(samRow).toBeVisible();
+  await samRow.getByRole('button', { name: 'Delete' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete sam?' });
+  await dialog.getByLabel('Replacement user').selectOption({ label: 'lee' });
+  await dialog.getByLabel('Type sam to confirm').fill('sam');
+  await dialog.getByRole('button', { name: 'Delete user' }).click();
+
+  await expect(page.getByText('sam deleted.')).toBeVisible();
+  await expect(samRow).toBeHidden();
+  await expect(page.getByRole('row', { name: /lee active USER/ })).toBeVisible();
+});

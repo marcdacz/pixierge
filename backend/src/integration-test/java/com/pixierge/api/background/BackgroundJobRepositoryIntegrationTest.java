@@ -21,6 +21,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -141,6 +142,79 @@ class BackgroundJobRepositoryIntegrationTest {
                 });
         assertThat(problems).extracting(BackgroundJobProblemSummary::id).contains(deadLetterId);
         assertThat(problems).extracting(BackgroundJobProblemSummary::id).doesNotContain(pendingId);
+    }
+
+    @Test
+    void jobLifecycleSupportsFiltersRetryCancelAndDeadLetterQueries() {
+        OffsetDateTime now = OffsetDateTime.now();
+        UUID includedId = transactionTemplate.execute(status -> repository.enqueue(
+                job("included", "included:1", "included:group"), now));
+        UUID excludedId = transactionTemplate.execute(status -> repository.enqueue(
+                job("excluded", "excluded:1", "excluded:group"), now));
+
+        List<BackgroundJobRecord> includedClaim = transactionTemplate.execute(status -> repository.claimReadyJobs(
+                10,
+                "worker-1",
+                now.plusSeconds(1),
+                now.plusMinutes(5),
+                "included",
+                null
+        ));
+        assertThat(includedClaim).extracting(BackgroundJobRecord::id).containsExactly(includedId);
+        Boolean hasIncludedJob = transactionTemplate.execute(status ->
+                repository.hasActiveJobs("included", "included:", null));
+        Boolean hasIncludedJobExceptCurrent = transactionTemplate.execute(status ->
+                repository.hasActiveJobs("included", "included:", includedId));
+        assertThat(hasIncludedJob).isTrue();
+        assertThat(hasIncludedJobExceptCurrent).isFalse();
+
+        transactionTemplate.executeWithoutResult(status ->
+                repository.heartbeat(includedId, "worker-1", now.plusMinutes(10), now.plusSeconds(2))
+        );
+        transactionTemplate.executeWithoutResult(status ->
+                repository.retry(includedId, "worker-1", "temporary", "try again", now.plusSeconds(3), now.plusSeconds(2))
+        );
+        BackgroundJobRecord retried = transactionTemplate.execute(status -> repository.find(includedId)).orElseThrow();
+        assertThat(retried.status()).isEqualTo(BackgroundJobRepository.STATUS_PENDING);
+        assertThat(retried.lastErrorCode()).isEqualTo("temporary");
+
+        List<BackgroundJobRecord> excludedClaim = transactionTemplate.execute(status -> repository.claimReadyJobs(
+                10,
+                "worker-2",
+                now.plusSeconds(4),
+                now.plusMinutes(5),
+                null,
+                "included"
+        ));
+        assertThat(excludedClaim).extracting(BackgroundJobRecord::id).containsExactly(excludedId);
+        transactionTemplate.executeWithoutResult(status ->
+                repository.cancel(excludedId, now.plusSeconds(5))
+        );
+        assertThat(transactionTemplate.execute(status -> repository.find(excludedId)).orElseThrow().status())
+                .isEqualTo(BackgroundJobRepository.STATUS_CANCELLED);
+
+        List<BackgroundJobRecord> retriedClaim = transactionTemplate.execute(status -> repository.claimReadyJobs(
+                10,
+                "worker-3",
+                now.plusSeconds(5),
+                now.plusMinutes(5)
+        ));
+        assertThat(retriedClaim).extracting(BackgroundJobRecord::id).containsExactly(includedId);
+        transactionTemplate.executeWithoutResult(status ->
+                repository.deadLetter(includedId, "worker-3", "terminal", "gave up", now.plusSeconds(6))
+        );
+
+        List<BackgroundJobRecord> deadLetters = transactionTemplate.execute(status -> repository.deadLetterJobs("included", 0));
+        List<BackgroundJobRecord> latestJobs = transactionTemplate.execute(status -> repository.latestJobs(10));
+        Optional<BackgroundJobRecord> blankDedupe = transactionTemplate.execute(status -> repository.findActiveByDedupeKey(" "));
+
+        assertThat(deadLetters)
+                .extracting(BackgroundJobRecord::id)
+                .containsExactly(includedId);
+        assertThat(latestJobs)
+                .extracting(BackgroundJobRecord::id)
+                .contains(includedId, excludedId);
+        assertThat(blankDedupe).isEmpty();
     }
 
     @Test

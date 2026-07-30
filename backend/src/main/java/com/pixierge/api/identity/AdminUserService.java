@@ -58,6 +58,9 @@ class AdminUserService {
         if (actorId.equals(userId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You cannot delete your own account");
         }
+        if (replacementUserId == null || userId.equals(replacementUserId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Replacement user must be different from the deleted account");
+        }
         UserRepository.UserRecord user = requireUser(userId);
         UserRepository.UserRecord replacement = requireUser(replacementUserId);
         if (!IdentityConstants.USER_STATUS_ACTIVE.equals(replacement.status())) {

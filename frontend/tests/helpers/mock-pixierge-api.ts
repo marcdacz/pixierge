@@ -163,6 +163,15 @@ export async function mockPixiergeApi(page: Page) {
     summaryJson: string | null;
     errorMessage: string | null;
   }> = [];
+  let users = [
+    {
+      id: 'user-1',
+      username: 'admin',
+      status: 'active' as const,
+      roles: ['ADMIN'],
+      createdAt: '2026-07-03T00:00:00Z'
+    }
+  ];
   const albums: Array<{
     id: string;
     name: string;
@@ -419,18 +428,49 @@ export async function mockPixiergeApi(page: Page) {
       return;
     }
 
-    if (path === '/api/admin/users') {
-      await route.fulfill({
-        json: [
-          {
-            id: 'user-1',
-            username: 'admin',
-            status: 'active',
-            roles: ['ADMIN'],
-            createdAt: '2026-07-03T00:00:00Z'
-          }
-        ]
-      });
+    if (path === '/api/admin/users' && request.method() === 'GET') {
+      await route.fulfill({ json: users });
+      return;
+    }
+
+    if (path === '/api/admin/users' && request.method() === 'POST') {
+      const body = await request.postDataJSON();
+      const username = String(body.username ?? '').trim().toLowerCase();
+      if (users.some((user) => user.username.toLowerCase() === username)) {
+        await route.fulfill({ status: 409, json: { detail: 'Username already exists' } });
+        return;
+      }
+      const created = {
+        id: `user-${users.length + 1}`,
+        username,
+        status: 'active' as const,
+        roles: ['USER'],
+        createdAt: '2026-07-30T00:00:00Z'
+      };
+      users = [...users, created];
+      await route.fulfill({ json: created });
+      return;
+    }
+
+    const resetUserMatch = path.match(/^\/api\/admin\/users\/([^/]+)\/reset-password$/);
+    if (resetUserMatch && request.method() === 'POST') {
+      await route.fulfill({ status: 200, body: '' });
+      return;
+    }
+
+    const adminUserMatch = path.match(/^\/api\/admin\/users\/([^/]+)$/);
+    if (adminUserMatch && request.method() === 'PATCH') {
+      const body = await request.postDataJSON();
+      users = users.map((user) =>
+        user.id === adminUserMatch[1] ? { ...user, status: body.active ? 'active' as const : 'disabled' as const } : user
+      );
+      await route.fulfill({ json: users.find((user) => user.id === adminUserMatch[1]) });
+      return;
+    }
+
+    if (adminUserMatch && request.method() === 'DELETE') {
+      users = users.filter((user) => user.id !== adminUserMatch[1]);
+      await route.fulfill({ status: 200, body: '' });
       return;
     }
 

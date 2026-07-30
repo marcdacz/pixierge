@@ -8,6 +8,13 @@ ON CONFLICT (permission_key) DO NOTHING;
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM roles r
-JOIN permissions p ON p.permission_key IN ('album:write', 'tag:write', 'sharing:write')
+JOIN permissions p ON p.permission_key IN ('album:write', 'tag:write')
 WHERE r.role_key IN ('ADMIN', 'USER')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM roles r
+JOIN permissions p ON p.permission_key = 'sharing:write'
+WHERE r.role_key = 'ADMIN'
 ON CONFLICT DO NOTHING;

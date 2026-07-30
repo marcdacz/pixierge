@@ -11,10 +11,12 @@ import {
   CheckCircle2,
   CalendarClock,
   Plus,
+  KeyRound,
   RefreshCw,
   RotateCcw,
   SlidersHorizontal,
-  Trash2
+  Trash2,
+  UserCog
 } from 'lucide-react';
 import { useEffect, useState, type ComponentType, type FormEvent } from 'react';
 import {
@@ -23,20 +25,26 @@ import {
   addLibraryRoot,
   ApiError,
   archiveLibrary,
+  createUser,
+  deleteUser,
   createLibrary,
   deleteGlobalExclusionPattern,
   deleteLibraryExclusionPattern,
   deleteLibraryRoot,
   fetchGlobalExclusionPatterns,
+  fetchUsers,
   restoreLibrary,
+  resetUserPassword,
   scanLibrary,
   scanLibraryRoot,
+  updateUserStatus,
   type AuthResponse,
   type GlobalExclusionPattern,
   type LibraryExclusionPattern,
   type LibrarySummary,
   type LibrarySource,
-  type ScanRun
+  type ScanRun,
+  type UserSummary
 } from '@/api';
 import { Alert } from '@/components/ui/alert';
 import { useScanActivity } from '@/features/scans/scan-activity-context';
@@ -65,7 +73,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-export type SettingsView = 'configuration' | 'scheduler' | 'background' | 'plugins' | 'backups';
+export type SettingsView = 'configuration' | 'users' | 'scheduler' | 'background' | 'plugins' | 'backups';
 
 type SettingsItem = {
   description: string;
@@ -80,6 +88,12 @@ const settingsItems: SettingsItem[] = [
     icon: SlidersHorizontal,
     label: 'Configuration',
     view: 'configuration'
+  },
+  {
+    description: 'Create local accounts and manage access lifecycle.',
+    icon: UserCog,
+    label: 'Users',
+    view: 'users'
   },
   {
     description: 'View and run registered recurring jobs and their cron schedules.',
@@ -283,6 +297,8 @@ function SettingsContent({
           currentView={currentView}
           onViewChange={onViewChange}
         />
+      ) : item.view === 'users' ? (
+        <UsersSettings auth={auth} onError={onError} />
       ) : item.view === 'scheduler' ? (
         <SchedulerDetails auth={auth} onError={onError} />
       ) : item.view === 'background' ? (
@@ -291,6 +307,399 @@ function SettingsContent({
         <EmptySettingsPage label={item.label} />
       )}
     </section>
+  );
+}
+
+type PendingUserAction = { action: 'create' | 'delete' | 'reset' | 'status'; userId?: string } | null;
+
+export function UsersSettings({
+  auth,
+  onError
+}: {
+  auth: AuthResponse;
+  onError: (title: string, description?: string) => void;
+}) {
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingUserAction>(null);
+  const [resetTarget, setResetTarget] = useState<UserSummary | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<UserSummary | null>(null);
+
+  async function loadUsers() {
+    setLoadError(null);
+    setLoading(true);
+    try {
+      setUsers(await fetchUsers());
+    } catch (error) {
+      const message = messageForError(error, 'Users could not be loaded.');
+      setLoadError(message);
+      onError('Users could not be loaded', message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadUsers();
+  }, []);
+
+  async function submitCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
+    setStatusMessage(null);
+    setPendingAction({ action: 'create' });
+
+    try {
+      const created = await createUser({ username, password }, auth.csrfToken);
+      setUsername('');
+      setPassword('');
+      await loadUsers();
+      setStatusMessage(`${created.username} created.`);
+    } catch (error) {
+      const message = messageForError(error, 'User could not be created.');
+      setFormError(message);
+      onError('User could not be created', message);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function submitReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!resetTarget) {
+      return;
+    }
+    setFormError(null);
+    setStatusMessage(null);
+    setPendingAction({ action: 'reset', userId: resetTarget.id });
+
+    try {
+      await resetUserPassword(resetTarget.id, { password: resetPassword }, auth.csrfToken);
+      setStatusMessage(`${resetTarget.username} password reset.`);
+      setResetTarget(null);
+      setResetPassword('');
+    } catch (error) {
+      const message = messageForError(error, 'Password could not be reset.');
+      setFormError(message);
+      onError('Password could not be reset', message);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function submitStatus(user: UserSummary) {
+    setFormError(null);
+    setStatusMessage(null);
+    setPendingAction({ action: 'status', userId: user.id });
+
+    try {
+      const updated = await updateUserStatus(user.id, { active: user.status !== 'active' }, auth.csrfToken);
+      setUsers((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setStatusMessage(`${updated.username} is ${updated.status}.`);
+    } catch (error) {
+      const message = messageForError(error, 'User status could not be changed.');
+      setFormError(message);
+      onError('User status could not be changed', message);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function submitDelete(replacementUserId: string) {
+    if (!deleteTarget) {
+      return;
+    }
+    setFormError(null);
+    setStatusMessage(null);
+    setPendingAction({ action: 'delete', userId: deleteTarget.id });
+
+    try {
+      await deleteUser(deleteTarget.id, { replacementUserId }, auth.csrfToken);
+      setStatusMessage(`${deleteTarget.username} deleted.`);
+      setDeleteTarget(null);
+      await loadUsers();
+    } catch (error) {
+      const message = messageForError(error, 'User could not be deleted.');
+      setFormError(message);
+      onError('User could not be deleted', message);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  const createDisabled = pendingAction !== null || username.trim() === '' || password.length < 12;
+  const activeCount = users.filter((user) => user.status === 'active').length;
+  const adminCount = users.filter((user) => user.roles.includes('ADMIN')).length;
+  const eligibleReplacementUsers = deleteTarget
+    ? users.filter((user) => user.status === 'active' && user.id !== deleteTarget.id)
+    : [];
+
+  return (
+    <div className="grid gap-6">
+      <section aria-label="User totals" className="grid gap-3 md:grid-cols-3">
+        <SourceStat label="Accounts" value={users.length} />
+        <SourceStat label="Active" value={activeCount} />
+        <SourceStat label="Admins" value={adminCount} />
+      </section>
+
+      <div className="rounded-md border border-border p-4">
+        <form className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={submitCreate}>
+          <div className="grid gap-2">
+            <Label htmlFor="new-user-username">Username</Label>
+            <Input
+              autoComplete="off"
+              id="new-user-username"
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="sam"
+              value={username}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="new-user-password">Password</Label>
+            <Input
+              autoComplete="new-password"
+              id="new-user-password"
+              onChange={(event) => setPassword(event.target.value)}
+              type="password"
+              value={password}
+            />
+          </div>
+          <Button className="self-end" disabled={createDisabled} type="submit">
+            <Plus className="h-4 w-4" aria-hidden />
+            Create user
+          </Button>
+        </form>
+      </div>
+
+      {loadError && <Alert>{loadError}</Alert>}
+      {formError && <Alert>{formError}</Alert>}
+      {statusMessage && <p className="text-sm text-muted-foreground" role="status">{statusMessage}</p>}
+      {loading && <p className="text-sm text-muted-foreground">Loading users...</p>}
+
+      {!loading && users.length === 0 ? (
+        <div className="grid min-h-60 place-items-center rounded-md border border-dashed border-border">
+          <p className="text-sm text-muted-foreground">No local users have been created.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-md border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Username</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Roles</TableHead>
+                <TableHead className="min-w-72">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => {
+                const statusPending = pendingAction?.action === 'status' && pendingAction.userId === user.id;
+                const resetPending = pendingAction?.action === 'reset' && pendingAction.userId === user.id;
+                const deletePending = pendingAction?.action === 'delete' && pendingAction.userId === user.id;
+                const isSelf = user.id === auth.user.id;
+
+                return (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <span className="font-medium">{user.username}</span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={user.status === 'active' ? 'success' : 'warning'}>{user.status}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        {user.roles.map((role) => <Badge key={role} variant="secondary">{role}</Badge>)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          disabled={pendingAction !== null}
+                          onClick={() => {
+                            setResetTarget(user);
+                            setResetPassword('');
+                            setFormError(null);
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="secondary"
+                        >
+                          <KeyRound className="h-4 w-4" aria-hidden />
+                          {resetPending ? 'Resetting...' : 'Reset'}
+                        </Button>
+                        <Button
+                          disabled={pendingAction !== null}
+                          onClick={() => void submitStatus(user)}
+                          size="sm"
+                          type="button"
+                          variant="secondary"
+                        >
+                          {user.status === 'active' ? (
+                            <AlertTriangle className="h-4 w-4" aria-hidden />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4" aria-hidden />
+                          )}
+                          {statusPending ? 'Saving...' : user.status === 'active' ? 'Deactivate' : 'Reactivate'}
+                        </Button>
+                        <Button
+                          disabled={pendingAction !== null || isSelf}
+                          onClick={() => {
+                            setDeleteTarget(user);
+                            setFormError(null);
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                          {deletePending ? 'Deleting...' : 'Delete'}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {resetTarget && (
+        <form className="grid gap-3 rounded-md border border-border p-4 md:grid-cols-[minmax(0,1fr)_auto_auto]" onSubmit={submitReset}>
+          <div className="grid gap-2">
+            <Label htmlFor="reset-user-password">New password for {resetTarget.username}</Label>
+            <Input
+              autoComplete="new-password"
+              id="reset-user-password"
+              onChange={(event) => setResetPassword(event.target.value)}
+              type="password"
+              value={resetPassword}
+            />
+          </div>
+          <Button
+            className="self-end"
+            disabled={pendingAction !== null || resetPassword.length < 12}
+            type="submit"
+            variant="secondary"
+          >
+            <KeyRound className="h-4 w-4" aria-hidden />
+            Reset password
+          </Button>
+          <Button
+            className="self-end"
+            disabled={pendingAction !== null}
+            onClick={() => setResetTarget(null)}
+            type="button"
+            variant="ghost"
+          >
+            Cancel
+          </Button>
+        </form>
+      )}
+
+      {deleteTarget && (
+        <DeleteUserDialog
+          confirming={pendingAction?.action === 'delete' && pendingAction.userId === deleteTarget.id}
+          eligibleReplacementUsers={eligibleReplacementUsers}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={(replacementUserId) => void submitDelete(replacementUserId)}
+          user={deleteTarget}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteUserDialog({
+  confirming,
+  eligibleReplacementUsers,
+  onCancel,
+  onConfirm,
+  user
+}: {
+  confirming: boolean;
+  eligibleReplacementUsers: UserSummary[];
+  onCancel: () => void;
+  onConfirm: (replacementUserId: string) => void;
+  user: UserSummary;
+}) {
+  const [replacementUserId, setReplacementUserId] = useState(eligibleReplacementUsers[0]?.id ?? '');
+  const [confirmation, setConfirmation] = useState('');
+  const titleId = `delete-user-title-${user.id}`;
+  const canDelete = replacementUserId !== '' && confirmation === user.username && !confirming;
+
+  useEffect(() => {
+    setReplacementUserId(eligibleReplacementUsers[0]?.id ?? '');
+  }, [user.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+      <div
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="grid w-full max-w-lg gap-4 rounded-md border border-border bg-surface p-5 text-foreground shadow-lg"
+        role="dialog"
+      >
+        <div className="grid gap-2">
+          <h2 className="text-lg font-semibold" id={titleId}>Delete {user.username}?</h2>
+          <p className="text-sm text-muted-foreground">
+            Owned library membership, albums, and tags will move to the selected active user. Sessions for {user.username} will be revoked.
+          </p>
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="replacement-user">Replacement user</Label>
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            disabled={eligibleReplacementUsers.length === 0 || confirming}
+            id="replacement-user"
+            onChange={(event) => setReplacementUserId(event.target.value)}
+            value={replacementUserId}
+          >
+            {eligibleReplacementUsers.length === 0 ? (
+              <option value="">No active replacement available</option>
+            ) : (
+              eligibleReplacementUsers.map((replacementUser) => (
+                <option key={replacementUser.id} value={replacementUser.id}>{replacementUser.username}</option>
+              ))
+            )}
+          </select>
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="delete-user-confirmation">Type {user.username} to confirm</Label>
+          <Input
+            autoComplete="off"
+            disabled={confirming}
+            id="delete-user-confirmation"
+            onChange={(event) => setConfirmation(event.target.value)}
+            value={confirmation}
+          />
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button disabled={confirming} onClick={onCancel} type="button" variant="ghost">
+            Cancel
+          </Button>
+          <Button
+            className="border border-zinc-700 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
+            disabled={!canDelete}
+            onClick={() => onConfirm(replacementUserId)}
+            type="button"
+            variant="secondary"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+            {confirming ? 'Deleting...' : 'Delete user'}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

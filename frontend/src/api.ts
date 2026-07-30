@@ -453,6 +453,38 @@ export async function fetchUsers(): Promise<UserSummary[]> {
   return requestJson<UserSummary[]>('/api/admin/users');
 }
 
+export async function createUser(input: { username: string; password: string }, csrfToken: string): Promise<UserSummary> {
+  return requestJson<UserSummary>('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export async function resetUserPassword(userId: string, input: { password: string }, csrfToken: string): Promise<void> {
+  await requestWithoutBodyWithJson(`/api/admin/users/${userId}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export async function updateUserStatus(userId: string, input: { active: boolean }, csrfToken: string): Promise<UserSummary> {
+  return requestJson<UserSummary>(`/api/admin/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
+export async function deleteUser(userId: string, input: { replacementUserId: string }, csrfToken: string): Promise<void> {
+  await requestWithoutBodyWithJson(`/api/admin/users/${userId}`, {
+    method: 'DELETE',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+
 export async function fetchRoles(): Promise<RoleSummary[]> {
   return requestJson<RoleSummary[]>('/api/admin/roles');
 }
