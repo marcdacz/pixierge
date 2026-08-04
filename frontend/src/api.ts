@@ -65,6 +65,13 @@ export type LibrarySummary = {
   exclusionPatterns: LibraryExclusionPattern[];
 };
 
+export type LibraryMember = {
+  userId: string;
+  username: string;
+  role: 'owner' | 'admin' | 'member';
+  createdAt: string;
+};
+
 export type ScanError = {
   id: string;
   path: string | null;
@@ -588,6 +595,34 @@ export async function deleteLibraryExclusionPattern(
     method: 'DELETE',
     csrfToken
   });
+}
+
+export async function fetchLibraryMembers(libraryId: string): Promise<LibraryMember[]> {
+  return requestJson<LibraryMember[]>(`/api/libraries/${libraryId}/members`);
+}
+
+export async function fetchLibraryMemberCandidates(libraryId: string): Promise<LibraryMember[]> {
+  return requestJson<LibraryMember[]>(`/api/libraries/${libraryId}/members/candidates`);
+}
+
+export async function addLibraryMember(
+  libraryId: string, input: { userId: string; role: LibraryMember['role'] }, csrfToken: string
+): Promise<LibraryMember> {
+  return requestJson<LibraryMember>(`/api/libraries/${libraryId}/members`, {
+    method: 'POST', body: JSON.stringify(input), csrfToken
+  });
+}
+
+export async function updateLibraryMemberRole(
+  libraryId: string, userId: string, input: { role: LibraryMember['role'] }, csrfToken: string
+): Promise<LibraryMember> {
+  return requestJson<LibraryMember>(`/api/libraries/${libraryId}/members/${userId}`, {
+    method: 'PATCH', body: JSON.stringify(input), csrfToken
+  });
+}
+
+export async function removeLibraryMember(libraryId: string, userId: string, csrfToken: string): Promise<void> {
+  await requestWithoutBody(`/api/libraries/${libraryId}/members/${userId}`, { method: 'DELETE', csrfToken });
 }
 
 export async function addGlobalExclusionPattern(

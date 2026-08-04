@@ -191,11 +191,18 @@ public class UserRepository {
             return Optional.empty();
         }
 
+        Set<String> permissions = findPermissionKeys(userId);
+        if (hasLibraryMembership(userId)) {
+            permissions.add("library:read");
+        }
+        if (hasLibraryManagementMembership(userId)) {
+            permissions.add("sharing:write");
+        }
         return Optional.of(new AuthenticatedUser(
                 userRow.get(USERS.id),
                 userRow.get(USERS.username),
                 findRoleKeys(userId),
-                findPermissionKeys(userId),
+                permissions,
                 csrfToken
         ));
     }
@@ -268,6 +275,19 @@ public class UserRepository {
                 .where(USER_ROLES.userId.eq(userId))
                 .orderBy(PERMISSIONS.permissionKey.asc())
                 .fetch());
+    }
+
+    private boolean hasLibraryMembership(UUID userId) {
+        Integer membership = queryFactory.selectOne().from(LIBRARY_MEMBERS)
+                .where(LIBRARY_MEMBERS.userId.eq(userId)).fetchFirst();
+        return membership != null;
+    }
+
+    private boolean hasLibraryManagementMembership(UUID userId) {
+        Integer membership = queryFactory.selectOne().from(LIBRARY_MEMBERS)
+                .where(LIBRARY_MEMBERS.userId.eq(userId).and(LIBRARY_MEMBERS.memberRole.in("owner", "admin")))
+                .fetchFirst();
+        return membership != null;
     }
 
     private Map<UUID, Set<String>> rolesByUser() {

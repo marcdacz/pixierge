@@ -16,6 +16,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 import static com.pixierge.api.libraries.LibraryConstants.PERMISSION_LIBRARY_ADMIN;
 import static com.pixierge.api.libraries.LibraryConstants.PERMISSION_LIBRARY_READ;
+import static com.pixierge.api.libraries.LibraryConstants.PERMISSION_SHARING_WRITE;
 
 @Configuration
 public class SecurityConfig {
@@ -43,6 +44,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/libraries/**").hasAuthority(PERMISSION_LIBRARY_READ)
                         .requestMatchers(HttpMethod.GET, "/api/scans/**").hasAuthority(PERMISSION_LIBRARY_READ)
                         .requestMatchers(HttpMethod.GET, "/api/settings/**").hasAuthority(PERMISSION_LIBRARY_READ)
+                        .requestMatchers("/api/libraries/*/members/**").hasAuthority(PERMISSION_SHARING_WRITE)
                         .requestMatchers("/api/assets/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)
                         .requestMatchers("/api/libraries/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)
                         .requestMatchers("/api/settings/**").hasAuthority(PERMISSION_LIBRARY_ADMIN)

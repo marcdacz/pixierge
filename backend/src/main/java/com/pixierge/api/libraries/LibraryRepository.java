@@ -6,6 +6,7 @@ import com.pixierge.api.db.QLibraries;
 import com.pixierge.api.db.QLibraryExclusionPatterns;
 import com.pixierge.api.db.QLibraryMembers;
 import com.pixierge.api.db.QLibraryRoots;
+import com.pixierge.api.db.QUsers;
 import com.querydsl.core.Tuple;
 import com.querydsl.sql.SQLQueryFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -32,6 +33,7 @@ public class LibraryRepository {
             QLibraryExclusionPatterns.libraryExclusionPatterns;
     private static final QLibraryMembers LIBRARY_MEMBERS = QLibraryMembers.libraryMembers;
     private static final QLibraryRoots LIBRARY_ROOTS = QLibraryRoots.libraryRoots;
+    private static final QUsers USERS = QUsers.users;
     private static final String OWNER_ROLE = "owner";
     private final SQLQueryFactory queryFactory;
 
@@ -93,6 +95,68 @@ public class LibraryRepository {
                 rootsByLibrary(List.of(libraryId)).getOrDefault(libraryId, List.of()),
                 exclusionPatternsByLibrary(List.of(libraryId)).getOrDefault(libraryId, List.of())
         ));
+    }
+
+    @Transactional(readOnly = true)
+    public List<LibraryMemberRecord> listMembers(UUID libraryId) {
+        return queryFactory.select(LIBRARY_MEMBERS.userId, USERS.username, LIBRARY_MEMBERS.memberRole, LIBRARY_MEMBERS.createdAt)
+                .from(LIBRARY_MEMBERS).join(USERS).on(USERS.id.eq(LIBRARY_MEMBERS.userId))
+                .where(LIBRARY_MEMBERS.libraryId.eq(libraryId))
+                .orderBy(USERS.username.lower().asc()).fetch().stream()
+                .map(row -> new LibraryMemberRecord(row.get(LIBRARY_MEMBERS.userId), row.get(USERS.username),
+                        row.get(LIBRARY_MEMBERS.memberRole), row.get(LIBRARY_MEMBERS.createdAt))).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasManagementAccess(UUID libraryId, UUID userId) {
+        Integer result = queryFactory.selectOne().from(LIBRARY_MEMBERS)
+                .where(LIBRARY_MEMBERS.libraryId.eq(libraryId).and(LIBRARY_MEMBERS.userId.eq(userId))
+                        .and(LIBRARY_MEMBERS.memberRole.in("owner", "admin"))).fetchFirst();
+        return result != null;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isMember(UUID libraryId, UUID userId) {
+        Integer result = queryFactory.selectOne().from(LIBRARY_MEMBERS)
+                .where(LIBRARY_MEMBERS.libraryId.eq(libraryId).and(LIBRARY_MEMBERS.userId.eq(userId))).fetchFirst();
+        return result != null;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean activeUserExists(UUID userId) {
+        Integer result = queryFactory.selectOne().from(USERS)
+                .where(USERS.id.eq(userId).and(USERS.status.eq("active"))).fetchFirst();
+        return result != null;
+    }
+
+    @Transactional(readOnly = true)
+    public List<LibraryMemberRecord> listActiveUsers() {
+        return queryFactory.select(USERS.id, USERS.username, USERS.createdAt).from(USERS)
+                .where(USERS.status.eq("active")).orderBy(USERS.username.lower().asc()).fetch().stream()
+                .map(row -> new LibraryMemberRecord(row.get(USERS.id), row.get(USERS.username), null, row.get(USERS.createdAt)))
+                .toList();
+    }
+
+    public boolean addMember(UUID libraryId, UUID userId, String role) {
+        return queryFactory.insert(LIBRARY_MEMBERS).set(LIBRARY_MEMBERS.libraryId, libraryId).set(LIBRARY_MEMBERS.userId, userId)
+                .set(LIBRARY_MEMBERS.memberRole, role).set(LIBRARY_MEMBERS.createdAt, OffsetDateTime.now()).execute() > 0;
+    }
+
+    public boolean updateMemberRole(UUID libraryId, UUID userId, String role) {
+        return queryFactory.update(LIBRARY_MEMBERS).set(LIBRARY_MEMBERS.memberRole, role)
+                .where(LIBRARY_MEMBERS.libraryId.eq(libraryId).and(LIBRARY_MEMBERS.userId.eq(userId))).execute() > 0;
+    }
+
+    public boolean removeMember(UUID libraryId, UUID userId) {
+        return queryFactory.delete(LIBRARY_MEMBERS)
+                .where(LIBRARY_MEMBERS.libraryId.eq(libraryId).and(LIBRARY_MEMBERS.userId.eq(userId))).execute() > 0;
+    }
+
+    @Transactional(readOnly = true)
+    public long ownerCount(UUID libraryId) {
+        Long count = queryFactory.select(LIBRARY_MEMBERS.userId.count()).from(LIBRARY_MEMBERS)
+                .where(LIBRARY_MEMBERS.libraryId.eq(libraryId).and(LIBRARY_MEMBERS.memberRole.eq(OWNER_ROLE))).fetchOne();
+        return count == null ? 0 : count;
     }
 
     public UUID createLibrary(String name, UUID creatorId) {
@@ -453,5 +517,8 @@ public class LibraryRepository {
             String pattern,
             OffsetDateTime createdAt
     ) {
+    }
+
+    public record LibraryMemberRecord(UUID userId, String username, String role, OffsetDateTime createdAt) {
     }
 }

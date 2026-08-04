@@ -23,6 +23,7 @@ import {
   addGlobalExclusionPattern,
   addLibraryExclusionPattern,
   addLibraryRoot,
+  addLibraryMember,
   ApiError,
   archiveLibrary,
   createUser,
@@ -32,17 +33,22 @@ import {
   deleteLibraryExclusionPattern,
   deleteLibraryRoot,
   fetchGlobalExclusionPatterns,
+  fetchLibraryMembers,
+  fetchLibraryMemberCandidates,
   fetchUsers,
   restoreLibrary,
+  removeLibraryMember,
   resetUserPassword,
   scanLibrary,
   scanLibraryRoot,
   updateUserStatus,
+  updateLibraryMemberRole,
   type AuthResponse,
   type GlobalExclusionPattern,
   type LibraryExclusionPattern,
   type LibrarySummary,
   type LibrarySource,
+  type LibraryMember,
   type ScanRun,
   type UserSummary
 } from '@/api';
@@ -863,13 +869,18 @@ function SourcesSettings({
           </aside>
 
           {selectedLibrary ? (
-            <LibrarySourceCard
-              auth={auth}
-              key={selectedLibrary.id}
-              library={selectedLibrary}
-              onError={onError}
-              onLibrariesChange={onLibrariesChange}
-            />
+            <div className="grid gap-6">
+              <LibrarySourceCard
+                auth={auth}
+                key={selectedLibrary.id}
+                library={selectedLibrary}
+                onError={onError}
+                onLibrariesChange={onLibrariesChange}
+              />
+              {auth.user.permissions.includes('sharing:write') && (
+                <LibraryMembersPanel auth={auth} libraryId={selectedLibrary.id} onError={onError} />
+              )}
+            </div>
           ) : (
             <div className="grid min-h-80 place-items-center rounded-md border border-dashed border-border">
               <p className="text-sm text-muted-foreground">No libraries match the current view.</p>
@@ -879,6 +890,72 @@ function SourcesSettings({
       )}
     </div>
   );
+}
+
+function LibraryMembersPanel({ auth, libraryId, onError }: { auth: AuthResponse; libraryId: string; onError: SettingsPageProps['onError'] }) {
+  const [members, setMembers] = useState<LibraryMember[]>([]);
+  const [users, setUsers] = useState<LibraryMember[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [role, setRole] = useState<LibraryMember['role']>('member');
+  const [message, setMessage] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function load() {
+    try {
+      const [nextMembers, nextUsers] = await Promise.all([fetchLibraryMembers(libraryId), fetchLibraryMemberCandidates(libraryId)]);
+      // Older servers may not expose membership yet while a browser reloads during deployment.
+      setMembers(Array.isArray(nextMembers) ? nextMembers : []);
+      setUsers(Array.isArray(nextUsers) ? nextUsers : []);
+    } catch (error) {
+      setMembers([]);
+      setUsers([]);
+    }
+  }
+
+  useEffect(() => { void load(); }, [libraryId]);
+  const availableUsers = users.filter((user) => !members.some((member) => member.userId === user.userId));
+
+  async function addMember(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedUserId) return;
+    setPending(true); setMessage(null);
+    try {
+      await addLibraryMember(libraryId, { userId: selectedUserId, role }, auth.csrfToken);
+      setSelectedUserId(''); setRole('member'); await load();
+    } catch (error) { setMessage(messageForError(error, 'Member could not be added.')); }
+    finally { setPending(false); }
+  }
+
+  async function changeRole(member: LibraryMember, nextRole: LibraryMember['role']) {
+    setPending(true); setMessage(null);
+    try { await updateLibraryMemberRole(libraryId, member.userId, { role: nextRole }, auth.csrfToken); await load(); }
+    catch (error) { setMessage(messageForError(error, 'Member role could not be changed.')); }
+    finally { setPending(false); }
+  }
+
+  async function remove(member: LibraryMember) {
+    setPending(true); setMessage(null);
+    try { await removeLibraryMember(libraryId, member.userId, auth.csrfToken); await load(); }
+    catch (error) { setMessage(messageForError(error, 'Member could not be removed.')); }
+    finally { setPending(false); }
+  }
+
+  return <section aria-label="Library members" className="grid gap-4 rounded-md border border-border p-4">
+    <div><h3 className="text-base font-semibold text-foreground">Members</h3><p className="text-sm text-muted-foreground">Owners and admins can manage access. A library must retain an owner.</p></div>
+    {message && <Alert>{message}</Alert>}
+    <form className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_auto]" onSubmit={addMember}>
+      <select aria-label="User to add" className="h-10 rounded-md border border-border bg-background px-3 text-sm" value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}>
+        <option value="">Select active user</option>{availableUsers.map((user) => <option key={user.userId} value={user.userId}>{user.username}</option>)}
+      </select>
+      <select aria-label="New member role" className="h-10 rounded-md border border-border bg-background px-3 text-sm" value={role} onChange={(event) => setRole(event.target.value as LibraryMember['role'])}>
+        <option value="member">Member</option><option value="admin">Admin</option><option value="owner">Owner</option>
+      </select>
+      <Button disabled={pending || !selectedUserId} type="submit"><Plus className="h-4 w-4" aria-hidden />Add member</Button>
+    </form>
+    <div className="overflow-x-auto rounded-md border border-border"><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>
+      {members.map((member) => <TableRow key={member.userId}><TableCell className="font-medium">{member.username}</TableCell><TableCell><select aria-label={`${member.username} role`} className="h-8 rounded border border-border bg-background px-2 text-sm" disabled={pending} value={member.role} onChange={(event) => void changeRole(member, event.target.value as LibraryMember['role'])}><option value="owner">Owner</option><option value="admin">Admin</option><option value="member">Member</option></select></TableCell><TableCell><Button disabled={pending} onClick={() => void remove(member)} size="sm" type="button" variant="ghost"><Trash2 className="h-4 w-4" aria-hidden />Remove</Button></TableCell></TableRow>)}
+    </TableBody></Table></div>
+  </section>;
 }
 
 function SourceStat({ label, value, warning = false }: { label: string; value: number; warning?: boolean }) {

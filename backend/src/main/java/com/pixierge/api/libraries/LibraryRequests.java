@@ -14,3 +14,9 @@ record AddExclusionPatternRequest(String pattern) {
 
 record RenameFolderRequest(String path, String name) {
 }
+
+record AddLibraryMemberRequest(java.util.UUID userId, String role) {
+}
+
+record ChangeLibraryMemberRoleRequest(String role) {
+}

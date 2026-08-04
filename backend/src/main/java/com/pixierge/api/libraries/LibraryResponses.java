@@ -37,3 +37,11 @@ record LibraryExclusionPatternResponse(
 
 record RenameFolderResponse(String path, String name) {
 }
+
+record LibraryMemberResponse(
+        UUID userId,
+        String username,
+        String role,
+        OffsetDateTime createdAt
+) {
+}

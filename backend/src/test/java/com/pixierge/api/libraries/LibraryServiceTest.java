@@ -1,5 +1,6 @@
 package com.pixierge.api.libraries;
 
+import com.pixierge.api.identity.AuthenticatedUser;
 import com.querydsl.sql.SQLQueryFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -39,6 +40,37 @@ class LibraryServiceTest {
         assertThat(response.name()).isEqualTo("Family Photos");
         assertThat(repository.createdLibraryName).isEqualTo("Family Photos");
         assertThat(repository.createdLibraryOwner).isEqualTo(creatorId);
+    }
+
+    @Test
+    void membershipManagersCanAddMembersAndLastOwnerIsProtected() {
+        StubLibraryRepository repository = new StubLibraryRepository();
+        UUID managerId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        repository.managementAccess = true;
+        repository.activeUser = true;
+        LibraryService service = new LibraryService(repository);
+        AuthenticatedUser manager = new AuthenticatedUser(managerId, "owner", Set.of(), Set.of(), "csrf");
+
+        LibraryMemberResponse added = service.addMember(LIBRARY_ID, new AddLibraryMemberRequest(memberId, "admin"), manager);
+
+        assertThat(added.role()).isEqualTo("admin");
+        assertThat(repository.members).extracting(LibraryRepository.LibraryMemberRecord::userId).contains(memberId);
+        repository.members = List.of(new LibraryRepository.LibraryMemberRecord(managerId, "owner", "owner", OffsetDateTime.now()));
+        assertThatThrownBy(() -> service.removeMember(LIBRARY_ID, managerId, manager))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
+    void membershipRequiresOwnerAdminOrGlobalLibraryAdmin() {
+        StubLibraryRepository repository = new StubLibraryRepository();
+        LibraryService service = new LibraryService(repository);
+        AuthenticatedUser member = new AuthenticatedUser(UUID.randomUUID(), "member", Set.of(), Set.of(), "csrf");
+
+        assertThatThrownBy(() -> service.listMembers(LIBRARY_ID, member))
+                .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                        assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
     }
 
     @Test
@@ -538,6 +570,9 @@ class LibraryServiceTest {
         private DataIntegrityViolationException addGlobalExclusionFailure;
         private DataIntegrityViolationException addRootFailure;
         private DataIntegrityViolationException addExclusionFailure;
+        private boolean managementAccess;
+        private boolean activeUser;
+        private List<LibraryMemberRecord> members = new java.util.ArrayList<>();
 
         private StubLibraryRepository() {
             super((SQLQueryFactory) null);
@@ -554,6 +589,33 @@ class LibraryServiceTest {
                 return Optional.of(library(List.of(root)));
             }
             return Optional.of(library(libraryRoots));
+        }
+
+        @Override
+        public boolean hasManagementAccess(UUID libraryId, UUID userId) {
+            return managementAccess;
+        }
+
+        @Override
+        public boolean activeUserExists(UUID userId) {
+            return activeUser;
+        }
+
+        @Override
+        public List<LibraryMemberRecord> listMembers(UUID libraryId) {
+            return List.copyOf(members);
+        }
+
+        @Override
+        public boolean addMember(UUID libraryId, UUID userId, String role) {
+            members = new java.util.ArrayList<>(members);
+            members.add(new LibraryMemberRecord(userId, "new-user", role, OffsetDateTime.now()));
+            return true;
+        }
+
+        @Override
+        public long ownerCount(UUID libraryId) {
+            return members.stream().filter(member -> "owner".equals(member.role())).count();
         }
 
         @Override

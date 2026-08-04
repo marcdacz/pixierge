@@ -25,8 +25,40 @@ public class LibraryController {
     }
 
     @GetMapping("/api/libraries")
-    List<LibraryResponse> listLibraries() {
-        return libraryService.listLibraries();
+    List<LibraryResponse> listLibraries(@AuthenticationPrincipal AuthenticatedUser user) {
+        return libraryService.listLibraries(user);
+    }
+
+    @GetMapping("/api/libraries/{libraryId}/members")
+    List<LibraryMemberResponse> listMembers(@PathVariable UUID libraryId, @AuthenticationPrincipal AuthenticatedUser user) {
+        return libraryService.listMembers(libraryId, user);
+    }
+
+    @GetMapping("/api/libraries/{libraryId}/members/candidates")
+    List<LibraryMemberResponse> listMemberCandidates(@PathVariable UUID libraryId,
+                                                      @AuthenticationPrincipal AuthenticatedUser user) {
+        return libraryService.listMemberCandidates(libraryId, user);
+    }
+
+    @PostMapping("/api/libraries/{libraryId}/members")
+    @ResponseStatus(HttpStatus.CREATED)
+    LibraryMemberResponse addMember(@PathVariable UUID libraryId, @RequestBody AddLibraryMemberRequest request,
+                                    @AuthenticationPrincipal AuthenticatedUser user) {
+        return libraryService.addMember(libraryId, request, user);
+    }
+
+    @PatchMapping("/api/libraries/{libraryId}/members/{userId}")
+    LibraryMemberResponse changeMemberRole(@PathVariable UUID libraryId, @PathVariable UUID userId,
+                                            @RequestBody ChangeLibraryMemberRoleRequest request,
+                                            @AuthenticationPrincipal AuthenticatedUser user) {
+        return libraryService.changeMemberRole(libraryId, userId, request, user);
+    }
+
+    @DeleteMapping("/api/libraries/{libraryId}/members/{userId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void removeMember(@PathVariable UUID libraryId, @PathVariable UUID userId,
+                      @AuthenticationPrincipal AuthenticatedUser user) {
+        libraryService.removeMember(libraryId, userId, user);
     }
 
     @PostMapping("/api/libraries")

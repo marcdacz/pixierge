@@ -1,5 +1,6 @@
 package com.pixierge.api.libraries;
 
+import com.pixierge.api.identity.AuthenticatedUser;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -13,6 +14,8 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+
+import static com.pixierge.api.libraries.LibraryConstants.PERMISSION_LIBRARY_ADMIN;
 
 @Service
 public class LibraryService {
@@ -29,10 +32,70 @@ public class LibraryService {
     }
 
     @Transactional(readOnly = true)
-    public List<LibraryResponse> listLibraries() {
+    public List<LibraryResponse> listLibraries(AuthenticatedUser user) {
         return libraryRepository.listLibraries().stream()
+                .filter(library -> canAdminLibraries(user) || ("active".equals(library.status())
+                        && libraryRepository.isMember(library.id(), user.id())))
                 .map(this::toResponse)
                 .toList();
+    }
+
+    // Kept for focused legacy service tests; HTTP callers always supply their authenticated user.
+    @Transactional(readOnly = true)
+    List<LibraryResponse> listLibraries() {
+        return libraryRepository.listLibraries().stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LibraryMemberResponse> listMembers(UUID libraryId, AuthenticatedUser user) {
+        requireMembershipManager(libraryId, user);
+        return libraryRepository.listMembers(libraryId).stream().map(this::toMemberResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LibraryMemberResponse> listMemberCandidates(UUID libraryId, AuthenticatedUser user) {
+        requireMembershipManager(libraryId, user);
+        return libraryRepository.listActiveUsers().stream().map(this::toMemberResponse).toList();
+    }
+
+    @Transactional
+    public LibraryMemberResponse addMember(UUID libraryId, AddLibraryMemberRequest request, AuthenticatedUser user) {
+        requireMembershipManager(libraryId, user);
+        if (request.userId() == null || !libraryRepository.activeUserExists(request.userId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Member must be an active user");
+        }
+        String role = validateMemberRole(request.role());
+        if (!libraryRepository.addMember(libraryId, request.userId(), role)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User is already a library member");
+        }
+        return libraryRepository.listMembers(libraryId).stream().filter(member -> member.userId().equals(request.userId()))
+                .findFirst().map(this::toMemberResponse)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Library member not found"));
+    }
+
+    @Transactional
+    public LibraryMemberResponse changeMemberRole(UUID libraryId, UUID userId, ChangeLibraryMemberRoleRequest request,
+                                                   AuthenticatedUser user) {
+        requireMembershipManager(libraryId, user);
+        LibraryRepository.LibraryMemberRecord member = libraryRepository.listMembers(libraryId).stream()
+                .filter(candidate -> candidate.userId().equals(userId)).findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Library member not found"));
+        String role = validateMemberRole(request.role());
+        requireOwnerRetained(libraryId, member.role(), role);
+        libraryRepository.updateMemberRole(libraryId, userId, role);
+        return libraryRepository.listMembers(libraryId).stream().filter(candidate -> candidate.userId().equals(userId))
+                .findFirst().map(this::toMemberResponse)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Library member not found"));
+    }
+
+    @Transactional
+    public void removeMember(UUID libraryId, UUID userId, AuthenticatedUser user) {
+        requireMembershipManager(libraryId, user);
+        LibraryRepository.LibraryMemberRecord member = libraryRepository.listMembers(libraryId).stream()
+                .filter(candidate -> candidate.userId().equals(userId)).findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Library member not found"));
+        requireOwnerRetained(libraryId, member.role(), null);
+        libraryRepository.removeMember(libraryId, userId);
     }
 
     @Transactional
@@ -227,6 +290,35 @@ public class LibraryService {
 
     private LibraryResponse findLibrary(UUID libraryId) {
         return toResponse(findLibraryRecord(libraryId));
+    }
+
+    private void requireMembershipManager(UUID libraryId, AuthenticatedUser user) {
+        findLibraryRecord(libraryId);
+        if (!canAdminLibraries(user) && !libraryRepository.hasManagementAccess(libraryId, user.id())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Library membership requires an owner or administrator");
+        }
+    }
+
+    private void requireOwnerRetained(UUID libraryId, String currentRole, String replacementRole) {
+        if ("owner".equals(currentRole) && !"owner".equals(replacementRole) && libraryRepository.ownerCount(libraryId) <= 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A library must retain at least one owner");
+        }
+    }
+
+    private String validateMemberRole(String rawRole) {
+        String role = rawRole == null ? "" : rawRole.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!List.of("owner", "admin", "member").contains(role)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Library member role must be owner, admin, or member");
+        }
+        return role;
+    }
+
+    private LibraryMemberResponse toMemberResponse(LibraryRepository.LibraryMemberRecord member) {
+        return new LibraryMemberResponse(member.userId(), member.username(), member.role(), member.createdAt());
+    }
+
+    private boolean canAdminLibraries(AuthenticatedUser user) {
+        return user.permissions().contains(PERMISSION_LIBRARY_ADMIN);
     }
 
     private LibraryRepository.LibraryRecord findLibraryRecord(UUID libraryId) {
