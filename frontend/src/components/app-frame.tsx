@@ -34,6 +34,7 @@ import { StructuredSearch } from '@/features/search/structured-search';
 
 type AppFrameProps = {
   auth: AuthResponse;
+  canOpenSettings?: boolean;
   children: ReactNode;
   contentMode?: 'constrained' | 'edge';
   currentView: AppView;
@@ -83,6 +84,7 @@ const shellHeaderColumns = {
 
 export function AppFrame({
   auth,
+  canOpenSettings = true,
   children,
   contentMode = 'constrained',
   currentView,
@@ -99,6 +101,7 @@ export function AppFrame({
   const [navExpanded, setNavExpanded] = useState(false);
   const [navAutoCollapsed, setNavAutoCollapsed] = useState(false);
   const effectiveNavExpanded = navExpanded && !navAutoCollapsed;
+  const utilityItems = canOpenSettings ? utilityNav : [];
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') {
@@ -128,6 +131,7 @@ export function AppFrame({
       >
         <TopBar
           auth={auth}
+          canOpenSettings={canOpenSettings}
           navExpanded={effectiveNavExpanded}
           onLibrarySearchChange={onLibrarySearchChange}
           onLibrarySearchQueryChange={onLibrarySearchQueryChange}
@@ -169,17 +173,19 @@ export function AppFrame({
 
             <div className="mt-auto grid gap-3">
               <Separator />
-              <nav aria-label="Utilities" className="grid gap-2">
-                {utilityNav.map((item) => (
-                  <NavItem
-                    active={currentView === item.view}
-                    expanded={effectiveNavExpanded}
-                    key={item.view}
-                    item={item}
-                    onSelect={() => onViewChange(item.view)}
-                  />
-                ))}
-              </nav>
+              {utilityItems.length > 0 && (
+                <nav aria-label="Utilities" className="grid gap-2">
+                  {utilityItems.map((item) => (
+                    <NavItem
+                      active={currentView === item.view}
+                      expanded={effectiveNavExpanded}
+                      key={item.view}
+                      item={item}
+                      onSelect={() => onViewChange(item.view)}
+                    />
+                  ))}
+                </nav>
+              )}
               <RailToggle expanded={effectiveNavExpanded} onToggle={() => setNavExpanded((expanded) => !expanded)} />
             </div>
           </aside>
@@ -202,6 +208,7 @@ export function AppFrame({
 
 function TopBar({
   auth,
+  canOpenSettings,
   navExpanded,
   onLibrarySearchChange,
   onLibrarySearchQueryChange,
@@ -212,6 +219,7 @@ function TopBar({
   showLibrarySearch
 }: {
   auth: AuthResponse;
+  canOpenSettings: boolean;
   navExpanded: boolean;
   onLibrarySearchChange: (value: string) => void;
   onLibrarySearchQueryChange: (value: string) => void;
@@ -246,22 +254,24 @@ function TopBar({
         />
       </div>
       <div className="flex items-center gap-2 px-4">
-        <ScanActivityButton onOpenSettings={onOpenSettings} />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label="Settings"
-              data-testid="app-shell-settings"
-              size="icon"
-              type="button"
-              variant="ghost"
-              onClick={onOpenSettings}
-            >
-              <Settings className="h-4 w-4" aria-hidden />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Settings</TooltipContent>
-        </Tooltip>
+        <ScanActivityButton canOpenSettings={canOpenSettings} onOpenSettings={onOpenSettings} />
+        {canOpenSettings && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label="Settings"
+                data-testid="app-shell-settings"
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={onOpenSettings}
+              >
+                <Settings className="h-4 w-4" aria-hidden />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Settings</TooltipContent>
+          </Tooltip>
+        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

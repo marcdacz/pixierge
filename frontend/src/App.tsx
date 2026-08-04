@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SearchX } from 'lucide-react';
 import { fetchLibraries, fetchSession, fetchSetupStatus, updateLibrary, type AuthResponse, type LibrarySummary } from '@/api';
 import { AppFrame } from '@/components/app-frame';
+import { Button } from '@/components/ui/button';
 import { ToastViewport, type ToastMessage } from '@/components/ui/toast';
 import { LoginForm, SetupForm } from '@/features/identity/identity-forms';
 import { LibraryHome } from '@/features/library/library-home';
@@ -55,6 +57,10 @@ function pushAppPath(view: AppView, settingsView: SettingsView = 'configuration'
   url.search = '';
   url.pathname = view === 'settings' ? `/settings/${settingsView}` : '/';
   window.history.pushState(window.history.state, '', url);
+}
+
+function canAccessAdminDashboard(auth: AuthResponse) {
+  return auth.user.roles.includes('ADMIN');
 }
 
 export function App() {
@@ -275,11 +281,15 @@ export function App() {
     );
   }
 
+  const canOpenSettings = canAccessAdminDashboard(appState.auth);
+  const settingsNotFound = currentView === 'settings' && !canOpenSettings;
+
   return (
     <>
       <ScanActivityProvider>
         <AppFrame
           auth={appState.auth}
+          canOpenSettings={canOpenSettings}
           contentMode={currentView === 'settings' || currentView === 'search' || currentView === 'libraries' || currentView === 'starred' || currentView === 'albums' || currentView === 'tags' ? 'edge' : 'constrained'}
           currentView={currentView}
           libraries={libraries}
@@ -292,7 +302,10 @@ export function App() {
           showLibrarySearch
           onViewChange={handleViewChange}
         >
-          {currentView === 'search' && (
+          {settingsNotFound && (
+            <NotFoundPage onBackToLibraries={() => handleViewChange('libraries')} />
+          )}
+          {!settingsNotFound && currentView === 'search' && (
             <SearchHome
               auth={appState.auth}
               libraries={libraries}
@@ -300,13 +313,13 @@ export function App() {
               query={activeSearchQuery}
             />
           )}
-          {currentView === 'libraries' && (
+          {!settingsNotFound && currentView === 'libraries' && (
             <LibraryHome
               error={librariesError}
               auth={appState.auth}
               libraries={libraries}
               loading={librariesLoading}
-              onConfigureSources={() => handleSettingsViewChange('configuration')}
+              onConfigureSources={canOpenSettings ? () => handleSettingsViewChange('configuration') : undefined}
               onError={showErrorToast}
               onRenameLibrary={async (libraryId, name) => {
                 const updated = await updateLibrary(libraryId, { name }, appState.auth.csrfToken);
@@ -314,10 +327,10 @@ export function App() {
               }}
             />
           )}
-          {currentView === 'starred' && <StarredHome auth={appState.auth} />}
-          {currentView === 'albums' && <AlbumsHome auth={appState.auth} />}
-          {currentView === 'tags' && <TagsHome auth={appState.auth} />}
-          {currentView === 'settings' && (
+          {!settingsNotFound && currentView === 'starred' && <StarredHome auth={appState.auth} />}
+          {!settingsNotFound && currentView === 'albums' && <AlbumsHome auth={appState.auth} />}
+          {!settingsNotFound && currentView === 'tags' && <TagsHome auth={appState.auth} />}
+          {!settingsNotFound && currentView === 'settings' && (
             <SettingsPage
               auth={appState.auth}
               currentView={currentSettingsView}
@@ -344,5 +357,32 @@ function AppLoading() {
         <h1 className="text-2xl font-semibold">Preparing workspace</h1>
       </div>
     </main>
+  );
+}
+
+function NotFoundPage({ onBackToLibraries }: { onBackToLibraries: () => void }) {
+  return (
+    <div className="grid h-full min-h-0 place-items-center px-4 py-8">
+      <section
+        aria-labelledby="not-found-title"
+        className="grid w-full max-w-lg justify-items-center gap-6 text-center"
+      >
+        <div className="grid h-16 w-16 place-items-center rounded-lg border border-border bg-surface text-muted-foreground">
+          <SearchX className="h-7 w-7" aria-hidden />
+        </div>
+        <div className="grid gap-2">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">404</p>
+          <h1 id="not-found-title" className="text-2xl font-semibold text-foreground">
+            Page not found
+          </h1>
+          <p className="text-sm leading-6 text-muted-foreground">
+            That page is not available here. Head back to your library and keep browsing.
+          </p>
+        </div>
+        <Button onClick={onBackToLibraries} type="button">
+          Back to libraries
+        </Button>
+      </section>
+    </div>
   );
 }

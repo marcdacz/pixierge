@@ -19,6 +19,16 @@ const authBody = {
   }
 };
 
+const nonAdminAuthBody = {
+  csrfToken: 'csrf-token',
+  user: {
+    id: 'user-2',
+    username: 'sam',
+    roles: ['USER'],
+    permissions: ['library:read']
+  }
+};
+
 const configuredLibraries = [
   {
     id: 'library-1',
@@ -418,6 +428,39 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
     expect(screen.getByLabelText('Library name')).toBeInTheDocument();
+  });
+
+  it('hides admin settings entry points for non-admins', async () => {
+    mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: nonAdminAuthBody },
+      { status: 200, body: [] }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Libraries' })).toBeInTheDocument();
+    expect(screen.queryByTestId('app-shell-settings')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Utilities' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Configure sources' })).not.toBeInTheDocument();
+  });
+
+  it('shows a not-found page for non-admins on direct settings routes', async () => {
+    window.history.replaceState(null, '', '/settings/background');
+    const fetchMock = mockFetch([
+      { status: 200, body: { required: false } },
+      { status: 200, body: nonAdminAuthBody },
+      { status: 200, body: configuredLibraries }
+    ]);
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
+    expect(screen.getByText('404')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to libraries' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/settings/background');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/admin/'))).toBe(false);
+    expect(screen.queryByRole('heading', { name: 'Settings' })).not.toBeInTheDocument();
   });
 
   it('shows background work health in settings', async () => {

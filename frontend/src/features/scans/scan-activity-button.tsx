@@ -16,6 +16,7 @@ import { ScanStatsGrid } from '@/features/scans/scan-stats-grid';
 import { cn } from '@/lib/utils';
 
 type ScanActivityButtonProps = {
+  canOpenSettings?: boolean;
   onOpenSettings: () => void;
 };
 
@@ -38,7 +39,7 @@ type ScanActivityView = {
   errors: ScanError[];
 };
 
-export function ScanActivityButton({ onOpenSettings }: ScanActivityButtonProps) {
+export function ScanActivityButton({ canOpenSettings = true, onOpenSettings }: ScanActivityButtonProps) {
   const { activeScans, trackedScan } = useScanActivity();
   const displayScans = useDisplayScans(activeScans, trackedScan);
 
@@ -60,16 +61,18 @@ export function ScanActivityButton({ onOpenSettings }: ScanActivityButtonProps) 
           <p className="text-sm font-medium text-foreground">Scan activity</p>
           <div className="flex items-center gap-1">
             {spinning && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />}
-            <Button
-              aria-label="Open scan settings"
-              className="h-8 w-8"
-              onClick={() => onOpenSettings()}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <Settings className="h-4 w-4" aria-hidden />
-            </Button>
+            {canOpenSettings && (
+              <Button
+                aria-label="Open scan settings"
+                className="h-8 w-8"
+                onClick={() => onOpenSettings()}
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <Settings className="h-4 w-4" aria-hidden />
+              </Button>
+            )}
           </div>
         </div>
         {displayScans.map((scan) => (
@@ -99,7 +102,7 @@ export function ScanActivityButton({ onOpenSettings }: ScanActivityButtonProps) 
                 ))}
                 {scan.errors.length > 3 && (
                   <span className="text-muted-foreground">
-                    +{scan.errors.length - 3} more in scan settings
+                    +{scan.errors.length - 3} more recorded for this scan
                   </span>
                 )}
               </div>
