@@ -10,6 +10,9 @@ import com.pixierge.api.db.QLibraries;
 import com.pixierge.api.db.QLibraryMembers;
 import com.pixierge.api.db.QLibraryRoots;
 import com.pixierge.api.db.QSearchDocuments;
+import com.pixierge.api.db.QAlbumMembers;
+import com.pixierge.api.db.QAssetLibraryState;
+import com.pixierge.api.db.QAlbumItemShareApprovals;
 import com.pixierge.api.db.QTags;
 import com.pixierge.api.albums.AlbumKind;
 import com.pixierge.api.search.SearchClause;
@@ -61,6 +64,9 @@ class AssetRepository {
     private static final QLibraryMembers LIBRARY_MEMBERS = QLibraryMembers.libraryMembers;
     private static final QLibraryRoots LIBRARY_ROOTS = QLibraryRoots.libraryRoots;
     private static final QSearchDocuments SEARCH_DOCUMENTS = QSearchDocuments.searchDocuments;
+    private static final QAlbumMembers ALBUM_MEMBERS = QAlbumMembers.albumMembers;
+    private static final QAssetLibraryState ASSET_LIBRARY_STATE = QAssetLibraryState.assetLibraryState;
+    private static final QAlbumItemShareApprovals ALBUM_APPROVALS = QAlbumItemShareApprovals.albumItemShareApprovals;
 
     private final SQLQueryFactory queryFactory;
     private final SearchProperties searchProperties;
@@ -216,15 +222,20 @@ class AssetRepository {
 
     BrowseRows browseAlbumAssets(UUID userId, boolean admin, UUID albumId, int page, int pageSize) {
         Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
+        BooleanExpression visibleInAlbum = albumVisibleWhere(userId, admin, albumId);
         queryFactory.select(ALBUM_ITEMS.assetId, ALBUM_ITEMS.sourceLibraryId)
                 .from(ALBUM_ITEMS)
+                .join(ALBUMS).on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
                 .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ALBUM_ITEMS.assetId)
                         .and(ASSET_FILES.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
                 .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
                 .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+                .leftJoin(ALBUM_MEMBERS).on(ALBUM_MEMBERS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_MEMBERS.userId.eq(userId)))
+                .leftJoin(ASSET_LIBRARY_STATE).on(ASSET_LIBRARY_STATE.assetId.eq(ALBUM_ITEMS.assetId).and(ASSET_LIBRARY_STATE.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
+                .leftJoin(ALBUM_APPROVALS).on(ALBUM_APPROVALS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_APPROVALS.assetId.eq(ALBUM_ITEMS.assetId)).and(ALBUM_APPROVALS.recipientUserId.eq(userId)))
                 .where(ALBUM_ITEMS.albumId.eq(albumId)
                         .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(readableWhere(userId, admin, null)))
+                        .and(visibleInAlbum))
                 .groupBy(ALBUM_ITEMS.assetId, ALBUM_ITEMS.sourceLibraryId, ALBUM_ITEMS.position)
                 .orderBy(ALBUM_ITEMS.position.asc())
                 .offset((long) page * pageSize)
@@ -233,15 +244,30 @@ class AssetRepository {
                 .forEach(row -> assetContexts.put(row.get(ALBUM_ITEMS.assetId), row.get(ALBUM_ITEMS.sourceLibraryId)));
         Long count = queryFactory.select(ALBUM_ITEMS.assetId.countDistinct())
                 .from(ALBUM_ITEMS)
+                .join(ALBUMS).on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
                 .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ALBUM_ITEMS.assetId)
                         .and(ASSET_FILES.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
                 .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
                 .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+                .leftJoin(ALBUM_MEMBERS).on(ALBUM_MEMBERS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_MEMBERS.userId.eq(userId)))
+                .leftJoin(ASSET_LIBRARY_STATE).on(ASSET_LIBRARY_STATE.assetId.eq(ALBUM_ITEMS.assetId).and(ASSET_LIBRARY_STATE.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
+                .leftJoin(ALBUM_APPROVALS).on(ALBUM_APPROVALS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_APPROVALS.assetId.eq(ALBUM_ITEMS.assetId)).and(ALBUM_APPROVALS.recipientUserId.eq(userId)))
                 .where(ALBUM_ITEMS.albumId.eq(albumId)
                         .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(readableWhere(userId, admin, null)))
+                        .and(visibleInAlbum))
                 .fetchOne();
-        return browseByIds(userId, admin, assetContexts, count);
+        // The preceding query is the album-specific authorization boundary.  Do not
+        // apply normal library membership again here: a recipient deliberately has
+        // no source-library membership.
+        return browseByIds(userId, true, assetContexts, count);
+    }
+
+    private BooleanExpression albumVisibleWhere(UUID userId, boolean admin, UUID albumId) {
+        BooleanExpression directLibraryAccess = admin ? com.querydsl.core.types.dsl.Expressions.TRUE.isTrue() : LIBRARY_MEMBERS.userId.eq(userId);
+        BooleanExpression isOwner = ALBUMS.ownerUserId.eq(userId);
+        BooleanExpression isMember = ALBUM_MEMBERS.userId.eq(userId);
+        BooleanExpression approvedOrPublic = ASSET_LIBRARY_STATE.privacy.isNull().or(ASSET_LIBRARY_STATE.privacy.ne("private")).or(ALBUM_APPROVALS.assetId.isNotNull());
+        return LIBRARIES.status.eq(STATUS_ACTIVE).and(isOwner.or(isMember.and(directLibraryAccess.or(approvedOrPublic))));
     }
 
     BrowseRows browseTagAssets(UUID userId, boolean admin, UUID tagId, int page, int pageSize) {

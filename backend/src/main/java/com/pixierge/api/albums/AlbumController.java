@@ -26,8 +26,8 @@ public class AlbumController {
     }
 
     @GetMapping("/api/albums")
-    List<AlbumSummaryResponse> list(@AuthenticationPrincipal AuthenticatedUser user) {
-        return albumService.list(user);
+    List<AlbumSummaryResponse> list(@AuthenticationPrincipal AuthenticatedUser user, @RequestParam(required = false) String scope) {
+        return albumService.list(user, scope);
     }
 
     @PostMapping("/api/albums")
@@ -84,4 +84,9 @@ public class AlbumController {
                      @AuthenticationPrincipal AuthenticatedUser user) {
         albumService.deleteItems(albumId, request, user);
     }
+
+    @GetMapping("/api/albums/{albumId}/members") List<AlbumRepository.AlbumMemberRecord> members(@PathVariable UUID albumId, @AuthenticationPrincipal AuthenticatedUser user) { return albumService.members(albumId, user); }
+    @GetMapping("/api/albums/{albumId}/members/candidates") List<AlbumRepository.AlbumMemberRecord> memberCandidates(@PathVariable UUID albumId, @AuthenticationPrincipal AuthenticatedUser user) { return albumService.memberCandidates(albumId, user); }
+    @PostMapping("/api/albums/{albumId}/members") AlbumRepository.AlbumMemberRecord addMember(@PathVariable UUID albumId, @RequestBody UpsertAlbumMemberRequest request, @AuthenticationPrincipal AuthenticatedUser user) { return albumService.addMember(albumId, request, user); }
+    @DeleteMapping("/api/albums/{albumId}/members/{userId}") @ResponseStatus(HttpStatus.NO_CONTENT) void removeMember(@PathVariable UUID albumId, @PathVariable UUID userId, @AuthenticationPrincipal AuthenticatedUser user) { albumService.removeMember(albumId, userId, user); }
 }

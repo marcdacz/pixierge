@@ -3,6 +3,8 @@ package com.pixierge.api.albums;
 import com.pixierge.api.db.QAlbumItems;
 import com.pixierge.api.db.QAlbums;
 import com.pixierge.api.db.QAssetFiles;
+import com.pixierge.api.db.QAlbumMembers;
+import com.pixierge.api.db.QUsers;
 import com.querydsl.core.QueryFlag;
 import com.querydsl.sql.SQLQueryFactory;
 import org.springframework.stereotype.Repository;
@@ -17,6 +19,8 @@ class AlbumRepository {
     private static final QAlbums ALBUMS = QAlbums.albums;
     private static final QAlbumItems ITEMS = QAlbumItems.albumItems;
     private static final QAssetFiles FILES = QAssetFiles.assetFiles;
+    private static final QAlbumMembers MEMBERS = QAlbumMembers.albumMembers;
+    private static final QUsers USERS = QUsers.users;
     private final SQLQueryFactory queryFactory;
 
     AlbumRepository(SQLQueryFactory queryFactory) {
@@ -32,6 +36,44 @@ class AlbumRepository {
                 .groupBy(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt, ALBUMS.updatedAt)
                 .orderBy(ALBUMS.updatedAt.desc(), ALBUMS.name.lower().asc()).fetch().stream().map(this::record).toList();
     }
+
+    List<AlbumRecord> listShared(UUID userId) {
+        return queryFactory.select(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt,
+                        ALBUMS.updatedAt, ITEMS.assetId.countDistinct(), ITEMS.sourceLibraryId.countDistinct(), FILES.fileName.min())
+                .from(ALBUMS).join(MEMBERS).on(MEMBERS.albumId.eq(ALBUMS.id).and(MEMBERS.userId.eq(userId)))
+                .leftJoin(ITEMS).on(ITEMS.albumId.eq(ALBUMS.id)).leftJoin(FILES).on(FILES.assetId.eq(ALBUMS.coverAssetId))
+                .where(ALBUMS.kind.eq(AlbumKind.USER)).groupBy(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt, ALBUMS.updatedAt)
+                .orderBy(ALBUMS.updatedAt.desc(), ALBUMS.name.lower().asc()).fetch().stream().map(this::record).toList();
+    }
+
+    boolean canView(UUID albumId, UUID userId) {
+        return queryFactory.selectOne().from(ALBUMS).leftJoin(MEMBERS).on(MEMBERS.albumId.eq(ALBUMS.id).and(MEMBERS.userId.eq(userId)))
+                .where(ALBUMS.id.eq(albumId).and(ALBUMS.ownerUserId.eq(userId).or(MEMBERS.userId.eq(userId)))).fetchFirst() != null;
+    }
+
+    boolean canEdit(UUID albumId, UUID userId) {
+        return queryFactory.selectOne().from(ALBUMS).leftJoin(MEMBERS).on(MEMBERS.albumId.eq(ALBUMS.id).and(MEMBERS.userId.eq(userId)))
+                .where(ALBUMS.id.eq(albumId).and(ALBUMS.ownerUserId.eq(userId).or(MEMBERS.memberRole.eq("editor")))).fetchFirst() != null;
+    }
+
+    boolean owns(UUID albumId, UUID userId) { return queryFactory.selectOne().from(ALBUMS).where(ALBUMS.id.eq(albumId).and(ALBUMS.ownerUserId.eq(userId))).fetchFirst() != null; }
+
+    List<AlbumMemberRecord> members(UUID albumId) {
+        return queryFactory.select(MEMBERS.userId, USERS.username, MEMBERS.memberRole, MEMBERS.createdAt).from(MEMBERS)
+                .join(USERS).on(USERS.id.eq(MEMBERS.userId)).where(MEMBERS.albumId.eq(albumId)).orderBy(USERS.username.asc()).fetch()
+                .stream().map(row -> new AlbumMemberRecord(row.get(MEMBERS.userId), row.get(USERS.username), row.get(MEMBERS.memberRole), row.get(MEMBERS.createdAt))).toList();
+    }
+
+    boolean activeUser(UUID userId) { return queryFactory.selectOne().from(USERS).where(USERS.id.eq(userId).and(USERS.status.eq("active"))).fetchFirst() != null; }
+    List<AlbumMemberRecord> activeUsersExcept(UUID userId) {
+        return queryFactory.select(USERS.id, USERS.username).from(USERS).where(USERS.status.eq("active").and(USERS.id.ne(userId))).orderBy(USERS.username.asc()).fetch()
+                .stream().map(row -> new AlbumMemberRecord(row.get(USERS.id), row.get(USERS.username), null, null)).toList();
+    }
+    void upsertMember(UUID albumId, UUID userId, String role) {
+        long updated = queryFactory.update(MEMBERS).set(MEMBERS.memberRole, role).where(MEMBERS.albumId.eq(albumId).and(MEMBERS.userId.eq(userId))).execute();
+        if (updated == 0) queryFactory.insert(MEMBERS).set(MEMBERS.albumId, albumId).set(MEMBERS.userId, userId).set(MEMBERS.memberRole, role).set(MEMBERS.createdAt, OffsetDateTime.now()).execute();
+    }
+    void removeMember(UUID albumId, UUID userId) { queryFactory.delete(MEMBERS).where(MEMBERS.albumId.eq(albumId).and(MEMBERS.userId.eq(userId))).execute(); }
 
     Optional<AlbumRecord> find(UUID albumId, UUID userId) {
         return queryFactory.select(ALBUMS.id, ALBUMS.name, ALBUMS.coverAssetId, ALBUMS.kind, ALBUMS.createdAt,
@@ -132,4 +174,5 @@ class AlbumRepository {
     record AlbumRecord(UUID id, String name, UUID coverAssetId, String coverFileName, String kind,
                        int itemCount, int sourceLibraryCount, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
     }
+    record AlbumMemberRecord(UUID userId, String username, String role, OffsetDateTime createdAt) {}
 }

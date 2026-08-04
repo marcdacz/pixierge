@@ -268,6 +268,7 @@ export type AlbumSummary = {
   createdAt: string;
   updatedAt: string;
 };
+export type AlbumMember = { userId: string; username: string; role: 'viewer' | 'editor'; createdAt: string };
 
 export type SchedulerJob = {
   id: string;
@@ -733,9 +734,15 @@ export async function fetchAsset(assetId: string): Promise<AssetDetail> {
   return requestJson<AssetDetail>(`/api/assets/${assetId}`);
 }
 
-export async function fetchAlbums(): Promise<AlbumSummary[]> {
-  return requestJson<AlbumSummary[]>('/api/albums');
+export async function fetchAlbums(scope?: 'mine' | 'shared'): Promise<AlbumSummary[]> {
+  return requestJson<AlbumSummary[]>(scope === 'shared' ? '/api/albums?scope=shared' : '/api/albums');
 }
+export async function fetchAlbumMembers(albumId: string): Promise<AlbumMember[]> { return requestJson<AlbumMember[]>(`/api/albums/${albumId}/members`); }
+export async function fetchAlbumMemberCandidates(albumId: string): Promise<Array<{ userId: string; username: string }>> { return requestJson<Array<{ userId: string; username: string }>>(`/api/albums/${albumId}/members/candidates`); }
+export async function addAlbumMember(albumId: string, input: { userId: string; role: 'viewer' | 'editor' }, csrfToken: string): Promise<AlbumMember> {
+  return requestJson<AlbumMember>(`/api/albums/${albumId}/members`, { method: 'POST', body: JSON.stringify(input), csrfToken });
+}
+export async function removeAlbumMember(albumId: string, userId: string, csrfToken: string): Promise<void> { await requestWithoutBody(`/api/albums/${albumId}/members/${userId}`, { method: 'DELETE', csrfToken }); }
 
 export async function createAlbum(input: { name: string }, csrfToken: string): Promise<AlbumSummary> {
   return requestJson<AlbumSummary>('/api/albums', { method: 'POST', body: JSON.stringify(input), csrfToken });

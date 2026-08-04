@@ -17,3 +17,12 @@ record AlbumAssetItemRequest(UUID assetId, UUID sourceLibraryId) {
 
 record DeleteAlbumItemsRequest(List<UUID> assetIds) {
 }
+
+record UpsertAlbumMemberRequest(UUID userId, String role) {
+}
+
+record SetAssetPrivacyRequest(UUID libraryId, List<UUID> assetIds, boolean privateItems) {
+}
+
+record ApprovePrivateItemsRequest(UUID recipientUserId, UUID sourceLibraryId, List<UUID> assetIds) {
+}

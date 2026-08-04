@@ -1,4 +1,4 @@
-import { Pencil, Plus, type LucideIcon } from 'lucide-react';
+import { Pencil, Plus, Share2, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { BrowseSidebar, BROWSE_LAYOUT_HEIGHT_CLASS } from '@/features/browse/browse-sidebar';
@@ -32,6 +32,7 @@ type OrganizerSidebarProps = {
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   isLowResolution: boolean;
+  onShare?: (rowId: string) => void;
 };
 
 const ROW_BASE_PADDING_REM = 0.5;
@@ -53,6 +54,7 @@ export function OrganizerSidebar({
   collapsed,
   onCollapsedChange,
   isLowResolution
+  , onShare
 }: OrganizerSidebarProps) {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -184,6 +186,11 @@ export function OrganizerSidebar({
                       variant="ghost"
                     >
                       <Pencil className="h-3 w-3" aria-hidden />
+                    </Button>
+                  )}
+                  {onShare && (
+                    <Button aria-label={`Share ${row.label}`} className="size-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 group-focus-within:opacity-100" onClick={(event) => { event.stopPropagation(); onShare(row.id); }} size="icon" type="button" variant="ghost">
+                      <Share2 className="h-3 w-3" aria-hidden />
                     </Button>
                   )}
                 </div>

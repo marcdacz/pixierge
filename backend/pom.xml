@@ -21,7 +21,9 @@
         <build-helper.version>3.6.0</build-helper.version>
         <java.version>21</java.version>
         <jacoco.version>0.8.13</jacoco.version>
+        <pmd.version>3.26.0</pmd.version>
         <querydsl.version>5.1.0</querydsl.version>
+        <spotless.version>2.44.3</spotless.version>
     </properties>
 
     <dependencies>
@@ -97,6 +99,21 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <java>
+                        <googleJavaFormat/>
+                    </java>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-pmd-plugin</artifactId>
+                <version>${pmd.version}</version>
             </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

@@ -26,8 +26,8 @@ public class AlbumService {
     }
 
     @Transactional(readOnly = true)
-    public List<AlbumSummaryResponse> list(AuthenticatedUser user) {
-        return albumRepository.list(user.id()).stream().map(this::response).toList();
+    public List<AlbumSummaryResponse> list(AuthenticatedUser user, String scope) {
+        return ("shared".equalsIgnoreCase(scope) ? albumRepository.listShared(user.id()) : albumRepository.list(user.id())).stream().map(this::response).toList();
     }
 
     @Transactional
@@ -43,7 +43,8 @@ public class AlbumService {
 
     @Transactional(readOnly = true)
     public AlbumSummaryResponse get(UUID id, AuthenticatedUser user) {
-        return albumRepository.find(id, user.id()).map(this::response).orElseThrow(this::notFound);
+        if (!albumRepository.canView(id, user.id())) throw notFound();
+        return albumRepository.find(id, user.id()).or(() -> albumRepository.listShared(user.id()).stream().filter(album -> album.id().equals(id)).findFirst()).map(this::response).orElseThrow(this::notFound);
     }
 
     @Transactional
@@ -69,6 +70,7 @@ public class AlbumService {
 
     @Transactional
     public AlbumSummaryResponse update(UUID id, UpdateAlbumRequest request, AuthenticatedUser user) {
+        if (!albumRepository.owns(id, user.id())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can update album details");
         AlbumRepository.AlbumRecord album = albumRepository.find(id, user.id()).orElseThrow(this::notFound);
         if (AlbumKind.STARRED.equals(album.kind()) && request.name() != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Starred cannot be renamed");
@@ -107,7 +109,7 @@ public class AlbumService {
 
     @Transactional(readOnly = true)
     public AssetBrowseResponse browseAssets(UUID id, AuthenticatedUser user, Integer page, Integer pageSize) {
-        get(id, user);
+        if (!albumRepository.canView(id, user.id())) throw notFound();
         return assetService.browseAlbumAssets(user, id, page, pageSize);
     }
 
@@ -117,13 +119,11 @@ public class AlbumService {
         if (albumIds.isEmpty() || request.items() == null || request.items().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Albums and items are required");
         }
-        if (!albumRepository.ownsAll(user.id(), albumIds)) {
-            throw notFound();
-        }
         for (AlbumAssetItemRequest item : request.items()) {
             assetService.requireReadableAssetInLibrary(user, item.assetId(), item.sourceLibraryId());
         }
         for (UUID albumId : albumIds) {
+            if (!albumRepository.canEdit(albumId, user.id())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Album is read-only");
             int position = albumRepository.nextPosition(albumId);
             for (AlbumAssetItemRequest item : request.items()) {
                 if (albumRepository.add(albumId, item.assetId(), item.sourceLibraryId(), position, user.id())) {
@@ -135,12 +135,39 @@ public class AlbumService {
 
     @Transactional
     public void deleteItems(UUID albumId, DeleteAlbumItemsRequest request, AuthenticatedUser user) {
-        get(albumId, user);
+        if (!albumRepository.canEdit(albumId, user.id())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Album is read-only");
         List<UUID> assetIds = distinct(request.assetIds());
         if (assetIds.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Assets are required");
         }
         albumRepository.deleteItems(albumId, assetIds);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AlbumRepository.AlbumMemberRecord> members(UUID id, AuthenticatedUser user) {
+        if (!albumRepository.owns(id, user.id())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can manage members");
+        return albumRepository.members(id);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AlbumRepository.AlbumMemberRecord> memberCandidates(UUID id, AuthenticatedUser user) {
+        if (!albumRepository.owns(id, user.id())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can manage members");
+        return albumRepository.activeUsersExcept(user.id());
+    }
+
+    @Transactional
+    public AlbumRepository.AlbumMemberRecord addMember(UUID id, UpsertAlbumMemberRequest request, AuthenticatedUser user) {
+        if (!albumRepository.owns(id, user.id())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can manage members");
+        if (request == null || request.userId() == null || !List.of("viewer", "editor").contains(request.role())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A viewer or editor is required");
+        if (request.userId().equals(user.id()) || !albumRepository.activeUser(request.userId())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Recipient must be another active user");
+        albumRepository.upsertMember(id, request.userId(), request.role());
+        return albumRepository.members(id).stream().filter(member -> member.userId().equals(request.userId())).findFirst().orElseThrow();
+    }
+
+    @Transactional
+    public void removeMember(UUID id, UUID memberId, AuthenticatedUser user) {
+        if (!albumRepository.owns(id, user.id())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can manage members");
+        albumRepository.removeMember(id, memberId);
     }
 
     private AlbumSummaryResponse response(AlbumRepository.AlbumRecord album) {
