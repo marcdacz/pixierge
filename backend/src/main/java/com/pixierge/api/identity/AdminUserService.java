@@ -1,6 +1,10 @@
 package com.pixierge.api.identity;
 
+import com.pixierge.api.catalog.CatalogChange;
+import com.pixierge.api.catalog.CatalogService;
+import com.pixierge.api.catalog.UserCatalogChanges;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -13,14 +17,25 @@ class AdminUserService {
   private final UserRepository userRepository;
   private final SessionRepository sessionRepository;
   private final PasswordEncoder passwordEncoder;
+  private final CatalogService catalogService;
+
+  @Autowired
+  AdminUserService(
+      UserRepository userRepository,
+      SessionRepository sessionRepository,
+      PasswordEncoder passwordEncoder,
+      CatalogService catalogService) {
+    this.userRepository = userRepository;
+    this.sessionRepository = sessionRepository;
+    this.passwordEncoder = passwordEncoder;
+    this.catalogService = catalogService;
+  }
 
   AdminUserService(
       UserRepository userRepository,
       SessionRepository sessionRepository,
       PasswordEncoder passwordEncoder) {
-    this.userRepository = userRepository;
-    this.sessionRepository = sessionRepository;
-    this.passwordEncoder = passwordEncoder;
+    this(userRepository, sessionRepository, passwordEncoder, null);
   }
 
   @Transactional
@@ -32,7 +47,9 @@ class AdminUserService {
     UUID userId =
         userRepository.createUser(input.username(), passwordEncoder.encode(input.password()));
     userRepository.assignRole(userId, IdentityConstants.ROLE_USER);
-    return userRepository.requireUserSummary(userId);
+    UserSummaryResponse created = userRepository.requireUserSummary(userId);
+    record(UserCatalogChanges.created(userId, created.username(), created.roles()), null);
+    return created;
   }
 
   @Transactional
@@ -58,7 +75,9 @@ class AdminUserService {
     if (!active) {
       sessionRepository.revokeAllForUser(userId);
     }
-    return userRepository.requireUserSummary(userId);
+    UserSummaryResponse updated = userRepository.requireUserSummary(userId);
+    record(UserCatalogChanges.statusChanged(userId, updated.status()), null);
+    return updated;
   }
 
   @Transactional
@@ -85,11 +104,18 @@ class AdminUserService {
     userRepository.transferOwnership(userId, replacementUserId);
     sessionRepository.revokeAllForUser(userId);
     userRepository.deleteUser(userId);
+    record(UserCatalogChanges.ownershipTransferred(userId, replacementUserId), actorId);
   }
 
   private UserRepository.UserRecord requireUser(UUID userId) {
     return userRepository
         .findUser(userId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+  }
+
+  private void record(CatalogChange change, UUID actorId) {
+    if (catalogService != null) {
+      catalogService.record(change, actorId);
+    }
   }
 }

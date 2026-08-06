@@ -598,7 +598,8 @@ export async function mockPixiergeApi(page: Page) {
     }
 
     if (path === '/api/albums' && request.method() === 'GET') {
-      await route.fulfill({ json: albums });
+      const scope = new URL(request.url()).searchParams.get('scope');
+      await route.fulfill({ json: scope === 'shared' ? [] : albums });
       return;
     }
 

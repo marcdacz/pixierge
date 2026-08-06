@@ -1,5 +1,8 @@
 package com.pixierge.api.scheduler;
 
+import static com.pixierge.api.scheduler.SchedulerConstants.CATALOG_EXPORT_CONCURRENCY_KEY;
+import static com.pixierge.api.scheduler.SchedulerConstants.CATALOG_EXPORT_CRON;
+import static com.pixierge.api.scheduler.SchedulerConstants.CATALOG_EXPORT_TIMEOUT_SECONDS;
 import static com.pixierge.api.scheduler.SchedulerConstants.DEFAULT_TIMEZONE;
 import static com.pixierge.api.scheduler.SchedulerConstants.FILE_ACTIVITY_RETENTION_CONCURRENCY_KEY;
 import static com.pixierge.api.scheduler.SchedulerConstants.FILE_ACTIVITY_RETENTION_CRON;
@@ -13,6 +16,7 @@ import static com.pixierge.api.scheduler.SchedulerConstants.METADATA_SCAN_TIMEOU
 
 import com.pixierge.api.assets.MetadataEnrichmentService;
 import com.pixierge.api.background.FileActivityService;
+import com.pixierge.api.catalog.CatalogService;
 import com.pixierge.api.libraries.LibraryRepository;
 import com.pixierge.api.scans.ScanService;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +29,7 @@ public class CoreSchedulerJobsConfig {
   public static final String LIBRARY_SCAN_JOB_KEY = "core.library-scan";
   public static final String METADATA_SCAN_JOB_KEY = "core.metadata-scan";
   public static final String FILE_ACTIVITY_RETENTION_JOB_KEY = "core.file-activity-retention";
+  public static final String CATALOG_EXPORT_JOB_KEY = "core.catalog-export";
 
   @Bean
   SchedulerJobDefinition libraryScanJobDefinition(
@@ -108,5 +113,22 @@ public class CoreSchedulerJobsConfig {
         job ->
             new SchedulerJobResult(
                 "{\"deletedCount\":" + fileActivityService.deleteExpired() + "}"));
+  }
+
+  @Bean
+  SchedulerJobDefinition catalogExportJobDefinition(CatalogService catalogService) {
+    return new SchedulerJobDefinition(
+        CATALOG_EXPORT_JOB_KEY,
+        "Catalog export",
+        "Creates a daily recovery catalog export with its checksum and history record.",
+        CATALOG_EXPORT_CRON,
+        DEFAULT_TIMEZONE,
+        true,
+        CATALOG_EXPORT_TIMEOUT_SECONDS,
+        CATALOG_EXPORT_CONCURRENCY_KEY,
+        job -> {
+          catalogService.exportNow();
+          return SchedulerJobResult.empty();
+        });
   }
 }

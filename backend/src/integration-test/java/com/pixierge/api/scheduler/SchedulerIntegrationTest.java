@@ -95,7 +95,10 @@ class SchedulerIntegrationTest {
         assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(listResponse.getBody()).isNotNull();
         assertThat(listResponse.getBody()).extracting(SchedulerJobResponse::jobKey)
-                .contains(CoreSchedulerJobsConfig.LIBRARY_SCAN_JOB_KEY, CoreSchedulerJobsConfig.METADATA_SCAN_JOB_KEY);
+                .contains(
+                        CoreSchedulerJobsConfig.LIBRARY_SCAN_JOB_KEY,
+                        CoreSchedulerJobsConfig.METADATA_SCAN_JOB_KEY,
+                        CoreSchedulerJobsConfig.CATALOG_EXPORT_JOB_KEY);
 
         SchedulerJobResponse metadataJob = listResponse.getBody().stream()
                 .filter(job -> CoreSchedulerJobsConfig.METADATA_SCAN_JOB_KEY.equals(job.jobKey()))

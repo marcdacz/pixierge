@@ -1,5 +1,7 @@
 package com.pixierge.api.identity;
 
+import com.pixierge.api.catalog.CatalogService;
+import com.pixierge.api.catalog.UserCatalogChanges;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -19,16 +21,19 @@ public class AuthService {
   private final SessionRepository sessionRepository;
   private final PasswordEncoder passwordEncoder;
   private final SessionTokenService sessionTokenService;
+  private final CatalogService catalogService;
 
   public AuthService(
       UserRepository userRepository,
       SessionRepository sessionRepository,
       PasswordEncoder passwordEncoder,
-      SessionTokenService sessionTokenService) {
+      SessionTokenService sessionTokenService,
+      CatalogService catalogService) {
     this.userRepository = userRepository;
     this.sessionRepository = sessionRepository;
     this.passwordEncoder = passwordEncoder;
     this.sessionTokenService = sessionTokenService;
+    this.catalogService = catalogService;
   }
 
   public boolean setupRequired() {
@@ -46,6 +51,10 @@ public class AuthService {
     UUID userId =
         userRepository.createUser(input.username(), passwordEncoder.encode(input.password()));
     userRepository.assignRole(userId, IdentityConstants.ROLE_ADMIN);
+    catalogService.record(
+        UserCatalogChanges.created(
+            userId, input.username(), java.util.List.of(IdentityConstants.ROLE_ADMIN)),
+        userId);
 
     return createSessionForUser(userId);
   }

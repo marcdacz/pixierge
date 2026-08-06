@@ -123,7 +123,11 @@ class LibraryFilesystemWatcherTest {
 
     try {
       watcher.start();
-      waitFor(() -> "degraded".equals(health.snapshot().status()));
+      waitFor(
+          () -> {
+            FilesystemWatcherHealthSnapshot snapshot = health.snapshot();
+            return "degraded".equals(snapshot.status()) && snapshot.registeredRootCount() == 1;
+          });
 
       FilesystemWatcherHealthSnapshot snapshot = health.snapshot();
       assertThat(snapshot.lastErrorCode()).isEqualTo("root_unavailable");

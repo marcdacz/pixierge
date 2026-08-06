@@ -76,6 +76,8 @@ class AssetRepository {
     this.searchProperties = searchProperties;
   }
 
+  record CatalogAssetReferenceRow(UUID sourceLibraryId, String confirmedContentHash) {}
+
   List<LibraryRootRow> listLibraryRoots(UUID userId, boolean admin, UUID libraryId) {
     BooleanBuilder where = readableWhere(userId, admin, libraryId);
 
@@ -240,6 +242,27 @@ class AssetRepository {
                     .and(readableWhere(userId, admin, null)))
             .fetchFirst();
     return result != null;
+  }
+
+  Optional<CatalogAssetReferenceRow> confirmedCatalogReference(UUID assetId, UUID libraryId) {
+    Tuple row =
+        queryFactory
+            .select(ASSET_FILES.libraryId, ASSETS.contentHash)
+            .from(ASSET_FILES)
+            .join(ASSETS)
+            .on(ASSETS.id.eq(ASSET_FILES.assetId))
+            .where(
+                ASSET_FILES.assetId.eq(assetId),
+                ASSET_FILES.libraryId.eq(libraryId),
+                ASSET_FILES.status.eq(FILE_STATUS_ACTIVE),
+                ASSETS.contentHash.isNotNull(),
+                ASSETS.contentHash.startsWith("provisional:").not())
+            .fetchOne();
+    return row == null
+        ? Optional.empty()
+        : Optional.of(
+            new CatalogAssetReferenceRow(
+                row.get(ASSET_FILES.libraryId), row.get(ASSETS.contentHash)));
   }
 
   Set<UUID> starredAssetIds(UUID userId, Collection<UUID> assetIds) {

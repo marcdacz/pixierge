@@ -23,7 +23,7 @@ build:
 	npm --prefix frontend run build
 
 run:
-	docker compose up --build
+	docker compose -f docker-compose.yml -f docker-compose.local-test.yml up --build
 
 stop:
 	docker compose down

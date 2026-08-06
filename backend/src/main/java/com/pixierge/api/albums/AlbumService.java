@@ -2,11 +2,16 @@ package com.pixierge.api.albums;
 
 import com.pixierge.api.assets.AssetBrowseResponse;
 import com.pixierge.api.assets.AssetService;
+import com.pixierge.api.catalog.AlbumCatalogChanges;
+import com.pixierge.api.catalog.CatalogAssetReference;
+import com.pixierge.api.catalog.CatalogChange;
+import com.pixierge.api.catalog.CatalogService;
 import com.pixierge.api.identity.AuthenticatedUser;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,10 +23,19 @@ public class AlbumService {
   private static final int MAX_NAME_LENGTH = 80;
   private final AlbumRepository albumRepository;
   private final AssetService assetService;
+  private final CatalogService catalogService;
 
+  // Kept for focused legacy service tests.
   public AlbumService(AlbumRepository albumRepository, AssetService assetService) {
+    this(albumRepository, assetService, null);
+  }
+
+  @Autowired
+  public AlbumService(
+      AlbumRepository albumRepository, AssetService assetService, CatalogService catalogService) {
     this.albumRepository = albumRepository;
     this.assetService = assetService;
+    this.catalogService = catalogService;
   }
 
   @Transactional(readOnly = true)
@@ -37,7 +51,9 @@ public class AlbumService {
     String name = validateName(request.name());
     rejectReservedStarredName(name);
     try {
-      return get(albumRepository.create(user.id(), name), user);
+      AlbumSummaryResponse response = get(albumRepository.create(user.id(), name), user);
+      record(AlbumCatalogChanges.changed(response.id(), "created", name), user.id());
+      return response;
     } catch (DataIntegrityViolationException exception) {
       throw duplicate(exception);
     }
@@ -108,7 +124,11 @@ public class AlbumService {
       if (!albumRepository.update(id, user.id(), name, request.coverAssetId())) {
         throw notFound();
       }
-      return get(id, user);
+      AlbumSummaryResponse response = get(id, user);
+      if (name != null) {
+        record(AlbumCatalogChanges.changed(id, "renamed", name), user.id());
+      }
+      return response;
     } catch (DataIntegrityViolationException exception) {
       throw duplicate(exception);
     }
@@ -124,6 +144,7 @@ public class AlbumService {
     if (!albumRepository.delete(id, user.id())) {
       throw notFound();
     }
+    record(AlbumCatalogChanges.changed(id, "deleted", null), user.id());
   }
 
   @Transactional(readOnly = true)
@@ -142,6 +163,15 @@ public class AlbumService {
     for (AlbumAssetItemRequest item : request.items()) {
       assetService.requireReadableAssetInLibrary(user, item.assetId(), item.sourceLibraryId());
     }
+    List<CatalogAssetReference> references =
+        catalogService == null
+            ? List.of()
+            : request.items().stream()
+                .map(
+                    item ->
+                        assetService.requireConfirmedCatalogReference(
+                            item.assetId(), item.sourceLibraryId()))
+                .toList();
     for (UUID albumId : albumIds) {
       if (!albumRepository.canEdit(albumId, user.id()))
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Album is read-only");
@@ -151,6 +181,9 @@ public class AlbumService {
             albumId, item.assetId(), item.sourceLibraryId(), position, user.id())) {
           position++;
         }
+      }
+      if (catalogService != null) {
+        record(AlbumCatalogChanges.itemsAdded(albumId, references), user.id());
       }
     }
   }
@@ -193,6 +226,10 @@ public class AlbumService {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "Recipient must be another active user");
     albumRepository.upsertMember(id, request.userId(), request.role());
+    record(
+        AlbumCatalogChanges.changed(
+            id, "member_upserted", new MemberValue(request.userId(), request.role())),
+        user.id());
     return albumRepository.members(id).stream()
         .filter(member -> member.userId().equals(request.userId()))
         .findFirst()
@@ -204,6 +241,7 @@ public class AlbumService {
     if (!albumRepository.owns(id, user.id()))
       throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can manage members");
     albumRepository.removeMember(id, memberId);
+    record(AlbumCatalogChanges.changed(id, "member_removed", memberId), user.id());
   }
 
   private AlbumSummaryResponse response(AlbumRepository.AlbumRecord album) {
@@ -254,5 +292,13 @@ public class AlbumService {
 
   private ResponseStatusException notFound() {
     return new ResponseStatusException(HttpStatus.NOT_FOUND, "Album not found");
+  }
+
+  private record MemberValue(UUID userId, String role) {}
+
+  private void record(CatalogChange change, UUID actorId) {
+    if (catalogService != null) {
+      catalogService.record(change, actorId);
+    }
   }
 }

@@ -5,7 +5,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @ConfigurationProperties(prefix = "pixierge.storage")
-class StorageProperties {
+public class StorageProperties {
 
   private String root = "/var/lib/pixierge";
 

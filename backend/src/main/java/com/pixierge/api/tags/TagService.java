@@ -2,11 +2,16 @@ package com.pixierge.api.tags;
 
 import com.pixierge.api.assets.AssetBrowseResponse;
 import com.pixierge.api.assets.AssetService;
+import com.pixierge.api.catalog.CatalogAssetReference;
+import com.pixierge.api.catalog.CatalogChange;
+import com.pixierge.api.catalog.CatalogService;
+import com.pixierge.api.catalog.TagCatalogChanges;
 import com.pixierge.api.identity.AuthenticatedUser;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,10 +24,19 @@ public class TagService {
   private static final int MAX_NAME_LENGTH = 80;
   private final TagRepository tagRepository;
   private final AssetService assetService;
+  private final CatalogService catalogService;
 
+  // Kept for focused legacy service tests.
   public TagService(TagRepository tagRepository, AssetService assetService) {
+    this(tagRepository, assetService, null);
+  }
+
+  @Autowired
+  public TagService(
+      TagRepository tagRepository, AssetService assetService, CatalogService catalogService) {
     this.tagRepository = tagRepository;
     this.assetService = assetService;
+    this.catalogService = catalogService;
   }
 
   @Transactional(readOnly = true)
@@ -34,7 +48,10 @@ public class TagService {
   public TagResponse create(CreateTagRequest request, AuthenticatedUser user) {
     String name = validate(request.name());
     try {
-      return get(tagRepository.create(user.id(), name, name.toLowerCase(Locale.ROOT)), user);
+      TagResponse response =
+          get(tagRepository.create(user.id(), name, name.toLowerCase(Locale.ROOT)), user);
+      record(TagCatalogChanges.changed(response.id(), "created", name), user.id());
+      return response;
     } catch (DataIntegrityViolationException exception) {
       throw duplicate(exception);
     }
@@ -47,7 +64,9 @@ public class TagService {
       if (!tagRepository.rename(tagId, user.id(), name, name.toLowerCase(Locale.ROOT))) {
         throw notFound();
       }
-      return get(tagId, user);
+      TagResponse response = get(tagId, user);
+      record(TagCatalogChanges.changed(tagId, "renamed", name), user.id());
+      return response;
     } catch (DataIntegrityViolationException exception) {
       throw duplicate(exception);
     }
@@ -58,6 +77,7 @@ public class TagService {
     if (!tagRepository.delete(tagId, user.id())) {
       throw notFound();
     }
+    record(TagCatalogChanges.changed(tagId, "deleted", null), user.id());
   }
 
   @Transactional(readOnly = true)
@@ -79,6 +99,15 @@ public class TagService {
     for (AssetItemRequest item : request.items()) {
       assetService.requireReadableAssetInLibrary(user, item.assetId(), item.sourceLibraryId());
     }
+    List<CatalogAssetReference> references =
+        catalogService == null
+            ? List.of()
+            : request.items().stream()
+                .map(
+                    item ->
+                        assetService.requireConfirmedCatalogReference(
+                            item.assetId(), item.sourceLibraryId()))
+                .toList();
     for (UUID tagId : tagIds) {
       for (AssetItemRequest item : request.items()) {
         try {
@@ -88,6 +117,9 @@ public class TagService {
             throw exception;
           }
         }
+      }
+      if (catalogService != null) {
+        record(TagCatalogChanges.assignmentsAdded(tagId, references), user.id());
       }
     }
   }
@@ -142,5 +174,11 @@ public class TagService {
 
   private ResponseStatusException notFound() {
     return new ResponseStatusException(HttpStatus.NOT_FOUND, "Tag not found");
+  }
+
+  private void record(CatalogChange change, UUID actorId) {
+    if (catalogService != null) {
+      catalogService.record(change, actorId);
+    }
   }
 }

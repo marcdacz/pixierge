@@ -298,6 +298,26 @@ export type SchedulerJobRun = {
   errorMessage: string | null;
 };
 
+export type CatalogStatus = {
+  status: 'current' | 'lagging' | 'degraded';
+  latestSequence: number;
+  exportedThroughSequence: number;
+  pendingEventCount: number;
+  failureDetail: string | null;
+};
+
+export type CatalogSnapshot = {
+  id: string;
+  createdAt: string;
+  throughSequence: number;
+  byteSize: number;
+  checksum: string;
+  status: 'completed' | 'failed';
+  failureDetail: string | null;
+};
+
+export type CatalogHistory = { items: CatalogSnapshot[]; page: number; pageSize: number; hasNext: boolean };
+
 export type BackgroundJobStatusSummary = {
   jobType: string;
   status: string;
@@ -821,6 +841,18 @@ export async function removeAlbumItems(albumId: string, assetIds: string[], csrf
 
 export async function fetchStarred(): Promise<AlbumSummary> {
   return requestJson<AlbumSummary>('/api/starred');
+}
+
+export async function fetchCatalogStatus(): Promise<CatalogStatus> {
+  return requestJson<CatalogStatus>('/api/admin/catalog/status');
+}
+
+export async function fetchCatalogHistory(page = 0, pageSize = 10): Promise<CatalogHistory> {
+  return requestJson<CatalogHistory>(`/api/admin/catalog/history?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function exportCatalog(csrfToken: string): Promise<CatalogSnapshot> {
+  return requestJson<CatalogSnapshot>('/api/admin/catalog/export', { method: 'POST', csrfToken });
 }
 
 export async function fetchSchedulerJobs(): Promise<SchedulerJob[]> {

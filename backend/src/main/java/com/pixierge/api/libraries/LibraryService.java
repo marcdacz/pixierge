@@ -2,6 +2,9 @@ package com.pixierge.api.libraries;
 
 import static com.pixierge.api.libraries.LibraryConstants.PERMISSION_LIBRARY_ADMIN;
 
+import com.pixierge.api.catalog.CatalogChange;
+import com.pixierge.api.catalog.CatalogService;
+import com.pixierge.api.catalog.LibraryCatalogChanges;
 import com.pixierge.api.identity.AuthenticatedUser;
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
@@ -10,6 +13,7 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,9 +29,17 @@ public class LibraryService {
   private static final int MAX_EXCLUSION_PATTERN_LENGTH = 256;
 
   private final LibraryRepository libraryRepository;
+  private final CatalogService catalogService;
 
+  // Kept for focused legacy service tests.
   public LibraryService(LibraryRepository libraryRepository) {
+    this(libraryRepository, null);
+  }
+
+  @Autowired
+  public LibraryService(LibraryRepository libraryRepository, CatalogService catalogService) {
     this.libraryRepository = libraryRepository;
+    this.catalogService = catalogService;
   }
 
   @Transactional(readOnly = true)
@@ -72,6 +84,10 @@ public class LibraryService {
     if (!libraryRepository.addMember(libraryId, request.userId(), role)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "User is already a library member");
     }
+    record(
+        LibraryCatalogChanges.changed(
+            libraryId, "member_added", new MemberValue(request.userId(), role)),
+        user.id());
     return libraryRepository.listMembers(libraryId).stream()
         .filter(member -> member.userId().equals(request.userId()))
         .findFirst()
@@ -94,6 +110,10 @@ public class LibraryService {
     String role = validateMemberRole(request.role());
     requireOwnerRetained(libraryId, member.role(), role);
     libraryRepository.updateMemberRole(libraryId, userId, role);
+    record(
+        LibraryCatalogChanges.changed(
+            libraryId, "member_role_changed", new MemberValue(userId, role)),
+        user.id());
     return libraryRepository.listMembers(libraryId).stream()
         .filter(candidate -> candidate.userId().equals(userId))
         .findFirst()
@@ -114,6 +134,7 @@ public class LibraryService {
                     new ResponseStatusException(HttpStatus.NOT_FOUND, "Library member not found"));
     requireOwnerRetained(libraryId, member.role(), null);
     libraryRepository.removeMember(libraryId, userId);
+    record(LibraryCatalogChanges.changed(libraryId, "member_removed", userId), user.id());
   }
 
   @Transactional
@@ -134,7 +155,11 @@ public class LibraryService {
       throw exception;
     }
 
-    return findLibrary(libraryId);
+    LibraryResponse response = findLibrary(libraryId);
+    record(
+        LibraryCatalogChanges.changed(libraryId, "created", new LibraryValue(name, creatorId)),
+        creatorId);
+    return response;
   }
 
   @Transactional
@@ -157,7 +182,9 @@ public class LibraryService {
       throw exception;
     }
 
-    return findLibrary(libraryId);
+    LibraryResponse response = findLibrary(libraryId);
+    record(LibraryCatalogChanges.changed(libraryId, "renamed", name), null);
+    return response;
   }
 
   @Transactional(readOnly = true)
@@ -223,15 +250,25 @@ public class LibraryService {
       throw exception;
     }
 
-    return findLibrary(libraryId);
+    LibraryResponse response = findLibrary(libraryId);
+    record(
+        LibraryCatalogChanges.changed(libraryId, "root_added", sourcePath.normalizedPath()), null);
+    return response;
   }
 
   @Transactional
   public void deleteRoot(UUID libraryId, UUID rootId) {
-    findLibraryRecord(libraryId);
+    LibraryRepository.LibraryRecord library = findLibraryRecord(libraryId);
+    String path =
+        library.roots().stream()
+            .filter(root -> root.id().equals(rootId))
+            .map(LibraryRepository.LibraryRootRecord::normalizedPath)
+            .findFirst()
+            .orElse(null);
     if (!libraryRepository.deleteRoot(libraryId, rootId)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Source path not found");
     }
+    record(LibraryCatalogChanges.changed(libraryId, "root_removed", path), null);
   }
 
   @Transactional
@@ -310,14 +347,18 @@ public class LibraryService {
   public LibraryResponse archiveLibrary(UUID libraryId) {
     findLibraryRecord(libraryId);
     libraryRepository.archiveLibrary(libraryId);
-    return findLibrary(libraryId);
+    LibraryResponse response = findLibrary(libraryId);
+    record(LibraryCatalogChanges.changed(libraryId, "status_changed", "archived"), null);
+    return response;
   }
 
   @Transactional
   public LibraryResponse restoreLibrary(UUID libraryId) {
     findLibraryRecord(libraryId);
     libraryRepository.restoreLibrary(libraryId);
-    return findLibrary(libraryId);
+    LibraryResponse response = findLibrary(libraryId);
+    record(LibraryCatalogChanges.changed(libraryId, "status_changed", "active"), null);
+    return response;
   }
 
   private LibraryResponse findLibrary(UUID libraryId) {
@@ -410,7 +451,9 @@ public class LibraryService {
       throw exception;
     }
 
-    return findLibrary(libraryId);
+    LibraryResponse response = findLibrary(libraryId);
+    record(LibraryCatalogChanges.changed(libraryId, "exclusion_added", pattern), null);
+    return response;
   }
 
   @Transactional
@@ -419,6 +462,7 @@ public class LibraryService {
     if (!libraryRepository.deleteExclusionPattern(libraryId, patternId)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Exclusion pattern not found");
     }
+    record(LibraryCatalogChanges.changed(libraryId, "exclusion_removed", patternId), null);
   }
 
   private LibraryExclusionPatternResponse toExclusionPatternResponse(
@@ -578,6 +622,16 @@ public class LibraryService {
   }
 
   private record SourcePath(String path, String normalizedPath) {}
+
+  private record MemberValue(UUID userId, String role) {}
+
+  private record LibraryValue(String name, UUID creatorUserId) {}
+
+  private void record(CatalogChange change, UUID actorId) {
+    if (catalogService != null) {
+      catalogService.record(change, actorId);
+    }
+  }
 
   private record SourceHealth(boolean available, String unavailableReason) {}
 }

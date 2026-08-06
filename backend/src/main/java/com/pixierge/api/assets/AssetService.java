@@ -7,6 +7,7 @@ import static com.pixierge.api.assets.AssetConstants.IMAGE_MIME_PREFIX;
 import static com.pixierge.api.assets.AssetConstants.MAX_PAGE_SIZE;
 import static com.pixierge.api.libraries.LibraryConstants.PERMISSION_LIBRARY_ADMIN;
 
+import com.pixierge.api.catalog.CatalogAssetReference;
 import com.pixierge.api.identity.AuthenticatedUser;
 import com.pixierge.api.search.SearchParser;
 import com.pixierge.api.tags.TagRepository;
@@ -203,6 +204,18 @@ public class AssetService {
   @Transactional(readOnly = true)
   public boolean canReadAsset(AuthenticatedUser user, UUID assetId) {
     return assetRepository.canReadAsset(user.id(), canAdminLibraries(user), assetId);
+  }
+
+  @Transactional(readOnly = true)
+  public CatalogAssetReference requireConfirmedCatalogReference(UUID assetId, UUID libraryId) {
+    return assetRepository
+        .confirmedCatalogReference(assetId, libraryId)
+        .map(row -> new CatalogAssetReference(row.sourceLibraryId(), row.confirmedContentHash()))
+        .orElseThrow(
+            () ->
+                new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Asset identity is not confirmed yet; rescan completion is required before saving recovery intent"));
   }
 
   private AssetBrowseResponse toBrowseResponse(

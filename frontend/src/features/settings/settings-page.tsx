@@ -63,6 +63,7 @@ import {
 import { ScanStatsGrid } from '@/features/scans/scan-stats-grid';
 import { BackgroundWorkHealthPanel } from '@/features/settings/background-work-panel';
 import { SchedulerDetails } from '@/features/settings/scheduler-details';
+import { CatalogExportPanel } from '@/features/settings/catalog-export-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -113,7 +114,7 @@ const settingsItems: SettingsItem[] = [
     view: 'plugins'
   },
   {
-    description: 'Backup health, schedules, and restore checks will live here.',
+    description: 'Review catalog export health and recovery artifacts.',
     icon: Archive,
     label: 'Backups',
     view: 'backups'
@@ -302,6 +303,8 @@ function SettingsContent({
         <SchedulerDetails auth={auth} onError={onError} />
       ) : item.view === 'background' ? (
         <BackgroundWorkHealthPanel auth={auth} onError={onError} />
+      ) : item.view === 'backups' ? (
+        <CatalogExportPanel auth={auth} onError={onError} />
       ) : (
         <EmptySettingsPage label={item.label} />
       )}
