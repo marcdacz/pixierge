@@ -133,7 +133,6 @@ class LibraryFilesystemWatcher implements DisposableBean {
   private boolean registerTree(UUID libraryId, UUID rootId, Path rootPath) {
     if (!Files.isDirectory(rootPath) || !Files.isReadable(rootPath)) {
       watcherHealth.recordDegraded("root_unavailable", "Source root is unavailable: " + rootPath);
-      enqueueChange(libraryId, rootId, rootPath, "root_unavailable");
       return false;
     }
     try (var paths = Files.walk(rootPath)) {

@@ -132,16 +132,7 @@ class LibraryFilesystemWatcherTest {
       FilesystemWatcherHealthSnapshot snapshot = health.snapshot();
       assertThat(snapshot.lastErrorCode()).isEqualTo("root_unavailable");
       assertThat(snapshot.registeredRootCount()).isEqualTo(1);
-      assertThat(backgroundJobService.enqueuedJobs)
-          .singleElement()
-          .satisfies(
-              job -> assertThat(job.dedupeKey()).contains(ScanJobTypes.FILESYSTEM_CHANGE_EVENT));
-      FilesystemChangeJobPayload payload =
-          objectMapper.readValue(
-              backgroundJobService.enqueuedJobs.getFirst().payloadJson(),
-              FilesystemChangeJobPayload.class);
-      assertThat(payload.path()).isEqualTo(missingRoot.toString());
-      assertThat(payload.eventType()).isEqualTo("root_unavailable");
+      assertThat(backgroundJobService.enqueuedJobs).isEmpty();
     } finally {
       watcher.destroy();
     }

@@ -1,9 +1,12 @@
 package com.pixierge.api.filesystem;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pixierge.api.background.BackgroundJobDeferredException;
 import com.pixierge.api.background.BackgroundJobRecord;
+import com.pixierge.api.scans.ScanService;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,25 @@ class FilesystemChangeJobHandlerTest {
     assertThat(scanEnqueuer.libraryId).isEqualTo(libraryId);
     assertThat(scanEnqueuer.rootId).isEqualTo(rootId);
     assertThat(scanEnqueuer.path).isEqualTo(path);
+  }
+
+  @Test
+  void defersWhenTheLibraryAlreadyHasAnActiveScan() throws Exception {
+    UUID libraryId = UUID.randomUUID();
+    FilesystemChangeJobHandler handler =
+        new FilesystemChangeJobHandler(
+            (ignoredLibraryId, ignoredRootId, ignoredPath) -> {
+              throw new ScanService.ScanAlreadyActiveException(libraryId);
+            },
+            objectMapper);
+    String payload =
+        objectMapper.writeValueAsString(
+            new FilesystemChangeJobPayload(
+                libraryId, UUID.randomUUID(), "/photos/incoming", "file_created"));
+
+    assertThatThrownBy(() -> handler.handle(job(payload)))
+        .isInstanceOf(BackgroundJobDeferredException.class)
+        .hasMessageContaining("A scan is already running for library " + libraryId);
   }
 
   private BackgroundJobRecord job(String payload) {

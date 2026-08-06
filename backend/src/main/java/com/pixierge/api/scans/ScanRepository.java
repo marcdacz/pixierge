@@ -2,12 +2,15 @@ package com.pixierge.api.scans;
 
 import com.pixierge.api.db.QAssetFiles;
 import com.pixierge.api.db.QAssets;
+import com.pixierge.api.db.QBackgroundJobs;
 import com.pixierge.api.db.QFileActivityEvents;
 import com.pixierge.api.db.QLibraries;
 import com.pixierge.api.db.QLibraryRoots;
 import com.pixierge.api.db.QScanErrors;
 import com.pixierge.api.db.QScanRuns;
 import com.querydsl.core.Tuple;
+import com.querydsl.core.types.dsl.Expressions;
+import com.querydsl.sql.SQLExpressions;
 import com.querydsl.sql.SQLQuery;
 import com.querydsl.sql.SQLQueryFactory;
 import java.time.OffsetDateTime;
@@ -22,6 +25,7 @@ class ScanRepository {
 
   private static final QAssets ASSETS = QAssets.assets;
   private static final QAssetFiles ASSET_FILES = QAssetFiles.assetFiles;
+  private static final QBackgroundJobs BACKGROUND_JOBS = QBackgroundJobs.backgroundJobs;
   private static final QFileActivityEvents FILE_ACTIVITY_EVENTS =
       QFileActivityEvents.fileActivityEvents;
   private static final QScanRuns SCAN_RUNS = QScanRuns.scanRuns;
@@ -57,6 +61,39 @@ class ScanRepository {
             .where(SCAN_RUNS.libraryId.eq(libraryId).and(SCAN_RUNS.status.in("queued", "running")))
             .fetchFirst();
     return exists != null;
+  }
+
+  int failOrphanedQueuedScanRuns(OffsetDateTime now) {
+    var catalogJobForScan =
+        BACKGROUND_JOBS
+            .dedupeKey
+            .eq(
+                Expressions.stringTemplate(
+                    "concat({0}, cast({1} as text))",
+                    ScanJobTypes.LIBRARY_CATALOG_ROOT + ":", SCAN_RUNS.id))
+            .or(
+                BACKGROUND_JOBS.dedupeKey.eq(
+                    Expressions.stringTemplate(
+                        "concat({0}, cast({1} as text))",
+                        ScanJobTypes.LIBRARY_CATALOG_SUBTREE + ":", SCAN_RUNS.id)));
+    return (int)
+        queryFactory
+            .update(SCAN_RUNS)
+            .set(SCAN_RUNS.status, "failed")
+            .set(SCAN_RUNS.completedAt, now)
+            .where(
+                SCAN_RUNS
+                    .status
+                    .eq("queued")
+                    .and(SCAN_RUNS.startedAt.loe(now.minusMinutes(5)))
+                    .and(
+                        SQLExpressions.selectOne()
+                            .from(BACKGROUND_JOBS)
+                            .where(
+                                catalogJobForScan.and(
+                                    BACKGROUND_JOBS.status.in("pending", "running")))
+                            .notExists()))
+            .execute();
   }
 
   void markScanRunRunning(UUID scanRunId, OffsetDateTime startedAt) {

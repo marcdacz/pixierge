@@ -209,6 +209,20 @@ public class BackgroundJobRepository {
         .execute();
   }
 
+  public void defer(UUID jobId, String workerId, OffsetDateTime nextRunAt, OffsetDateTime now) {
+    queryFactory
+        .update(JOBS)
+        .set(JOBS.status, STATUS_PENDING)
+        .set(JOBS.attempts, JOBS.attempts.subtract(1))
+        .setNull(JOBS.leaseUntil)
+        .setNull(JOBS.lockedBy)
+        .set(JOBS.nextRunAt, nextRunAt)
+        .set(JOBS.updatedAt, now)
+        .where(
+            JOBS.id.eq(jobId).and(JOBS.status.eq(STATUS_RUNNING)).and(JOBS.lockedBy.eq(workerId)))
+        .execute();
+  }
+
   public void deadLetter(
       UUID jobId, String workerId, String errorCode, String errorMessage, OffsetDateTime now) {
     queryFactory

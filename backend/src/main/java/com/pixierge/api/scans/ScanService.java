@@ -103,6 +103,11 @@ public class ScanService {
     return scanRepository.listActiveScanRuns().stream().map(this::toActiveResponse).toList();
   }
 
+  int reconcileOrphanedQueuedScans() {
+    return transactionTemplate.execute(
+        status -> scanRepository.failOrphanedQueuedScanRuns(OffsetDateTime.now()));
+  }
+
   private ScanRunResponse startScan(
       LibraryRepository.LibraryRecord library,
       LibraryRepository.LibraryRootRecord singleRoot,
@@ -209,9 +214,9 @@ public class ScanService {
         });
   }
 
-  private static final class ScanAlreadyActiveException extends RuntimeException {
+  public static final class ScanAlreadyActiveException extends RuntimeException {
 
-    private ScanAlreadyActiveException(UUID libraryId) {
+    public ScanAlreadyActiveException(UUID libraryId) {
       super("A scan is already running for library " + libraryId);
     }
   }

@@ -322,8 +322,24 @@ class ScanServiceTest {
 
     assertThatThrownBy(
             () -> service.enqueueFilesystemChangeScan(libraryId, rootId, tempDir.toString()))
-        .isInstanceOf(RuntimeException.class)
+        .isInstanceOf(ScanService.ScanAlreadyActiveException.class)
         .hasMessageContaining("A scan is already running for library " + libraryId);
+  }
+
+  @Test
+  void reconcilesOrphanedQueuedScans() {
+    FakeScanRepository scanRepository = new FakeScanRepository(List.of());
+    UUID scanRunId =
+        scanRepository.createScanRun(
+            UUID.randomUUID(), UUID.randomUUID(), null, OffsetDateTime.now());
+
+    int reconciled = service(scanRepository, new FakeFileHasher()).reconcileOrphanedQueuedScans();
+
+    assertThat(reconciled).isEqualTo(1);
+    assertThat(scanRepository.findScanRun(scanRunId))
+        .get()
+        .extracting(ScanRepository.ScanRunRecord::status)
+        .isEqualTo("failed");
   }
 
   private ScanService service(FakeScanRepository scanRepository, FileHasher fileHasher) {
@@ -481,6 +497,36 @@ class ScanServiceTest {
       return scanRuns.values().stream()
           .filter(run -> run.libraryId().equals(libraryId))
           .anyMatch(run -> "queued".equals(run.status()) || "running".equals(run.status()));
+    }
+
+    @Override
+    int failOrphanedQueuedScanRuns(OffsetDateTime now) {
+      int reconciled = 0;
+      for (Map.Entry<UUID, ScanRunRecord> entry : scanRuns.entrySet()) {
+        ScanRunRecord run = entry.getValue();
+        if (!"queued".equals(run.status())) {
+          continue;
+        }
+        entry.setValue(
+            new ScanRunRecord(
+                run.id(),
+                run.libraryId(),
+                run.rootId(),
+                "failed",
+                run.startedAt(),
+                now,
+                run.scannedFileCount(),
+                run.addedCount(),
+                run.unchangedCount(),
+                run.movedCount(),
+                run.modifiedCount(),
+                run.duplicateCount(),
+                run.missingCount(),
+                run.reappearedCount(),
+                run.errorCount()));
+        reconciled++;
+      }
+      return reconciled;
     }
 
     @Override

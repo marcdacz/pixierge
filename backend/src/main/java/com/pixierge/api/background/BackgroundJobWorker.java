@@ -94,6 +94,9 @@ public class BackgroundJobWorker {
         log.warn(
             "Background job {} completed, but post-completion work failed", job.id(), exception);
       }
+    } catch (BackgroundJobDeferredException exception) {
+      jobService.defer(job.id(), workerId, exception.delay());
+      log.debug("Background job {} deferred: {}", job.id(), exception.getMessage());
     } catch (Exception exception) {
       log.warn("Background job {} failed", job.id(), exception);
       jobService.fail(

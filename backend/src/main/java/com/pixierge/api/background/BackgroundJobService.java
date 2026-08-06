@@ -112,6 +112,12 @@ public class BackgroundJobService {
         status -> repository.deadLetter(jobId, workerId, errorCode, errorMessage, now));
   }
 
+  public void defer(UUID jobId, String workerId, Duration delay) {
+    OffsetDateTime now = now();
+    transactionTemplate.executeWithoutResult(
+        status -> repository.defer(jobId, workerId, now.plus(delay), now));
+  }
+
   public void cancel(UUID jobId) {
     OffsetDateTime now = now();
     transactionTemplate.executeWithoutResult(status -> repository.cancel(jobId, now));
