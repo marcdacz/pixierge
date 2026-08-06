@@ -10,16 +10,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/health")
 public class AppHealthController {
 
-    private final AppHealthService appHealthService;
+  private final AppHealthService appHealthService;
 
-    public AppHealthController(AppHealthService appHealthService) {
-        this.appHealthService = appHealthService;
-    }
+  public AppHealthController(AppHealthService appHealthService) {
+    this.appHealthService = appHealthService;
+  }
 
-    @GetMapping
-    public ResponseEntity<HealthResponse> health() {
-        HealthResponse response = appHealthService.currentHealth();
-        HttpStatus status = "ok".equals(response.status()) ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
-        return ResponseEntity.status(status).body(response);
-    }
+  @GetMapping
+  public ResponseEntity<HealthResponse> health() {
+    HealthResponse response = appHealthService.currentHealth();
+    HttpStatus status =
+        "ok".equals(response.status()) ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
+    return ResponseEntity.status(status).body(response);
+  }
 }

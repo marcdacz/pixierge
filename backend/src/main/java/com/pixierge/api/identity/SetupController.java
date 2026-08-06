@@ -13,28 +13,27 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/setup")
 public class SetupController {
 
-    private final AuthService authService;
+  private final AuthService authService;
 
-    public SetupController(AuthService authService) {
-        this.authService = authService;
-    }
+  public SetupController(AuthService authService) {
+    this.authService = authService;
+  }
 
-    @GetMapping("/status")
-    SetupStatusResponse status() {
-        return new SetupStatusResponse(authService.setupRequired());
-    }
+  @GetMapping("/status")
+  SetupStatusResponse status() {
+    return new SetupStatusResponse(authService.setupRequired());
+  }
 
-    @PostMapping("/admin")
-    AuthResponse createFirstAdmin(
-            @RequestBody CreateAdminRequest request,
-            HttpServletRequest servletRequest,
-            HttpServletResponse servletResponse
-    ) {
-        AuthService.CreatedSession session = authService.createFirstAdmin(request);
-        servletResponse.addHeader(
-                HttpHeaders.SET_COOKIE,
-                SessionCookieSupport.createSessionCookie(session.sessionToken(), servletRequest.isSecure())
-        );
-        return AuthResponse.from(session.user());
-    }
+  @PostMapping("/admin")
+  AuthResponse createFirstAdmin(
+      @RequestBody CreateAdminRequest request,
+      HttpServletRequest servletRequest,
+      HttpServletResponse servletResponse) {
+    AuthService.CreatedSession session = authService.createFirstAdmin(request);
+    servletResponse.addHeader(
+        HttpHeaders.SET_COOKIE,
+        SessionCookieSupport.createSessionCookie(
+            session.sessionToken(), servletRequest.isSecure()));
+    return AuthResponse.from(session.user());
+  }
 }

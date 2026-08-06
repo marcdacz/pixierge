@@ -17,23 +17,39 @@ public class QAlbumItemShareApprovals extends RelationalPathBase<QAlbumItemShare
 
   public final ComparablePath<UUID> albumId = createComparable("albumId", UUID.class);
   public final ComparablePath<UUID> assetId = createComparable("assetId", UUID.class);
-  public final ComparablePath<UUID> recipientUserId = createComparable("recipientUserId", UUID.class);
-  public final ComparablePath<UUID> sourceLibraryId = createComparable("sourceLibraryId", UUID.class);
+  public final ComparablePath<UUID> recipientUserId =
+      createComparable("recipientUserId", UUID.class);
+  public final ComparablePath<UUID> sourceLibraryId =
+      createComparable("sourceLibraryId", UUID.class);
   public final ComparablePath<UUID> approvedBy = createComparable("approvedBy", UUID.class);
-  public final DateTimePath<OffsetDateTime> approvedAt = createDateTime("approvedAt", OffsetDateTime.class);
+  public final DateTimePath<OffsetDateTime> approvedAt =
+      createDateTime("approvedAt", OffsetDateTime.class);
 
   public QAlbumItemShareApprovals(String variable) {
-    super(QAlbumItemShareApprovals.class, forVariable(variable), null, "album_item_share_approvals");
+    super(
+        QAlbumItemShareApprovals.class, forVariable(variable), null, "album_item_share_approvals");
     addMetadata();
   }
 
   private void addMetadata() {
-    addMetadata(albumId, ColumnMetadata.named("album_id").withIndex(1).ofType(Types.OTHER).notNull());
-    addMetadata(assetId, ColumnMetadata.named("asset_id").withIndex(2).ofType(Types.OTHER).notNull());
-    addMetadata(recipientUserId, ColumnMetadata.named("recipient_user_id").withIndex(3).ofType(Types.OTHER).notNull());
-    addMetadata(sourceLibraryId, ColumnMetadata.named("source_library_id").withIndex(4).ofType(Types.OTHER).notNull());
-    addMetadata(approvedBy, ColumnMetadata.named("approved_by").withIndex(5).ofType(Types.OTHER).notNull());
-    addMetadata(approvedAt, ColumnMetadata.named("approved_at").withIndex(6).ofType(Types.TIMESTAMP_WITH_TIMEZONE).notNull());
+    addMetadata(
+        albumId, ColumnMetadata.named("album_id").withIndex(1).ofType(Types.OTHER).notNull());
+    addMetadata(
+        assetId, ColumnMetadata.named("asset_id").withIndex(2).ofType(Types.OTHER).notNull());
+    addMetadata(
+        recipientUserId,
+        ColumnMetadata.named("recipient_user_id").withIndex(3).ofType(Types.OTHER).notNull());
+    addMetadata(
+        sourceLibraryId,
+        ColumnMetadata.named("source_library_id").withIndex(4).ofType(Types.OTHER).notNull());
+    addMetadata(
+        approvedBy, ColumnMetadata.named("approved_by").withIndex(5).ofType(Types.OTHER).notNull());
+    addMetadata(
+        approvedAt,
+        ColumnMetadata.named("approved_at")
+            .withIndex(6)
+            .ofType(Types.TIMESTAMP_WITH_TIMEZONE)
+            .notNull());
   }
 
   @Override

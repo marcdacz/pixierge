@@ -1,4 +1,3 @@
 package com.pixierge.api.background;
 
-public record BackgroundJobEnqueuedEvent() {
-}
+public record BackgroundJobEnqueuedEvent() {}

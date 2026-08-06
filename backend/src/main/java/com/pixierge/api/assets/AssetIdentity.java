@@ -5,14 +5,13 @@ import static com.pixierge.api.assets.AssetConstants.IDENTITY_STATUS_PENDING;
 
 final class AssetIdentity {
 
-    private static final String PROVISIONAL_PREFIX = "provisional:";
+  private static final String PROVISIONAL_PREFIX = "provisional:";
 
-    private AssetIdentity() {
-    }
+  private AssetIdentity() {}
 
-    static String statusFor(String contentHash) {
-        return contentHash != null && contentHash.startsWith(PROVISIONAL_PREFIX)
-                ? IDENTITY_STATUS_PENDING
-                : IDENTITY_STATUS_CONFIRMED;
-    }
+  static String statusFor(String contentHash) {
+    return contentHash != null && contentHash.startsWith(PROVISIONAL_PREFIX)
+        ? IDENTITY_STATUS_PENDING
+        : IDENTITY_STATUS_CONFIRMED;
+  }
 }

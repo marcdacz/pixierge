@@ -5,10 +5,4 @@ import java.util.Set;
 import java.util.UUID;
 
 public record UserSummaryResponse(
-        UUID id,
-        String username,
-        String status,
-        Set<String> roles,
-        OffsetDateTime createdAt
-) {
-}
+    UUID id, String username, String status, Set<String> roles, OffsetDateTime createdAt) {}

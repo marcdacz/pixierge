@@ -10,22 +10,24 @@ import org.springframework.stereotype.Component;
 @Component
 class AssetMetadataJobHandler implements BackgroundJobHandler {
 
-    private final MetadataEnrichmentService metadataEnrichmentService;
-    private final ObjectMapper objectMapper;
+  private final MetadataEnrichmentService metadataEnrichmentService;
+  private final ObjectMapper objectMapper;
 
-    AssetMetadataJobHandler(MetadataEnrichmentService metadataEnrichmentService, ObjectMapper objectMapper) {
-        this.metadataEnrichmentService = metadataEnrichmentService;
-        this.objectMapper = objectMapper;
-    }
+  AssetMetadataJobHandler(
+      MetadataEnrichmentService metadataEnrichmentService, ObjectMapper objectMapper) {
+    this.metadataEnrichmentService = metadataEnrichmentService;
+    this.objectMapper = objectMapper;
+  }
 
-    @Override
-    public String jobType() {
-        return ScanJobTypes.ASSET_METADATA_BACKFILL;
-    }
+  @Override
+  public String jobType() {
+    return ScanJobTypes.ASSET_METADATA_BACKFILL;
+  }
 
-    @Override
-    public void handle(BackgroundJobRecord job) throws JsonProcessingException {
-        AssetMetadataJobPayload payload = objectMapper.readValue(job.payloadJson(), AssetMetadataJobPayload.class);
-        metadataEnrichmentService.extractQueuedMetadata(payload, job.id());
-    }
+  @Override
+  public void handle(BackgroundJobRecord job) throws JsonProcessingException {
+    AssetMetadataJobPayload payload =
+        objectMapper.readValue(job.payloadJson(), AssetMetadataJobPayload.class);
+    metadataEnrichmentService.extractQueuedMetadata(payload, job.id());
+  }
 }

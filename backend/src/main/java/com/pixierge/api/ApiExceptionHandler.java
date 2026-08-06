@@ -9,12 +9,14 @@ import org.springframework.web.server.ResponseStatusException;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    @ExceptionHandler(ResponseStatusException.class)
-    ResponseEntity<ProblemDetail> handleResponseStatus(ResponseStatusException exception) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                exception.getStatusCode(),
-                exception.getReason() == null ? exception.getStatusCode().toString() : exception.getReason()
-        );
-        return ResponseEntity.status(exception.getStatusCode()).body(problem);
-    }
+  @ExceptionHandler(ResponseStatusException.class)
+  ResponseEntity<ProblemDetail> handleResponseStatus(ResponseStatusException exception) {
+    ProblemDetail problem =
+        ProblemDetail.forStatusAndDetail(
+            exception.getStatusCode(),
+            exception.getReason() == null
+                ? exception.getStatusCode().toString()
+                : exception.getReason());
+    return ResponseEntity.status(exception.getStatusCode()).body(problem);
+  }
 }

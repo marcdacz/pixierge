@@ -5,43 +5,23 @@ import java.util.List;
 import java.util.UUID;
 
 record LibraryResponse(
-        UUID id,
-        String name,
-        String status,
-        long sourceCount,
-        long availableSourceCount,
-        long unavailableSourceCount,
-        OffsetDateTime createdAt,
-        OffsetDateTime updatedAt,
-        OffsetDateTime archivedAt,
-        List<LibrarySourceResponse> sources,
-        List<LibraryExclusionPatternResponse> exclusionPatterns
-) {
-}
+    UUID id,
+    String name,
+    String status,
+    long sourceCount,
+    long availableSourceCount,
+    long unavailableSourceCount,
+    OffsetDateTime createdAt,
+    OffsetDateTime updatedAt,
+    OffsetDateTime archivedAt,
+    List<LibrarySourceResponse> sources,
+    List<LibraryExclusionPatternResponse> exclusionPatterns) {}
 
 record LibrarySourceResponse(
-        UUID id,
-        String path,
-        boolean available,
-        String unavailableReason,
-        OffsetDateTime createdAt
-) {
-}
+    UUID id, String path, boolean available, String unavailableReason, OffsetDateTime createdAt) {}
 
-record LibraryExclusionPatternResponse(
-        UUID id,
-        String pattern,
-        OffsetDateTime createdAt
-) {
-}
+record LibraryExclusionPatternResponse(UUID id, String pattern, OffsetDateTime createdAt) {}
 
-record RenameFolderResponse(String path, String name) {
-}
+record RenameFolderResponse(String path, String name) {}
 
-record LibraryMemberResponse(
-        UUID userId,
-        String username,
-        String role,
-        OffsetDateTime createdAt
-) {
-}
+record LibraryMemberResponse(UUID userId, String username, String role, OffsetDateTime createdAt) {}

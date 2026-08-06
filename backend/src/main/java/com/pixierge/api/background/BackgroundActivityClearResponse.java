@@ -1,3 +1,3 @@
 package com.pixierge.api.background;
 
-record BackgroundActivityClearResponse(int deletedCount) { }
+record BackgroundActivityClearResponse(int deletedCount) {}

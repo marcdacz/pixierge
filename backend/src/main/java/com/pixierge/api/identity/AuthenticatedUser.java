@@ -4,10 +4,4 @@ import java.util.Set;
 import java.util.UUID;
 
 public record AuthenticatedUser(
-        UUID id,
-        String username,
-        Set<String> roles,
-        Set<String> permissions,
-        String csrfToken
-) {
-}
+    UUID id, String username, Set<String> roles, Set<String> permissions, String csrfToken) {}

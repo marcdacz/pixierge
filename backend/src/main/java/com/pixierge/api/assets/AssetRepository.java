@@ -1,47 +1,5 @@
 package com.pixierge.api.assets;
 
-import com.pixierge.api.db.QAssetFiles;
-import com.pixierge.api.db.QAssetMetadata;
-import com.pixierge.api.db.QAlbumItems;
-import com.pixierge.api.db.QAlbums;
-import com.pixierge.api.db.QAssetTags;
-import com.pixierge.api.db.QAssets;
-import com.pixierge.api.db.QLibraries;
-import com.pixierge.api.db.QLibraryMembers;
-import com.pixierge.api.db.QLibraryRoots;
-import com.pixierge.api.db.QSearchDocuments;
-import com.pixierge.api.db.QAlbumMembers;
-import com.pixierge.api.db.QAssetLibraryState;
-import com.pixierge.api.db.QAlbumItemShareApprovals;
-import com.pixierge.api.db.QTags;
-import com.pixierge.api.albums.AlbumKind;
-import com.pixierge.api.search.SearchClause;
-import com.pixierge.api.search.SearchField;
-import com.pixierge.api.search.SearchProperties;
-import com.pixierge.api.search.SearchQuery;
-import com.querydsl.core.BooleanBuilder;
-import com.querydsl.core.Tuple;
-import com.querydsl.core.types.dsl.BooleanExpression;
-import com.querydsl.core.types.dsl.Expressions;
-import com.querydsl.sql.SQLQuery;
-import com.querydsl.sql.SQLQueryFactory;
-import com.querydsl.sql.SQLExpressions;
-import org.springframework.stereotype.Repository;
-
-import java.time.OffsetDateTime;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-
 import static com.pixierge.api.assets.AssetConstants.AVAILABILITY_AVAILABLE;
 import static com.pixierge.api.assets.AssetConstants.AVAILABILITY_MISSING;
 import static com.pixierge.api.assets.AssetConstants.EXTRACTION_STATUS_FAILED;
@@ -51,1202 +9,1467 @@ import static com.pixierge.api.assets.AssetConstants.FILE_STATUS_ACTIVE;
 import static com.pixierge.api.assets.AssetConstants.IMAGE_MIME_PREFIX;
 import static com.pixierge.api.libraries.LibraryConstants.STATUS_ACTIVE;
 
+import com.pixierge.api.albums.AlbumKind;
+import com.pixierge.api.db.QAlbumItemShareApprovals;
+import com.pixierge.api.db.QAlbumItems;
+import com.pixierge.api.db.QAlbumMembers;
+import com.pixierge.api.db.QAlbums;
+import com.pixierge.api.db.QAssetFiles;
+import com.pixierge.api.db.QAssetLibraryState;
+import com.pixierge.api.db.QAssetMetadata;
+import com.pixierge.api.db.QAssetTags;
+import com.pixierge.api.db.QAssets;
+import com.pixierge.api.db.QLibraries;
+import com.pixierge.api.db.QLibraryMembers;
+import com.pixierge.api.db.QLibraryRoots;
+import com.pixierge.api.db.QSearchDocuments;
+import com.pixierge.api.db.QTags;
+import com.pixierge.api.search.SearchClause;
+import com.pixierge.api.search.SearchField;
+import com.pixierge.api.search.SearchProperties;
+import com.pixierge.api.search.SearchQuery;
+import com.querydsl.core.BooleanBuilder;
+import com.querydsl.core.Tuple;
+import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.core.types.dsl.Expressions;
+import com.querydsl.sql.SQLExpressions;
+import com.querydsl.sql.SQLQuery;
+import com.querydsl.sql.SQLQueryFactory;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import org.springframework.stereotype.Repository;
+
 @Repository
 class AssetRepository {
 
-    private static final QAssetFiles ASSET_FILES = QAssetFiles.assetFiles;
-    private static final QAssets ASSETS = QAssets.assets;
-    private static final QAssetMetadata ASSET_METADATA = QAssetMetadata.assetMetadata;
-    private static final QAlbumItems ALBUM_ITEMS = QAlbumItems.albumItems;
-    private static final QAlbums ALBUMS = QAlbums.albums;
-    private static final QAssetTags ASSET_TAGS = QAssetTags.assetTags;
-    private static final QLibraries LIBRARIES = QLibraries.libraries;
-    private static final QLibraryMembers LIBRARY_MEMBERS = QLibraryMembers.libraryMembers;
-    private static final QLibraryRoots LIBRARY_ROOTS = QLibraryRoots.libraryRoots;
-    private static final QSearchDocuments SEARCH_DOCUMENTS = QSearchDocuments.searchDocuments;
-    private static final QAlbumMembers ALBUM_MEMBERS = QAlbumMembers.albumMembers;
-    private static final QAssetLibraryState ASSET_LIBRARY_STATE = QAssetLibraryState.assetLibraryState;
-    private static final QAlbumItemShareApprovals ALBUM_APPROVALS = QAlbumItemShareApprovals.albumItemShareApprovals;
+  private static final QAssetFiles ASSET_FILES = QAssetFiles.assetFiles;
+  private static final QAssets ASSETS = QAssets.assets;
+  private static final QAssetMetadata ASSET_METADATA = QAssetMetadata.assetMetadata;
+  private static final QAlbumItems ALBUM_ITEMS = QAlbumItems.albumItems;
+  private static final QAlbums ALBUMS = QAlbums.albums;
+  private static final QAssetTags ASSET_TAGS = QAssetTags.assetTags;
+  private static final QLibraries LIBRARIES = QLibraries.libraries;
+  private static final QLibraryMembers LIBRARY_MEMBERS = QLibraryMembers.libraryMembers;
+  private static final QLibraryRoots LIBRARY_ROOTS = QLibraryRoots.libraryRoots;
+  private static final QSearchDocuments SEARCH_DOCUMENTS = QSearchDocuments.searchDocuments;
+  private static final QAlbumMembers ALBUM_MEMBERS = QAlbumMembers.albumMembers;
+  private static final QAssetLibraryState ASSET_LIBRARY_STATE =
+      QAssetLibraryState.assetLibraryState;
+  private static final QAlbumItemShareApprovals ALBUM_APPROVALS =
+      QAlbumItemShareApprovals.albumItemShareApprovals;
 
-    private final SQLQueryFactory queryFactory;
-    private final SearchProperties searchProperties;
+  private final SQLQueryFactory queryFactory;
+  private final SearchProperties searchProperties;
 
-    AssetRepository(SQLQueryFactory queryFactory, SearchProperties searchProperties) {
-        this.queryFactory = queryFactory;
-        this.searchProperties = searchProperties;
+  AssetRepository(SQLQueryFactory queryFactory, SearchProperties searchProperties) {
+    this.queryFactory = queryFactory;
+    this.searchProperties = searchProperties;
+  }
+
+  List<LibraryRootRow> listLibraryRoots(UUID userId, boolean admin, UUID libraryId) {
+    BooleanBuilder where = readableWhere(userId, admin, libraryId);
+
+    return queryFactory
+        .select(LIBRARY_ROOTS.libraryId, LIBRARY_ROOTS.normalizedPath)
+        .from(LIBRARY_ROOTS)
+        .join(LIBRARIES)
+        .on(LIBRARIES.id.eq(LIBRARY_ROOTS.libraryId))
+        .leftJoin(LIBRARY_MEMBERS)
+        .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+        .where(where)
+        .orderBy(LIBRARY_ROOTS.normalizedPath.asc())
+        .fetch()
+        .stream()
+        .map(
+            row ->
+                new LibraryRootRow(
+                    row.get(LIBRARY_ROOTS.libraryId), row.get(LIBRARY_ROOTS.normalizedPath)))
+        .toList();
+  }
+
+  List<FolderRow> listFolders(UUID userId, boolean admin, UUID libraryId) {
+    BooleanBuilder where =
+        readableWhere(userId, admin, libraryId).and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE));
+
+    return queryFactory
+        .select(
+            ASSET_FILES.libraryId, LIBRARIES.name, ASSET_FILES.normalizedPath, ASSET_FILES.assetId)
+        .from(ASSET_FILES)
+        .join(ASSETS)
+        .on(ASSETS.id.eq(ASSET_FILES.assetId))
+        .join(LIBRARIES)
+        .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+        .leftJoin(LIBRARY_MEMBERS)
+        .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+        .where(where)
+        .orderBy(LIBRARIES.name.lower().asc(), ASSET_FILES.normalizedPath.asc())
+        .fetch()
+        .stream()
+        .map(
+            row ->
+                new FolderRow(
+                    row.get(ASSET_FILES.libraryId),
+                    row.get(LIBRARIES.name),
+                    folderPath(row.get(ASSET_FILES.normalizedPath)),
+                    row.get(ASSET_FILES.assetId)))
+        .toList();
+  }
+
+  BrowseRows browse(UUID userId, boolean admin, AssetSearchCriteria criteria) {
+    BooleanBuilder where = assetSearchWhere(userId, admin, criteria);
+
+    Long count =
+        queryFactory
+            .select(ASSETS.id.countDistinct())
+            .from(ASSET_FILES)
+            .join(ASSETS)
+            .on(ASSETS.id.eq(ASSET_FILES.assetId))
+            .join(LIBRARIES)
+            .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+            .leftJoin(LIBRARY_MEMBERS)
+            .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+            .leftJoin(ASSET_METADATA)
+            .on(ASSET_METADATA.assetId.eq(ASSETS.id))
+            .leftJoin(SEARCH_DOCUMENTS)
+            .on(SEARCH_DOCUMENTS.assetId.eq(ASSETS.id))
+            .where(where)
+            .fetchOne();
+    int totalCount = count == null ? 0 : Math.toIntExact(count);
+
+    if (totalCount == 0) {
+      return new BrowseRows(List.of(), 0);
     }
 
-    List<LibraryRootRow> listLibraryRoots(UUID userId, boolean admin, UUID libraryId) {
-        BooleanBuilder where = readableWhere(userId, admin, libraryId);
+    List<UUID> assetIds =
+        queryFactory
+            .select(ASSETS.id)
+            .from(ASSET_FILES)
+            .join(ASSETS)
+            .on(ASSETS.id.eq(ASSET_FILES.assetId))
+            .join(LIBRARIES)
+            .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+            .leftJoin(LIBRARY_MEMBERS)
+            .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+            .leftJoin(ASSET_METADATA)
+            .on(ASSET_METADATA.assetId.eq(ASSETS.id))
+            .leftJoin(SEARCH_DOCUMENTS)
+            .on(SEARCH_DOCUMENTS.assetId.eq(ASSETS.id))
+            .where(where)
+            .groupBy(ASSETS.id)
+            .orderBy(
+                ASSET_FILES.normalizedPath.min().asc(),
+                ASSET_FILES.fileName.lower().min().asc(),
+                ASSETS.id.asc())
+            .offset((long) criteria.page() * criteria.pageSize())
+            .limit(criteria.pageSize())
+            .fetch();
 
-        return queryFactory
-                .select(LIBRARY_ROOTS.libraryId, LIBRARY_ROOTS.normalizedPath)
-                .from(LIBRARY_ROOTS)
-                .join(LIBRARIES).on(LIBRARIES.id.eq(LIBRARY_ROOTS.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .where(where)
-                .orderBy(LIBRARY_ROOTS.normalizedPath.asc())
-                .fetch()
-                .stream()
-                .map(row -> new LibraryRootRow(
-                        row.get(LIBRARY_ROOTS.libraryId),
-                        row.get(LIBRARY_ROOTS.normalizedPath)
-                ))
-                .toList();
+    if (assetIds.isEmpty()) {
+      return new BrowseRows(List.of(), totalCount);
     }
 
-    List<FolderRow> listFolders(UUID userId, boolean admin, UUID libraryId) {
-        BooleanBuilder where = readableWhere(userId, admin, libraryId)
-                .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE));
+    List<AssetFileRow> rows =
+        baseFileQuery()
+            .leftJoin(ASSET_METADATA)
+            .on(ASSET_METADATA.assetId.eq(ASSETS.id))
+            .leftJoin(SEARCH_DOCUMENTS)
+            .on(SEARCH_DOCUMENTS.assetId.eq(ASSETS.id))
+            .where(where.and(ASSETS.id.in(assetIds)))
+            .orderBy(
+                ASSET_FILES.normalizedPath.asc(),
+                ASSET_FILES.fileName.lower().asc(),
+                ASSET_FILES.assetId.asc())
+            .fetch()
+            .stream()
+            .map(this::toAssetFileRow)
+            .toList();
 
-        return queryFactory
-                .select(
-                        ASSET_FILES.libraryId,
-                        LIBRARIES.name,
-                        ASSET_FILES.normalizedPath,
-                        ASSET_FILES.assetId
-                )
-                .from(ASSET_FILES)
-                .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .where(where)
-                .orderBy(LIBRARIES.name.lower().asc(), ASSET_FILES.normalizedPath.asc())
-                .fetch()
-                .stream()
-                .map(row -> new FolderRow(
-                        row.get(ASSET_FILES.libraryId),
-                        row.get(LIBRARIES.name),
-                        folderPath(row.get(ASSET_FILES.normalizedPath)),
-                        row.get(ASSET_FILES.assetId)
-                ))
-                .toList();
+    Map<UUID, AssetGroup> groups = new LinkedHashMap<>();
+    for (AssetFileRow row : rows) {
+      groups.computeIfAbsent(row.assetId(), ignored -> new AssetGroup(row)).add(row);
     }
 
-    BrowseRows browse(UUID userId, boolean admin, AssetSearchCriteria criteria) {
-        BooleanBuilder where = assetSearchWhere(userId, admin, criteria);
+    List<AssetSummaryRow> summaries = groups.values().stream().map(AssetGroup::toSummary).toList();
+    return new BrowseRows(summaries, totalCount);
+  }
 
-        Long count = queryFactory
-                .select(ASSETS.id.countDistinct())
-                .from(ASSET_FILES)
-                .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
-                .leftJoin(SEARCH_DOCUMENTS).on(SEARCH_DOCUMENTS.assetId.eq(ASSETS.id))
-                .where(where)
-                .fetchOne();
-        int totalCount = count == null ? 0 : Math.toIntExact(count);
+  boolean canReadAssetInLibrary(UUID userId, boolean admin, UUID assetId, UUID libraryId) {
+    Integer result =
+        queryFactory
+            .selectOne()
+            .from(ASSET_FILES)
+            .join(LIBRARIES)
+            .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+            .leftJoin(LIBRARY_MEMBERS)
+            .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+            .where(
+                ASSET_FILES
+                    .assetId
+                    .eq(assetId)
+                    .and(ASSET_FILES.libraryId.eq(libraryId))
+                    .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                    .and(readableWhere(userId, admin, libraryId)))
+            .fetchFirst();
+    return result != null;
+  }
 
-        if (totalCount == 0) {
-            return new BrowseRows(List.of(), 0);
-        }
+  boolean canReadAsset(UUID userId, boolean admin, UUID assetId) {
+    Integer result =
+        queryFactory
+            .selectOne()
+            .from(ASSET_FILES)
+            .join(LIBRARIES)
+            .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+            .leftJoin(LIBRARY_MEMBERS)
+            .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+            .where(
+                ASSET_FILES
+                    .assetId
+                    .eq(assetId)
+                    .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                    .and(readableWhere(userId, admin, null)))
+            .fetchFirst();
+    return result != null;
+  }
 
-        List<UUID> assetIds = queryFactory
-                .select(ASSETS.id)
-                .from(ASSET_FILES)
-                .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
-                .leftJoin(SEARCH_DOCUMENTS).on(SEARCH_DOCUMENTS.assetId.eq(ASSETS.id))
-                .where(where)
-                .groupBy(ASSETS.id)
-                .orderBy(ASSET_FILES.normalizedPath.min().asc(), ASSET_FILES.fileName.lower().min().asc(), ASSETS.id.asc())
-                .offset((long) criteria.page() * criteria.pageSize())
-                .limit(criteria.pageSize())
-                .fetch();
+  Set<UUID> starredAssetIds(UUID userId, Collection<UUID> assetIds) {
+    if (assetIds == null || assetIds.isEmpty()) {
+      return Set.of();
+    }
+    return new HashSet<>(
+        queryFactory
+            .select(ALBUM_ITEMS.assetId)
+            .from(ALBUM_ITEMS)
+            .join(ALBUMS)
+            .on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
+            .where(
+                ALBUMS
+                    .ownerUserId
+                    .eq(userId)
+                    .and(ALBUMS.kind.eq(AlbumKind.STARRED))
+                    .and(ALBUM_ITEMS.assetId.in(assetIds)))
+            .fetch());
+  }
 
-        if (assetIds.isEmpty()) {
-            return new BrowseRows(List.of(), totalCount);
-        }
+  BrowseRows browseAlbumAssets(UUID userId, boolean admin, UUID albumId, int page, int pageSize) {
+    Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
+    BooleanExpression visibleInAlbum = albumVisibleWhere(userId, admin, albumId);
+    queryFactory
+        .select(ALBUM_ITEMS.assetId, ALBUM_ITEMS.sourceLibraryId)
+        .from(ALBUM_ITEMS)
+        .join(ALBUMS)
+        .on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
+        .join(ASSET_FILES)
+        .on(
+            ASSET_FILES
+                .assetId
+                .eq(ALBUM_ITEMS.assetId)
+                .and(ASSET_FILES.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
+        .join(LIBRARIES)
+        .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+        .leftJoin(LIBRARY_MEMBERS)
+        .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+        .leftJoin(ALBUM_MEMBERS)
+        .on(ALBUM_MEMBERS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_MEMBERS.userId.eq(userId)))
+        .leftJoin(ASSET_LIBRARY_STATE)
+        .on(
+            ASSET_LIBRARY_STATE
+                .assetId
+                .eq(ALBUM_ITEMS.assetId)
+                .and(ASSET_LIBRARY_STATE.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
+        .leftJoin(ALBUM_APPROVALS)
+        .on(
+            ALBUM_APPROVALS
+                .albumId
+                .eq(ALBUM_ITEMS.albumId)
+                .and(ALBUM_APPROVALS.assetId.eq(ALBUM_ITEMS.assetId))
+                .and(ALBUM_APPROVALS.recipientUserId.eq(userId)))
+        .where(
+            ALBUM_ITEMS
+                .albumId
+                .eq(albumId)
+                .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                .and(visibleInAlbum))
+        .groupBy(ALBUM_ITEMS.assetId, ALBUM_ITEMS.sourceLibraryId, ALBUM_ITEMS.position)
+        .orderBy(ALBUM_ITEMS.position.asc())
+        .offset((long) page * pageSize)
+        .limit(pageSize)
+        .fetch()
+        .forEach(
+            row ->
+                assetContexts.put(
+                    row.get(ALBUM_ITEMS.assetId), row.get(ALBUM_ITEMS.sourceLibraryId)));
+    Long count =
+        queryFactory
+            .select(ALBUM_ITEMS.assetId.countDistinct())
+            .from(ALBUM_ITEMS)
+            .join(ALBUMS)
+            .on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
+            .join(ASSET_FILES)
+            .on(
+                ASSET_FILES
+                    .assetId
+                    .eq(ALBUM_ITEMS.assetId)
+                    .and(ASSET_FILES.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
+            .join(LIBRARIES)
+            .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+            .leftJoin(LIBRARY_MEMBERS)
+            .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+            .leftJoin(ALBUM_MEMBERS)
+            .on(ALBUM_MEMBERS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_MEMBERS.userId.eq(userId)))
+            .leftJoin(ASSET_LIBRARY_STATE)
+            .on(
+                ASSET_LIBRARY_STATE
+                    .assetId
+                    .eq(ALBUM_ITEMS.assetId)
+                    .and(ASSET_LIBRARY_STATE.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
+            .leftJoin(ALBUM_APPROVALS)
+            .on(
+                ALBUM_APPROVALS
+                    .albumId
+                    .eq(ALBUM_ITEMS.albumId)
+                    .and(ALBUM_APPROVALS.assetId.eq(ALBUM_ITEMS.assetId))
+                    .and(ALBUM_APPROVALS.recipientUserId.eq(userId)))
+            .where(
+                ALBUM_ITEMS
+                    .albumId
+                    .eq(albumId)
+                    .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                    .and(visibleInAlbum))
+            .fetchOne();
+    // The preceding query is the album-specific authorization boundary. Do not
+    // apply normal library membership again here: a recipient deliberately has
+    // no source-library membership.
+    return browseByIds(userId, true, assetContexts, count);
+  }
 
-        List<AssetFileRow> rows = baseFileQuery()
-                .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
-                .leftJoin(SEARCH_DOCUMENTS).on(SEARCH_DOCUMENTS.assetId.eq(ASSETS.id))
-                .where(where.and(ASSETS.id.in(assetIds)))
-                .orderBy(ASSET_FILES.normalizedPath.asc(), ASSET_FILES.fileName.lower().asc(), ASSET_FILES.assetId.asc())
-                .fetch()
-                .stream()
-                .map(this::toAssetFileRow)
-                .toList();
+  private BooleanExpression albumVisibleWhere(UUID userId, boolean admin, UUID albumId) {
+    BooleanExpression directLibraryAccess =
+        admin
+            ? com.querydsl.core.types.dsl.Expressions.TRUE.isTrue()
+            : LIBRARY_MEMBERS.userId.eq(userId);
+    BooleanExpression isOwner = ALBUMS.ownerUserId.eq(userId);
+    BooleanExpression isMember = ALBUM_MEMBERS.userId.eq(userId);
+    BooleanExpression approvedOrPublic =
+        ASSET_LIBRARY_STATE
+            .privacy
+            .isNull()
+            .or(ASSET_LIBRARY_STATE.privacy.ne("private"))
+            .or(ALBUM_APPROVALS.assetId.isNotNull());
+    return LIBRARIES
+        .status
+        .eq(STATUS_ACTIVE)
+        .and(isOwner.or(isMember.and(directLibraryAccess.or(approvedOrPublic))));
+  }
 
-        Map<UUID, AssetGroup> groups = new LinkedHashMap<>();
-        for (AssetFileRow row : rows) {
-            groups.computeIfAbsent(row.assetId(), ignored -> new AssetGroup(row)).add(row);
-        }
+  BrowseRows browseTagAssets(UUID userId, boolean admin, UUID tagId, int page, int pageSize) {
+    Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
+    queryFactory
+        .select(ASSET_TAGS.assetId, ASSET_TAGS.sourceLibraryId)
+        .from(ASSET_TAGS)
+        .join(ASSET_FILES)
+        .on(
+            ASSET_FILES
+                .assetId
+                .eq(ASSET_TAGS.assetId)
+                .and(ASSET_FILES.libraryId.eq(ASSET_TAGS.sourceLibraryId)))
+        .join(LIBRARIES)
+        .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+        .leftJoin(LIBRARY_MEMBERS)
+        .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+        .where(
+            ASSET_TAGS
+                .tagId
+                .eq(tagId)
+                .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                .and(readableWhere(userId, admin, null)))
+        .groupBy(ASSET_TAGS.assetId, ASSET_TAGS.sourceLibraryId)
+        .orderBy(ASSET_TAGS.assetId.asc())
+        .offset((long) page * pageSize)
+        .limit(pageSize)
+        .fetch()
+        .forEach(
+            row ->
+                assetContexts.put(
+                    row.get(ASSET_TAGS.assetId), row.get(ASSET_TAGS.sourceLibraryId)));
+    Long count =
+        queryFactory
+            .select(ASSET_TAGS.assetId.countDistinct())
+            .from(ASSET_TAGS)
+            .join(ASSET_FILES)
+            .on(
+                ASSET_FILES
+                    .assetId
+                    .eq(ASSET_TAGS.assetId)
+                    .and(ASSET_FILES.libraryId.eq(ASSET_TAGS.sourceLibraryId)))
+            .join(LIBRARIES)
+            .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+            .leftJoin(LIBRARY_MEMBERS)
+            .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
+            .where(
+                ASSET_TAGS
+                    .tagId
+                    .eq(tagId)
+                    .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                    .and(readableWhere(userId, admin, null)))
+            .fetchOne();
+    return browseByIds(userId, admin, assetContexts, count);
+  }
 
-        List<AssetSummaryRow> summaries = groups.values().stream()
-                .map(AssetGroup::toSummary)
-                .toList();
-        return new BrowseRows(summaries, totalCount);
+  Optional<AssetDetailRow> findAsset(UUID userId, boolean admin, UUID assetId) {
+    List<AssetFileRow> rows =
+        baseFileQuery()
+            .leftJoin(ASSET_METADATA)
+            .on(ASSET_METADATA.assetId.eq(ASSETS.id))
+            .leftJoin(SEARCH_DOCUMENTS)
+            .on(SEARCH_DOCUMENTS.assetId.eq(ASSETS.id))
+            .where(
+                readableWhere(userId, admin, null)
+                    .and(ASSETS.id.eq(assetId))
+                    .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE)))
+            .orderBy(ASSET_FILES.status.asc(), ASSET_FILES.normalizedPath.asc())
+            .fetch()
+            .stream()
+            .map(this::toAssetFileRow)
+            .toList();
+
+    if (rows.isEmpty()) {
+      return Optional.empty();
     }
 
-    boolean canReadAssetInLibrary(UUID userId, boolean admin, UUID assetId, UUID libraryId) {
-        Integer result = queryFactory.selectOne()
-                .from(ASSET_FILES)
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .where(ASSET_FILES.assetId.eq(assetId)
-                        .and(ASSET_FILES.libraryId.eq(libraryId))
-                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(readableWhere(userId, admin, libraryId)))
-                .fetchFirst();
-        return result != null;
+    return Optional.of(AssetDetailRow.from(rows));
+  }
+
+  List<MetadataCandidateRow> listMetadataCandidates(
+      int limit, String extractor, String extractorVersion, int schemaVersion) {
+    return queryFactory
+        .selectDistinct(
+            ASSETS.id,
+            ASSET_FILES.id,
+            ASSET_FILES.path,
+            ASSET_FILES.normalizedPath,
+            ASSET_FILES.fileName,
+            ASSET_FILES.sizeBytes,
+            ASSET_FILES.modifiedAt,
+            ASSETS.mediaType,
+            ASSET_FILES.lastObservedAt)
+        .from(ASSET_FILES)
+        .join(ASSETS)
+        .on(ASSETS.id.eq(ASSET_FILES.assetId))
+        .leftJoin(ASSET_METADATA)
+        .on(ASSET_METADATA.assetId.eq(ASSETS.id))
+        .where(
+            ASSET_FILES
+                .status
+                .eq(FILE_STATUS_ACTIVE)
+                .and(ASSETS.contentHash.isNotNull())
+                .and(ASSETS.contentHash.startsWith("provisional:").not())
+                .and(
+                    ASSET_METADATA
+                        .assetId
+                        .isNull()
+                        .or(ASSET_METADATA.metadataStatus.isNull())
+                        .or(
+                            ASSET_METADATA.metadataStatus.in(
+                                EXTRACTION_STATUS_PENDING,
+                                EXTRACTION_STATUS_FAILED,
+                                EXTRACTION_STATUS_STALE))
+                        .or(
+                            ASSET_METADATA
+                                .metadataExtractor
+                                .isNull()
+                                .or(ASSET_METADATA.metadataExtractor.ne(extractor)))
+                        .or(
+                            ASSET_METADATA
+                                .metadataExtractorVersion
+                                .isNull()
+                                .or(ASSET_METADATA.metadataExtractorVersion.ne(extractorVersion)))
+                        .or(
+                            ASSET_METADATA
+                                .metadataSchemaVersion
+                                .isNull()
+                                .or(ASSET_METADATA.metadataSchemaVersion.ne(schemaVersion)))
+                        .or(
+                            ASSET_METADATA
+                                .metadataSourceFileSize
+                                .isNull()
+                                .or(
+                                    ASSET_METADATA.metadataSourceFileSize.ne(
+                                        ASSET_FILES.sizeBytes)))
+                        .or(
+                            ASSET_METADATA
+                                .metadataSourceModifiedAt
+                                .isNull()
+                                .or(
+                                    ASSET_METADATA.metadataSourceModifiedAt.ne(
+                                        ASSET_FILES.modifiedAt)))))
+        .orderBy(ASSET_FILES.lastObservedAt.desc())
+        .limit(limit)
+        .fetch()
+        .stream()
+        .map(
+            row ->
+                new MetadataCandidateRow(
+                    row.get(ASSETS.id),
+                    row.get(ASSET_FILES.id),
+                    row.get(ASSET_FILES.path),
+                    row.get(ASSET_FILES.normalizedPath),
+                    row.get(ASSET_FILES.fileName),
+                    row.get(ASSET_FILES.sizeBytes),
+                    row.get(ASSET_FILES.modifiedAt),
+                    row.get(ASSETS.mediaType)))
+        .toList();
+  }
+
+  Optional<MetadataCandidateRow> findActiveMetadataCandidate(UUID assetId, UUID assetFileId) {
+    Tuple row =
+        queryFactory
+            .select(
+                ASSETS.id,
+                ASSET_FILES.id,
+                ASSET_FILES.path,
+                ASSET_FILES.normalizedPath,
+                ASSET_FILES.fileName,
+                ASSET_FILES.sizeBytes,
+                ASSET_FILES.modifiedAt,
+                ASSETS.mediaType)
+            .from(ASSET_FILES)
+            .join(ASSETS)
+            .on(ASSETS.id.eq(ASSET_FILES.assetId))
+            .where(
+                ASSETS
+                    .id
+                    .eq(assetId)
+                    .and(ASSET_FILES.id.eq(assetFileId))
+                    .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                    .and(ASSETS.contentHash.isNotNull())
+                    .and(ASSETS.contentHash.startsWith("provisional:").not()))
+            .fetchOne();
+    if (row == null) {
+      return Optional.empty();
     }
+    return Optional.of(
+        new MetadataCandidateRow(
+            row.get(ASSETS.id),
+            row.get(ASSET_FILES.id),
+            row.get(ASSET_FILES.path),
+            row.get(ASSET_FILES.normalizedPath),
+            row.get(ASSET_FILES.fileName),
+            row.get(ASSET_FILES.sizeBytes),
+            row.get(ASSET_FILES.modifiedAt),
+            row.get(ASSETS.mediaType)));
+  }
 
-    boolean canReadAsset(UUID userId, boolean admin, UUID assetId) {
-        Integer result = queryFactory.selectOne()
-                .from(ASSET_FILES)
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .where(ASSET_FILES.assetId.eq(assetId)
-                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(readableWhere(userId, admin, null)))
-                .fetchFirst();
-        return result != null;
+  List<UUID> listConfirmedAssetIds() {
+    return queryFactory
+        .select(ASSETS.id)
+        .from(ASSETS)
+        .where(ASSETS.contentHash.isNotNull(), ASSETS.contentHash.startsWith("provisional:").not())
+        .fetch();
+  }
+
+  void upsertMetadata(MetadataUpdate update) {
+    long updated =
+        queryFactory
+            .update(ASSET_METADATA)
+            .set(ASSET_METADATA.capturedAt, update.capturedAt())
+            .set(ASSET_METADATA.width, update.width())
+            .set(ASSET_METADATA.height, update.height())
+            .set(ASSET_METADATA.orientation, update.orientation())
+            .set(ASSET_METADATA.fileExtension, update.fileExtension())
+            .set(ASSET_METADATA.mimeType, update.mimeType())
+            .set(ASSET_METADATA.cameraMake, update.cameraMake())
+            .set(ASSET_METADATA.cameraModel, update.cameraModel())
+            .set(ASSET_METADATA.sourceVersion, update.sourceVersion())
+            .set(ASSET_METADATA.extractionStatus, update.extractionStatus())
+            .set(ASSET_METADATA.extractedAt, update.extractedAt())
+            .set(ASSET_METADATA.errorMessage, update.errorMessage())
+            .set(ASSET_METADATA.metadataStatus, update.extractionStatus())
+            .set(ASSET_METADATA.metadataExtractor, update.extractor())
+            .set(ASSET_METADATA.metadataExtractorVersion, update.extractorVersion())
+            .set(ASSET_METADATA.metadataSchemaVersion, update.schemaVersion())
+            .set(ASSET_METADATA.metadataSourceFileSize, update.sourceFileSize())
+            .set(ASSET_METADATA.metadataSourceModifiedAt, update.sourceModifiedAt())
+            .set(ASSET_METADATA.metadataExtractedAt, update.extractedAt())
+            .set(ASSET_METADATA.metadataErrorCode, update.errorCode())
+            .set(ASSET_METADATA.metadataErrorMessage, update.errorMessage())
+            .set(ASSET_METADATA.lensModel, update.lensModel())
+            .set(ASSET_METADATA.focalLength, update.focalLength())
+            .set(ASSET_METADATA.aperture, update.aperture())
+            .set(ASSET_METADATA.exposureTime, update.exposureTime())
+            .set(ASSET_METADATA.iso, update.iso())
+            .set(ASSET_METADATA.latitude, update.latitude())
+            .set(ASSET_METADATA.longitude, update.longitude())
+            .set(ASSET_METADATA.title, update.title())
+            .set(ASSET_METADATA.description, update.description())
+            .set(ASSET_METADATA.keywords, update.keywords())
+            .set(ASSET_METADATA.durationMs, update.durationMs())
+            .set(ASSET_METADATA.displayRotation, update.displayRotation())
+            .set(ASSET_METADATA.container, update.container())
+            .set(ASSET_METADATA.videoCodec, update.videoCodec())
+            .set(ASSET_METADATA.audioCodec, update.audioCodec())
+            .set(ASSET_METADATA.frameRate, update.frameRate())
+            .set(ASSET_METADATA.bitrate, update.bitrate())
+            .set(ASSET_METADATA.hasAudio, update.hasAudio())
+            .set(ASSET_METADATA.metadataExtractionDurationMs, update.metadataExtractionDurationMs())
+            .where(ASSET_METADATA.assetId.eq(update.assetId()))
+            .execute();
+
+    if (updated == 0) {
+      queryFactory
+          .insert(ASSET_METADATA)
+          .set(ASSET_METADATA.assetId, update.assetId())
+          .set(ASSET_METADATA.capturedAt, update.capturedAt())
+          .set(ASSET_METADATA.width, update.width())
+          .set(ASSET_METADATA.height, update.height())
+          .set(ASSET_METADATA.orientation, update.orientation())
+          .set(ASSET_METADATA.fileExtension, update.fileExtension())
+          .set(ASSET_METADATA.mimeType, update.mimeType())
+          .set(ASSET_METADATA.cameraMake, update.cameraMake())
+          .set(ASSET_METADATA.cameraModel, update.cameraModel())
+          .set(ASSET_METADATA.sourceVersion, update.sourceVersion())
+          .set(ASSET_METADATA.extractionStatus, update.extractionStatus())
+          .set(ASSET_METADATA.extractedAt, update.extractedAt())
+          .set(ASSET_METADATA.errorMessage, update.errorMessage())
+          .set(ASSET_METADATA.metadataStatus, update.extractionStatus())
+          .set(ASSET_METADATA.metadataExtractor, update.extractor())
+          .set(ASSET_METADATA.metadataExtractorVersion, update.extractorVersion())
+          .set(ASSET_METADATA.metadataSchemaVersion, update.schemaVersion())
+          .set(ASSET_METADATA.metadataSourceFileSize, update.sourceFileSize())
+          .set(ASSET_METADATA.metadataSourceModifiedAt, update.sourceModifiedAt())
+          .set(ASSET_METADATA.metadataExtractedAt, update.extractedAt())
+          .set(ASSET_METADATA.metadataErrorCode, update.errorCode())
+          .set(ASSET_METADATA.metadataErrorMessage, update.errorMessage())
+          .set(ASSET_METADATA.lensModel, update.lensModel())
+          .set(ASSET_METADATA.focalLength, update.focalLength())
+          .set(ASSET_METADATA.aperture, update.aperture())
+          .set(ASSET_METADATA.exposureTime, update.exposureTime())
+          .set(ASSET_METADATA.iso, update.iso())
+          .set(ASSET_METADATA.latitude, update.latitude())
+          .set(ASSET_METADATA.longitude, update.longitude())
+          .set(ASSET_METADATA.title, update.title())
+          .set(ASSET_METADATA.description, update.description())
+          .set(ASSET_METADATA.keywords, update.keywords())
+          .set(ASSET_METADATA.durationMs, update.durationMs())
+          .set(ASSET_METADATA.displayRotation, update.displayRotation())
+          .set(ASSET_METADATA.container, update.container())
+          .set(ASSET_METADATA.videoCodec, update.videoCodec())
+          .set(ASSET_METADATA.audioCodec, update.audioCodec())
+          .set(ASSET_METADATA.frameRate, update.frameRate())
+          .set(ASSET_METADATA.bitrate, update.bitrate())
+          .set(ASSET_METADATA.hasAudio, update.hasAudio())
+          .set(ASSET_METADATA.metadataExtractionDurationMs, update.metadataExtractionDurationMs())
+          .execute();
     }
+  }
 
-    Set<UUID> starredAssetIds(UUID userId, Collection<UUID> assetIds) {
-        if (assetIds == null || assetIds.isEmpty()) {
-            return Set.of();
-        }
-        return new HashSet<>(queryFactory.select(ALBUM_ITEMS.assetId)
-                .from(ALBUM_ITEMS)
-                .join(ALBUMS).on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
-                .where(ALBUMS.ownerUserId.eq(userId)
-                        .and(ALBUMS.kind.eq(AlbumKind.STARRED))
-                        .and(ALBUM_ITEMS.assetId.in(assetIds)))
-                .fetch());
+  void markMetadataFailed(UUID assetId, String errorCode, String errorMessage, OffsetDateTime now) {
+    queryFactory
+        .update(ASSET_METADATA)
+        .set(ASSET_METADATA.extractionStatus, EXTRACTION_STATUS_FAILED)
+        .set(ASSET_METADATA.metadataStatus, EXTRACTION_STATUS_FAILED)
+        .set(ASSET_METADATA.extractedAt, now)
+        .set(ASSET_METADATA.metadataExtractedAt, now)
+        .set(ASSET_METADATA.errorMessage, errorMessage)
+        .set(ASSET_METADATA.metadataErrorCode, errorCode)
+        .set(ASSET_METADATA.metadataErrorMessage, errorMessage)
+        .where(ASSET_METADATA.assetId.eq(assetId))
+        .execute();
+  }
+
+  void upsertSearchDocument(UUID assetId, String searchableText, OffsetDateTime now) {
+    long updated =
+        queryFactory
+            .update(SEARCH_DOCUMENTS)
+            .set(SEARCH_DOCUMENTS.searchableText, searchableText)
+            .set(SEARCH_DOCUMENTS.updatedAt, now)
+            .where(SEARCH_DOCUMENTS.assetId.eq(assetId))
+            .execute();
+
+    if (updated == 0) {
+      queryFactory
+          .insert(SEARCH_DOCUMENTS)
+          .set(SEARCH_DOCUMENTS.assetId, assetId)
+          .set(SEARCH_DOCUMENTS.searchableText, searchableText)
+          .set(SEARCH_DOCUMENTS.updatedAt, now)
+          .execute();
     }
+  }
 
-    BrowseRows browseAlbumAssets(UUID userId, boolean admin, UUID albumId, int page, int pageSize) {
-        Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
-        BooleanExpression visibleInAlbum = albumVisibleWhere(userId, admin, albumId);
-        queryFactory.select(ALBUM_ITEMS.assetId, ALBUM_ITEMS.sourceLibraryId)
-                .from(ALBUM_ITEMS)
-                .join(ALBUMS).on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
-                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ALBUM_ITEMS.assetId)
-                        .and(ASSET_FILES.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .leftJoin(ALBUM_MEMBERS).on(ALBUM_MEMBERS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_MEMBERS.userId.eq(userId)))
-                .leftJoin(ASSET_LIBRARY_STATE).on(ASSET_LIBRARY_STATE.assetId.eq(ALBUM_ITEMS.assetId).and(ASSET_LIBRARY_STATE.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
-                .leftJoin(ALBUM_APPROVALS).on(ALBUM_APPROVALS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_APPROVALS.assetId.eq(ALBUM_ITEMS.assetId)).and(ALBUM_APPROVALS.recipientUserId.eq(userId)))
-                .where(ALBUM_ITEMS.albumId.eq(albumId)
-                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(visibleInAlbum))
-                .groupBy(ALBUM_ITEMS.assetId, ALBUM_ITEMS.sourceLibraryId, ALBUM_ITEMS.position)
-                .orderBy(ALBUM_ITEMS.position.asc())
-                .offset((long) page * pageSize)
-                .limit(pageSize)
-                .fetch()
-                .forEach(row -> assetContexts.put(row.get(ALBUM_ITEMS.assetId), row.get(ALBUM_ITEMS.sourceLibraryId)));
-        Long count = queryFactory.select(ALBUM_ITEMS.assetId.countDistinct())
-                .from(ALBUM_ITEMS)
-                .join(ALBUMS).on(ALBUMS.id.eq(ALBUM_ITEMS.albumId))
-                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ALBUM_ITEMS.assetId)
-                        .and(ASSET_FILES.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .leftJoin(ALBUM_MEMBERS).on(ALBUM_MEMBERS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_MEMBERS.userId.eq(userId)))
-                .leftJoin(ASSET_LIBRARY_STATE).on(ASSET_LIBRARY_STATE.assetId.eq(ALBUM_ITEMS.assetId).and(ASSET_LIBRARY_STATE.libraryId.eq(ALBUM_ITEMS.sourceLibraryId)))
-                .leftJoin(ALBUM_APPROVALS).on(ALBUM_APPROVALS.albumId.eq(ALBUM_ITEMS.albumId).and(ALBUM_APPROVALS.assetId.eq(ALBUM_ITEMS.assetId)).and(ALBUM_APPROVALS.recipientUserId.eq(userId)))
-                .where(ALBUM_ITEMS.albumId.eq(albumId)
-                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(visibleInAlbum))
-                .fetchOne();
-        // The preceding query is the album-specific authorization boundary.  Do not
-        // apply normal library membership again here: a recipient deliberately has
-        // no source-library membership.
-        return browseByIds(userId, true, assetContexts, count);
-    }
-
-    private BooleanExpression albumVisibleWhere(UUID userId, boolean admin, UUID albumId) {
-        BooleanExpression directLibraryAccess = admin ? com.querydsl.core.types.dsl.Expressions.TRUE.isTrue() : LIBRARY_MEMBERS.userId.eq(userId);
-        BooleanExpression isOwner = ALBUMS.ownerUserId.eq(userId);
-        BooleanExpression isMember = ALBUM_MEMBERS.userId.eq(userId);
-        BooleanExpression approvedOrPublic = ASSET_LIBRARY_STATE.privacy.isNull().or(ASSET_LIBRARY_STATE.privacy.ne("private")).or(ALBUM_APPROVALS.assetId.isNotNull());
-        return LIBRARIES.status.eq(STATUS_ACTIVE).and(isOwner.or(isMember.and(directLibraryAccess.or(approvedOrPublic))));
-    }
-
-    BrowseRows browseTagAssets(UUID userId, boolean admin, UUID tagId, int page, int pageSize) {
-        Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
-        queryFactory.select(ASSET_TAGS.assetId, ASSET_TAGS.sourceLibraryId)
-                .from(ASSET_TAGS)
-                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ASSET_TAGS.assetId)
-                        .and(ASSET_FILES.libraryId.eq(ASSET_TAGS.sourceLibraryId)))
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .where(ASSET_TAGS.tagId.eq(tagId)
-                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(readableWhere(userId, admin, null)))
-                .groupBy(ASSET_TAGS.assetId, ASSET_TAGS.sourceLibraryId)
-                .orderBy(ASSET_TAGS.assetId.asc())
-                .offset((long) page * pageSize)
-                .limit(pageSize)
-                .fetch()
-                .forEach(row -> assetContexts.put(row.get(ASSET_TAGS.assetId), row.get(ASSET_TAGS.sourceLibraryId)));
-        Long count = queryFactory.select(ASSET_TAGS.assetId.countDistinct())
-                .from(ASSET_TAGS)
-                .join(ASSET_FILES).on(ASSET_FILES.assetId.eq(ASSET_TAGS.assetId)
-                        .and(ASSET_FILES.libraryId.eq(ASSET_TAGS.sourceLibraryId)))
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id))
-                .where(ASSET_TAGS.tagId.eq(tagId)
-                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(readableWhere(userId, admin, null)))
-                .fetchOne();
-        return browseByIds(userId, admin, assetContexts, count);
-    }
-
-    Optional<AssetDetailRow> findAsset(UUID userId, boolean admin, UUID assetId) {
-        List<AssetFileRow> rows = baseFileQuery()
-                .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
-                .leftJoin(SEARCH_DOCUMENTS).on(SEARCH_DOCUMENTS.assetId.eq(ASSETS.id))
-                .where(readableWhere(userId, admin, null)
-                        .and(ASSETS.id.eq(assetId))
-                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE)))
-                .orderBy(ASSET_FILES.status.asc(), ASSET_FILES.normalizedPath.asc())
-                .fetch()
-                .stream()
-                .map(this::toAssetFileRow)
-                .toList();
-
-        if (rows.isEmpty()) {
-            return Optional.empty();
-        }
-
-        return Optional.of(AssetDetailRow.from(rows));
-    }
-
-    List<MetadataCandidateRow> listMetadataCandidates(
-            int limit,
-            String extractor,
-            String extractorVersion,
-            int schemaVersion
-    ) {
-        return queryFactory
-                .selectDistinct(
-                        ASSETS.id,
-                        ASSET_FILES.id,
-                        ASSET_FILES.path,
-                        ASSET_FILES.normalizedPath,
-                        ASSET_FILES.fileName,
-                        ASSET_FILES.sizeBytes,
-                        ASSET_FILES.modifiedAt,
-                        ASSETS.mediaType,
-                        ASSET_FILES.lastObservedAt
-                )
-                .from(ASSET_FILES)
-                .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
-                .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
-                .where(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE)
-                        .and(ASSETS.contentHash.isNotNull())
-                        .and(ASSETS.contentHash.startsWith("provisional:").not())
-                        .and(ASSET_METADATA.assetId.isNull()
-                                .or(ASSET_METADATA.metadataStatus.isNull())
-                                .or(ASSET_METADATA.metadataStatus.in(EXTRACTION_STATUS_PENDING, EXTRACTION_STATUS_FAILED, EXTRACTION_STATUS_STALE))
-                                .or(ASSET_METADATA.metadataExtractor.isNull().or(ASSET_METADATA.metadataExtractor.ne(extractor)))
-                                .or(ASSET_METADATA.metadataExtractorVersion.isNull().or(ASSET_METADATA.metadataExtractorVersion.ne(extractorVersion)))
-                                .or(ASSET_METADATA.metadataSchemaVersion.isNull().or(ASSET_METADATA.metadataSchemaVersion.ne(schemaVersion)))
-                                .or(ASSET_METADATA.metadataSourceFileSize.isNull().or(ASSET_METADATA.metadataSourceFileSize.ne(ASSET_FILES.sizeBytes)))
-                                .or(ASSET_METADATA.metadataSourceModifiedAt.isNull().or(ASSET_METADATA.metadataSourceModifiedAt.ne(ASSET_FILES.modifiedAt)))))
-                .orderBy(ASSET_FILES.lastObservedAt.desc())
-                .limit(limit)
-                .fetch()
-                .stream()
-                .map(row -> new MetadataCandidateRow(
-                        row.get(ASSETS.id),
-                        row.get(ASSET_FILES.id),
-                        row.get(ASSET_FILES.path),
-                        row.get(ASSET_FILES.normalizedPath),
-                        row.get(ASSET_FILES.fileName),
-                        row.get(ASSET_FILES.sizeBytes),
-                        row.get(ASSET_FILES.modifiedAt),
-                        row.get(ASSETS.mediaType)
-                ))
-                .toList();
-    }
-
-    Optional<MetadataCandidateRow> findActiveMetadataCandidate(UUID assetId, UUID assetFileId) {
-        Tuple row = queryFactory
-                .select(
-                        ASSETS.id,
-                        ASSET_FILES.id,
-                        ASSET_FILES.path,
-                        ASSET_FILES.normalizedPath,
-                        ASSET_FILES.fileName,
-                        ASSET_FILES.sizeBytes,
-                        ASSET_FILES.modifiedAt,
-                        ASSETS.mediaType
-                )
-                .from(ASSET_FILES)
-                .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
-                .where(ASSETS.id.eq(assetId)
-                        .and(ASSET_FILES.id.eq(assetFileId))
-                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(ASSETS.contentHash.isNotNull())
-                        .and(ASSETS.contentHash.startsWith("provisional:").not()))
-                .fetchOne();
-        if (row == null) {
-            return Optional.empty();
-        }
-        return Optional.of(new MetadataCandidateRow(
-                row.get(ASSETS.id),
-                row.get(ASSET_FILES.id),
-                row.get(ASSET_FILES.path),
-                row.get(ASSET_FILES.normalizedPath),
-                row.get(ASSET_FILES.fileName),
-                row.get(ASSET_FILES.sizeBytes),
-                row.get(ASSET_FILES.modifiedAt),
-                row.get(ASSETS.mediaType)
-        ));
-    }
-
-    List<UUID> listConfirmedAssetIds() {
-        return queryFactory
-                .select(ASSETS.id)
-                .from(ASSETS)
-                .where(ASSETS.contentHash.isNotNull(), ASSETS.contentHash.startsWith("provisional:").not())
-                .fetch();
-    }
-
-    void upsertMetadata(MetadataUpdate update) {
-        long updated = queryFactory.update(ASSET_METADATA)
-                .set(ASSET_METADATA.capturedAt, update.capturedAt())
-                .set(ASSET_METADATA.width, update.width())
-                .set(ASSET_METADATA.height, update.height())
-                .set(ASSET_METADATA.orientation, update.orientation())
-                .set(ASSET_METADATA.fileExtension, update.fileExtension())
-                .set(ASSET_METADATA.mimeType, update.mimeType())
-                .set(ASSET_METADATA.cameraMake, update.cameraMake())
-                .set(ASSET_METADATA.cameraModel, update.cameraModel())
-                .set(ASSET_METADATA.sourceVersion, update.sourceVersion())
-                .set(ASSET_METADATA.extractionStatus, update.extractionStatus())
-                .set(ASSET_METADATA.extractedAt, update.extractedAt())
-                .set(ASSET_METADATA.errorMessage, update.errorMessage())
-                .set(ASSET_METADATA.metadataStatus, update.extractionStatus())
-                .set(ASSET_METADATA.metadataExtractor, update.extractor())
-                .set(ASSET_METADATA.metadataExtractorVersion, update.extractorVersion())
-                .set(ASSET_METADATA.metadataSchemaVersion, update.schemaVersion())
-                .set(ASSET_METADATA.metadataSourceFileSize, update.sourceFileSize())
-                .set(ASSET_METADATA.metadataSourceModifiedAt, update.sourceModifiedAt())
-                .set(ASSET_METADATA.metadataExtractedAt, update.extractedAt())
-                .set(ASSET_METADATA.metadataErrorCode, update.errorCode())
-                .set(ASSET_METADATA.metadataErrorMessage, update.errorMessage())
-                .set(ASSET_METADATA.lensModel, update.lensModel())
-                .set(ASSET_METADATA.focalLength, update.focalLength())
-                .set(ASSET_METADATA.aperture, update.aperture())
-                .set(ASSET_METADATA.exposureTime, update.exposureTime())
-                .set(ASSET_METADATA.iso, update.iso())
-                .set(ASSET_METADATA.latitude, update.latitude())
-                .set(ASSET_METADATA.longitude, update.longitude())
-                .set(ASSET_METADATA.title, update.title())
-                .set(ASSET_METADATA.description, update.description())
-                .set(ASSET_METADATA.keywords, update.keywords())
-                .set(ASSET_METADATA.durationMs, update.durationMs())
-                .set(ASSET_METADATA.displayRotation, update.displayRotation())
-                .set(ASSET_METADATA.container, update.container())
-                .set(ASSET_METADATA.videoCodec, update.videoCodec())
-                .set(ASSET_METADATA.audioCodec, update.audioCodec())
-                .set(ASSET_METADATA.frameRate, update.frameRate())
-                .set(ASSET_METADATA.bitrate, update.bitrate())
-                .set(ASSET_METADATA.hasAudio, update.hasAudio())
-                .set(ASSET_METADATA.metadataExtractionDurationMs, update.metadataExtractionDurationMs())
-                .where(ASSET_METADATA.assetId.eq(update.assetId()))
-                .execute();
-
-        if (updated == 0) {
-            queryFactory.insert(ASSET_METADATA)
-                    .set(ASSET_METADATA.assetId, update.assetId())
-                    .set(ASSET_METADATA.capturedAt, update.capturedAt())
-                    .set(ASSET_METADATA.width, update.width())
-                    .set(ASSET_METADATA.height, update.height())
-                    .set(ASSET_METADATA.orientation, update.orientation())
-                    .set(ASSET_METADATA.fileExtension, update.fileExtension())
-                    .set(ASSET_METADATA.mimeType, update.mimeType())
-                    .set(ASSET_METADATA.cameraMake, update.cameraMake())
-                    .set(ASSET_METADATA.cameraModel, update.cameraModel())
-                    .set(ASSET_METADATA.sourceVersion, update.sourceVersion())
-                    .set(ASSET_METADATA.extractionStatus, update.extractionStatus())
-                    .set(ASSET_METADATA.extractedAt, update.extractedAt())
-                    .set(ASSET_METADATA.errorMessage, update.errorMessage())
-                    .set(ASSET_METADATA.metadataStatus, update.extractionStatus())
-                    .set(ASSET_METADATA.metadataExtractor, update.extractor())
-                    .set(ASSET_METADATA.metadataExtractorVersion, update.extractorVersion())
-                    .set(ASSET_METADATA.metadataSchemaVersion, update.schemaVersion())
-                    .set(ASSET_METADATA.metadataSourceFileSize, update.sourceFileSize())
-                    .set(ASSET_METADATA.metadataSourceModifiedAt, update.sourceModifiedAt())
-                    .set(ASSET_METADATA.metadataExtractedAt, update.extractedAt())
-                    .set(ASSET_METADATA.metadataErrorCode, update.errorCode())
-                    .set(ASSET_METADATA.metadataErrorMessage, update.errorMessage())
-                    .set(ASSET_METADATA.lensModel, update.lensModel())
-                    .set(ASSET_METADATA.focalLength, update.focalLength())
-                    .set(ASSET_METADATA.aperture, update.aperture())
-                    .set(ASSET_METADATA.exposureTime, update.exposureTime())
-                    .set(ASSET_METADATA.iso, update.iso())
-                    .set(ASSET_METADATA.latitude, update.latitude())
-                    .set(ASSET_METADATA.longitude, update.longitude())
-                    .set(ASSET_METADATA.title, update.title())
-                    .set(ASSET_METADATA.description, update.description())
-                    .set(ASSET_METADATA.keywords, update.keywords())
-                    .set(ASSET_METADATA.durationMs, update.durationMs())
-                    .set(ASSET_METADATA.displayRotation, update.displayRotation())
-                    .set(ASSET_METADATA.container, update.container())
-                    .set(ASSET_METADATA.videoCodec, update.videoCodec())
-                    .set(ASSET_METADATA.audioCodec, update.audioCodec())
-                    .set(ASSET_METADATA.frameRate, update.frameRate())
-                    .set(ASSET_METADATA.bitrate, update.bitrate())
-                    .set(ASSET_METADATA.hasAudio, update.hasAudio())
-                    .set(ASSET_METADATA.metadataExtractionDurationMs, update.metadataExtractionDurationMs())
-                    .execute();
-        }
-    }
-
-    void markMetadataFailed(UUID assetId, String errorCode, String errorMessage, OffsetDateTime now) {
-        queryFactory.update(ASSET_METADATA)
-                .set(ASSET_METADATA.extractionStatus, EXTRACTION_STATUS_FAILED)
-                .set(ASSET_METADATA.metadataStatus, EXTRACTION_STATUS_FAILED)
-                .set(ASSET_METADATA.extractedAt, now)
-                .set(ASSET_METADATA.metadataExtractedAt, now)
-                .set(ASSET_METADATA.errorMessage, errorMessage)
-                .set(ASSET_METADATA.metadataErrorCode, errorCode)
-                .set(ASSET_METADATA.metadataErrorMessage, errorMessage)
-                .where(ASSET_METADATA.assetId.eq(assetId))
-                .execute();
-    }
-
-    void upsertSearchDocument(UUID assetId, String searchableText, OffsetDateTime now) {
-        long updated = queryFactory.update(SEARCH_DOCUMENTS)
-                .set(SEARCH_DOCUMENTS.searchableText, searchableText)
-                .set(SEARCH_DOCUMENTS.updatedAt, now)
-                .where(SEARCH_DOCUMENTS.assetId.eq(assetId))
-                .execute();
-
-        if (updated == 0) {
-            queryFactory.insert(SEARCH_DOCUMENTS)
-                    .set(SEARCH_DOCUMENTS.assetId, assetId)
-                    .set(SEARCH_DOCUMENTS.searchableText, searchableText)
-                    .set(SEARCH_DOCUMENTS.updatedAt, now)
-                    .execute();
-        }
-    }
-
-    String searchableTextForAsset(UUID assetId) {
-        List<String> parts = queryFactory
-                .select(ASSET_FILES.fileName, ASSET_FILES.normalizedPath, ASSETS.mediaType, ASSET_METADATA.fileExtension, ASSET_METADATA.mimeType)
-                .from(ASSET_FILES)
-                .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
-                .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
-                .where(ASSET_FILES.assetId.eq(assetId))
-                .fetch()
-                .stream()
-                .flatMap(row -> List.of(
+  String searchableTextForAsset(UUID assetId) {
+    List<String> parts =
+        queryFactory
+            .select(
+                ASSET_FILES.fileName,
+                ASSET_FILES.normalizedPath,
+                ASSETS.mediaType,
+                ASSET_METADATA.fileExtension,
+                ASSET_METADATA.mimeType)
+            .from(ASSET_FILES)
+            .join(ASSETS)
+            .on(ASSETS.id.eq(ASSET_FILES.assetId))
+            .leftJoin(ASSET_METADATA)
+            .on(ASSET_METADATA.assetId.eq(ASSETS.id))
+            .where(ASSET_FILES.assetId.eq(assetId))
+            .fetch()
+            .stream()
+            .flatMap(
+                row ->
+                    List.of(
                         row.get(ASSET_FILES.fileName),
                         row.get(ASSET_FILES.normalizedPath),
                         row.get(ASSETS.mediaType),
                         row.get(ASSET_METADATA.fileExtension),
-                        row.get(ASSET_METADATA.mimeType)
-                ).stream())
-                .filter(value -> value != null && !value.isBlank())
+                        row.get(ASSET_METADATA.mimeType))
+                        .stream())
+            .filter(value -> value != null && !value.isBlank())
+            .toList();
+    return String.join(" ", parts);
+  }
+
+  private SQLQuery<Tuple> baseFileQuery() {
+    return queryFactory
+        .select(
+            ASSETS.id,
+            ASSETS.contentHash,
+            ASSETS.mediaType,
+            ASSETS.availableFileCount,
+            ASSETS.lastObservedAt,
+            ASSET_FILES.id,
+            ASSET_FILES.libraryId,
+            ASSET_FILES.path,
+            ASSET_FILES.normalizedPath,
+            ASSET_FILES.fileName,
+            ASSET_FILES.sizeBytes,
+            ASSET_FILES.modifiedAt,
+            ASSET_FILES.status,
+            LIBRARIES.name,
+            ASSET_METADATA.capturedAt,
+            ASSET_METADATA.width,
+            ASSET_METADATA.height,
+            ASSET_METADATA.orientation,
+            ASSET_METADATA.fileExtension,
+            ASSET_METADATA.mimeType,
+            ASSET_METADATA.metadataStatus,
+            ASSET_METADATA.metadataExtractedAt,
+            ASSET_METADATA.metadataErrorCode,
+            ASSET_METADATA.metadataErrorMessage,
+            ASSET_METADATA.cameraMake,
+            ASSET_METADATA.cameraModel,
+            ASSET_METADATA.lensModel,
+            ASSET_METADATA.focalLength,
+            ASSET_METADATA.aperture,
+            ASSET_METADATA.exposureTime,
+            ASSET_METADATA.iso,
+            ASSET_METADATA.latitude,
+            ASSET_METADATA.longitude,
+            ASSET_METADATA.title,
+            ASSET_METADATA.description,
+            ASSET_METADATA.keywords,
+            ASSET_METADATA.durationMs,
+            ASSET_METADATA.displayRotation,
+            ASSET_METADATA.container,
+            ASSET_METADATA.videoCodec,
+            ASSET_METADATA.audioCodec,
+            ASSET_METADATA.frameRate,
+            ASSET_METADATA.bitrate,
+            ASSET_METADATA.hasAudio)
+        .from(ASSET_FILES)
+        .join(ASSETS)
+        .on(ASSETS.id.eq(ASSET_FILES.assetId))
+        .join(LIBRARIES)
+        .on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
+        .leftJoin(LIBRARY_MEMBERS)
+        .on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id));
+  }
+
+  private BooleanBuilder readableWhere(UUID userId, boolean admin, UUID libraryId) {
+    BooleanBuilder where = new BooleanBuilder().and(LIBRARIES.status.eq(STATUS_ACTIVE));
+    if (libraryId != null) {
+      where.and(LIBRARIES.id.eq(libraryId));
+    }
+    if (!admin) {
+      where.and(LIBRARY_MEMBERS.userId.eq(userId));
+    }
+    return where;
+  }
+
+  private BooleanBuilder assetSearchWhere(
+      UUID userId, boolean admin, AssetSearchCriteria criteria) {
+    BooleanBuilder where =
+        readableWhere(userId, admin, criteria.libraryId())
+            .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE));
+
+    if (criteria.folder() != null && !criteria.folder().isBlank()) {
+      String normalizedFolder = criteria.folder();
+      if (criteria.includeDescendants()) {
+        where.and(
+            ASSET_FILES
+                .normalizedPath
+                .eq(normalizedFolder)
+                .or(ASSET_FILES.normalizedPath.startsWith(normalizedFolder + "/")));
+      } else {
+        List<FolderRow> folders =
+            listFolders(userId, admin, criteria.libraryId()).stream()
+                .filter(folder -> folder.folderPath().equals(normalizedFolder))
                 .toList();
-        return String.join(" ", parts);
+        if (folders.isEmpty()) {
+          where.and(ASSETS.id.isNull());
+        } else {
+          where.and(ASSET_FILES.normalizedPath.startsWith(normalizedFolder + "/"));
+        }
+      }
     }
 
-    private SQLQuery<Tuple> baseFileQuery() {
-        return queryFactory
-                .select(
-                        ASSETS.id,
-                        ASSETS.contentHash,
-                        ASSETS.mediaType,
-                        ASSETS.availableFileCount,
-                        ASSETS.lastObservedAt,
-                        ASSET_FILES.id,
-                        ASSET_FILES.libraryId,
-                        ASSET_FILES.path,
-                        ASSET_FILES.normalizedPath,
-                        ASSET_FILES.fileName,
-                        ASSET_FILES.sizeBytes,
-                        ASSET_FILES.modifiedAt,
-                        ASSET_FILES.status,
-                        LIBRARIES.name,
-                        ASSET_METADATA.capturedAt,
-                        ASSET_METADATA.width,
-                        ASSET_METADATA.height,
-                        ASSET_METADATA.orientation,
-                        ASSET_METADATA.fileExtension,
-                        ASSET_METADATA.mimeType,
-                        ASSET_METADATA.metadataStatus,
-                        ASSET_METADATA.metadataExtractedAt,
-                        ASSET_METADATA.metadataErrorCode,
-                        ASSET_METADATA.metadataErrorMessage,
-                        ASSET_METADATA.cameraMake,
-                        ASSET_METADATA.cameraModel,
-                        ASSET_METADATA.lensModel,
-                        ASSET_METADATA.focalLength,
-                        ASSET_METADATA.aperture,
-                        ASSET_METADATA.exposureTime,
-                        ASSET_METADATA.iso,
-                        ASSET_METADATA.latitude,
-                        ASSET_METADATA.longitude,
-                        ASSET_METADATA.title,
-                        ASSET_METADATA.description,
-                        ASSET_METADATA.keywords,
-                        ASSET_METADATA.durationMs,
-                        ASSET_METADATA.displayRotation,
-                        ASSET_METADATA.container,
-                        ASSET_METADATA.videoCodec,
-                        ASSET_METADATA.audioCodec,
-                        ASSET_METADATA.frameRate,
-                        ASSET_METADATA.bitrate,
-                        ASSET_METADATA.hasAudio
-                )
-                .from(ASSET_FILES)
-                .join(ASSETS).on(ASSETS.id.eq(ASSET_FILES.assetId))
-                .join(LIBRARIES).on(LIBRARIES.id.eq(ASSET_FILES.libraryId))
-                .leftJoin(LIBRARY_MEMBERS).on(LIBRARY_MEMBERS.libraryId.eq(LIBRARIES.id));
+    if (criteria.availability() != null && !criteria.availability().isBlank()) {
+      if (AVAILABILITY_MISSING.equals(criteria.availability())) {
+        where.and(ASSETS.availableFileCount.eq(0));
+      }
+      if (AVAILABILITY_AVAILABLE.equals(criteria.availability())) {
+        where.and(ASSETS.availableFileCount.gt(0));
+      }
     }
 
-    private BooleanBuilder readableWhere(UUID userId, boolean admin, UUID libraryId) {
-        BooleanBuilder where = new BooleanBuilder()
-                .and(LIBRARIES.status.eq(STATUS_ACTIVE));
-        if (libraryId != null) {
-            where.and(LIBRARIES.id.eq(libraryId));
-        }
-        if (!admin) {
-            where.and(LIBRARY_MEMBERS.userId.eq(userId));
-        }
-        return where;
+    if (criteria.fileType() != null && !criteria.fileType().isBlank()) {
+      where.and(ASSETS.mediaType.lower().startsWith(criteria.fileType().toLowerCase(Locale.ROOT)));
     }
 
-    private BooleanBuilder assetSearchWhere(UUID userId, boolean admin, AssetSearchCriteria criteria) {
-        BooleanBuilder where = readableWhere(userId, admin, criteria.libraryId())
-                .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE));
-
-        if (criteria.folder() != null && !criteria.folder().isBlank()) {
-            String normalizedFolder = criteria.folder();
-            if (criteria.includeDescendants()) {
-                where.and(ASSET_FILES.normalizedPath.eq(normalizedFolder)
-                        .or(ASSET_FILES.normalizedPath.startsWith(normalizedFolder + "/")));
-            } else {
-                List<FolderRow> folders = listFolders(userId, admin, criteria.libraryId()).stream()
-                        .filter(folder -> folder.folderPath().equals(normalizedFolder))
-                        .toList();
-                if (folders.isEmpty()) {
-                    where.and(ASSETS.id.isNull());
-                } else {
-                    where.and(ASSET_FILES.normalizedPath.startsWith(normalizedFolder + "/"));
-                }
-            }
-        }
-
-        if (criteria.availability() != null && !criteria.availability().isBlank()) {
-            if (AVAILABILITY_MISSING.equals(criteria.availability())) {
-                where.and(ASSETS.availableFileCount.eq(0));
-            }
-            if (AVAILABILITY_AVAILABLE.equals(criteria.availability())) {
-                where.and(ASSETS.availableFileCount.gt(0));
-            }
-        }
-
-        if (criteria.fileType() != null && !criteria.fileType().isBlank()) {
-            where.and(ASSETS.mediaType.lower().startsWith(criteria.fileType().toLowerCase(Locale.ROOT)));
-        }
-
-        if (Boolean.TRUE.equals(criteria.duplicatesOnly())) {
-            where.and(ASSETS.availableFileCount.gt(1));
-        }
-
-        if (!criteria.query().freeText().isBlank()) {
-            String query = criteria.query().freeText().trim().toLowerCase(Locale.ROOT);
-            where.and(ASSET_FILES.fileName.lower().contains(query)
-                    .or(ASSET_FILES.normalizedPath.lower().contains(query))
-                    .or(ASSETS.mediaType.lower().contains(query))
-                    .or(ASSET_METADATA.fileExtension.lower().contains(query))
-                    .or(ASSET_METADATA.mimeType.lower().contains(query))
-                    .or(SEARCH_DOCUMENTS.searchableText.lower().contains(query))
-                    .or(Expressions.booleanTemplate(
-                            "search_documents.search_vector @@ plainto_tsquery('simple', {0})", query)));
-        }
-
-        BooleanBuilder positiveExtensions = new BooleanBuilder();
-        BooleanBuilder positiveLibraries = new BooleanBuilder();
-        BooleanBuilder positiveAlbums = new BooleanBuilder();
-        boolean hasPositiveExtension = false;
-        boolean hasPositiveLibrary = false;
-        boolean hasPositiveAlbum = false;
-        for (SearchClause clause : criteria.query().clauses()) {
-            BooleanExpression predicate = structuredPredicate(clause, criteria.tagOwnerUserId(), admin);
-            if (clause.field() == SearchField.EXTENSION && !clause.negated()) {
-                positiveExtensions.or(predicate);
-                hasPositiveExtension = true;
-                continue;
-            }
-            if (clause.field() == SearchField.LIBRARY && !clause.negated()) {
-                positiveLibraries.or(predicate);
-                hasPositiveLibrary = true;
-                continue;
-            }
-            if (clause.field() == SearchField.ALBUM && !clause.negated()) {
-                positiveAlbums.or(predicate);
-                hasPositiveAlbum = true;
-                continue;
-            }
-            where.and(clause.negated() ? predicate.not() : predicate);
-        }
-        if (hasPositiveExtension) {
-            where.and(positiveExtensions);
-        }
-        if (hasPositiveLibrary) {
-            where.and(positiveLibraries);
-        }
-        if (hasPositiveAlbum) {
-            where.and(positiveAlbums);
-        }
-
-        if (criteria.tagIds() != null && !criteria.tagIds().isEmpty()) {
-            for (UUID tagId : criteria.tagIds()) {
-                QAssetTags matchingTags = new QAssetTags("matching_tags_" + tagId);
-                QTags matchingTagDefinitions = new QTags("matching_tag_definitions_" + tagId);
-                where.and(com.querydsl.sql.SQLExpressions.selectOne()
-                        .from(matchingTags)
-                        .join(matchingTagDefinitions).on(matchingTagDefinitions.id.eq(matchingTags.tagId))
-                        .where(matchingTags.assetId.eq(ASSETS.id)
-                                .and(matchingTags.tagId.eq(tagId))
-                                .and(matchingTagDefinitions.ownerUserId.eq(criteria.tagOwnerUserId())))
-                        .exists());
-            }
-        }
-
-        return where;
+    if (Boolean.TRUE.equals(criteria.duplicatesOnly())) {
+      where.and(ASSETS.availableFileCount.gt(1));
     }
 
-    private BooleanExpression structuredPredicate(SearchClause clause, UUID userId, boolean admin) {
-        String value = clause.value().trim();
-        String normalized = value.toLowerCase(Locale.ROOT);
-        return switch (clause.field()) {
-            case LIBRARY -> assetInLibrary(value, userId, admin);
-            case FOLDER -> assetInFolder(value, userId, admin);
-            case ALBUM -> assetInAlbum(value, userId);
-            case TAG -> assetHasTag(value, userId);
-            case EXTENSION -> {
-                List<String> extensions = new ArrayList<>();
-                for (String part : value.split(",")) {
-                    String extension = part.trim().toLowerCase(Locale.ROOT);
-                    if (extension.isEmpty()) {
-                        continue;
-                    }
-                    if (extension.startsWith(".")) {
-                        extension = extension.substring(1);
-                    }
-                    if (!extension.isEmpty() && !extensions.contains(extension)) {
-                        extensions.add(extension);
-                    }
-                }
-                yield extensions.isEmpty()
-                        ? Expressions.FALSE
-                        : ASSET_METADATA.fileExtension.lower().in(extensions);
-            }
-            case CAMERA -> ASSET_METADATA.cameraMake.lower().contains(normalized)
-                    .or(ASSET_METADATA.cameraModel.lower().contains(normalized));
-            case AFTER -> ASSET_METADATA.capturedAt.goe(dateBoundary(value));
-            case BEFORE -> ASSET_METADATA.capturedAt.lt(dateBoundary(value));
-            case ON -> ASSET_METADATA.capturedAt.goe(dateBoundary(value))
-                    .and(ASSET_METADATA.capturedAt.lt(dateBoundary(value).plusDays(1)));
-            case IS -> switch (normalized) {
-                case "available" -> ASSETS.availableFileCount.gt(0);
-                case "missing" -> ASSETS.availableFileCount.eq(0);
-                case "duplicate" -> ASSETS.availableFileCount.gt(1);
-                case "starred" -> assetInStarred(userId);
-                default -> throw new IllegalArgumentException("Unsupported is: value " + value);
-            };
-        };
+    if (!criteria.query().freeText().isBlank()) {
+      String query = criteria.query().freeText().trim().toLowerCase(Locale.ROOT);
+      where.and(
+          ASSET_FILES
+              .fileName
+              .lower()
+              .contains(query)
+              .or(ASSET_FILES.normalizedPath.lower().contains(query))
+              .or(ASSETS.mediaType.lower().contains(query))
+              .or(ASSET_METADATA.fileExtension.lower().contains(query))
+              .or(ASSET_METADATA.mimeType.lower().contains(query))
+              .or(SEARCH_DOCUMENTS.searchableText.lower().contains(query))
+              .or(
+                  Expressions.booleanTemplate(
+                      "search_documents.search_vector @@ plainto_tsquery('simple', {0})", query)));
     }
 
-    private BooleanExpression assetInLibrary(String value, UUID userId, boolean admin) {
-        QAssetFiles files = new QAssetFiles("search_library_files");
-        QLibraries libraries = new QLibraries("search_libraries");
-        QLibraryMembers members = new QLibraryMembers("search_library_members");
-        BooleanBuilder predicate = new BooleanBuilder(files.assetId.eq(ASSETS.id))
-                .and(files.status.eq(FILE_STATUS_ACTIVE))
-                .and(libraries.status.eq(STATUS_ACTIVE))
-                .and(matchesIdentifier(libraries.id, libraries.name, value));
-        if (!admin) {
-            predicate.and(members.userId.eq(userId));
+    BooleanBuilder positiveExtensions = new BooleanBuilder();
+    BooleanBuilder positiveLibraries = new BooleanBuilder();
+    BooleanBuilder positiveAlbums = new BooleanBuilder();
+    boolean hasPositiveExtension = false;
+    boolean hasPositiveLibrary = false;
+    boolean hasPositiveAlbum = false;
+    for (SearchClause clause : criteria.query().clauses()) {
+      BooleanExpression predicate = structuredPredicate(clause, criteria.tagOwnerUserId(), admin);
+      if (clause.field() == SearchField.EXTENSION && !clause.negated()) {
+        positiveExtensions.or(predicate);
+        hasPositiveExtension = true;
+        continue;
+      }
+      if (clause.field() == SearchField.LIBRARY && !clause.negated()) {
+        positiveLibraries.or(predicate);
+        hasPositiveLibrary = true;
+        continue;
+      }
+      if (clause.field() == SearchField.ALBUM && !clause.negated()) {
+        positiveAlbums.or(predicate);
+        hasPositiveAlbum = true;
+        continue;
+      }
+      where.and(clause.negated() ? predicate.not() : predicate);
+    }
+    if (hasPositiveExtension) {
+      where.and(positiveExtensions);
+    }
+    if (hasPositiveLibrary) {
+      where.and(positiveLibraries);
+    }
+    if (hasPositiveAlbum) {
+      where.and(positiveAlbums);
+    }
+
+    if (criteria.tagIds() != null && !criteria.tagIds().isEmpty()) {
+      for (UUID tagId : criteria.tagIds()) {
+        QAssetTags matchingTags = new QAssetTags("matching_tags_" + tagId);
+        QTags matchingTagDefinitions = new QTags("matching_tag_definitions_" + tagId);
+        where.and(
+            com.querydsl.sql.SQLExpressions.selectOne()
+                .from(matchingTags)
+                .join(matchingTagDefinitions)
+                .on(matchingTagDefinitions.id.eq(matchingTags.tagId))
+                .where(
+                    matchingTags
+                        .assetId
+                        .eq(ASSETS.id)
+                        .and(matchingTags.tagId.eq(tagId))
+                        .and(matchingTagDefinitions.ownerUserId.eq(criteria.tagOwnerUserId())))
+                .exists());
+      }
+    }
+
+    return where;
+  }
+
+  private BooleanExpression structuredPredicate(SearchClause clause, UUID userId, boolean admin) {
+    String value = clause.value().trim();
+    String normalized = value.toLowerCase(Locale.ROOT);
+    return switch (clause.field()) {
+      case LIBRARY -> assetInLibrary(value, userId, admin);
+      case FOLDER -> assetInFolder(value, userId, admin);
+      case ALBUM -> assetInAlbum(value, userId);
+      case TAG -> assetHasTag(value, userId);
+      case EXTENSION -> {
+        List<String> extensions = new ArrayList<>();
+        for (String part : value.split(",")) {
+          String extension = part.trim().toLowerCase(Locale.ROOT);
+          if (extension.isEmpty()) {
+            continue;
+          }
+          if (extension.startsWith(".")) {
+            extension = extension.substring(1);
+          }
+          if (!extension.isEmpty() && !extensions.contains(extension)) {
+            extensions.add(extension);
+          }
         }
-        return SQLExpressions.selectOne().from(files)
-                .join(libraries).on(libraries.id.eq(files.libraryId))
-                .leftJoin(members).on(members.libraryId.eq(libraries.id))
-                .where(predicate).exists();
+        yield extensions.isEmpty()
+            ? Expressions.FALSE
+            : ASSET_METADATA.fileExtension.lower().in(extensions);
+      }
+      case CAMERA ->
+          ASSET_METADATA
+              .cameraMake
+              .lower()
+              .contains(normalized)
+              .or(ASSET_METADATA.cameraModel.lower().contains(normalized));
+      case AFTER -> ASSET_METADATA.capturedAt.goe(dateBoundary(value));
+      case BEFORE -> ASSET_METADATA.capturedAt.lt(dateBoundary(value));
+      case ON ->
+          ASSET_METADATA
+              .capturedAt
+              .goe(dateBoundary(value))
+              .and(ASSET_METADATA.capturedAt.lt(dateBoundary(value).plusDays(1)));
+      case IS ->
+          switch (normalized) {
+            case "available" -> ASSETS.availableFileCount.gt(0);
+            case "missing" -> ASSETS.availableFileCount.eq(0);
+            case "duplicate" -> ASSETS.availableFileCount.gt(1);
+            case "starred" -> assetInStarred(userId);
+            default -> throw new IllegalArgumentException("Unsupported is: value " + value);
+          };
+    };
+  }
+
+  private BooleanExpression assetInLibrary(String value, UUID userId, boolean admin) {
+    QAssetFiles files = new QAssetFiles("search_library_files");
+    QLibraries libraries = new QLibraries("search_libraries");
+    QLibraryMembers members = new QLibraryMembers("search_library_members");
+    BooleanBuilder predicate =
+        new BooleanBuilder(files.assetId.eq(ASSETS.id))
+            .and(files.status.eq(FILE_STATUS_ACTIVE))
+            .and(libraries.status.eq(STATUS_ACTIVE))
+            .and(matchesIdentifier(libraries.id, libraries.name, value));
+    if (!admin) {
+      predicate.and(members.userId.eq(userId));
+    }
+    return SQLExpressions.selectOne()
+        .from(files)
+        .join(libraries)
+        .on(libraries.id.eq(files.libraryId))
+        .leftJoin(members)
+        .on(members.libraryId.eq(libraries.id))
+        .where(predicate)
+        .exists();
+  }
+
+  private BooleanExpression assetInFolder(String value, UUID userId, boolean admin) {
+    QAssetFiles files = new QAssetFiles("search_folder_files");
+    QLibraries libraries = new QLibraries("search_folder_libraries");
+    QLibraryMembers members = new QLibraryMembers("search_folder_members");
+    String folder = value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    BooleanBuilder predicate =
+        new BooleanBuilder(files.assetId.eq(ASSETS.id))
+            .and(files.status.eq(FILE_STATUS_ACTIVE))
+            .and(files.normalizedPath.startsWith(folder + "/"))
+            .and(libraries.status.eq(STATUS_ACTIVE));
+    if (!admin) {
+      predicate.and(members.userId.eq(userId));
+    }
+    return SQLExpressions.selectOne()
+        .from(files)
+        .join(libraries)
+        .on(libraries.id.eq(files.libraryId))
+        .leftJoin(members)
+        .on(members.libraryId.eq(libraries.id))
+        .where(predicate)
+        .exists();
+  }
+
+  private BooleanExpression assetInAlbum(String value, UUID userId) {
+    QAlbumItems items = new QAlbumItems("search_album_items");
+    QAlbums albums = new QAlbums("search_albums");
+    return SQLExpressions.selectOne()
+        .from(items)
+        .join(albums)
+        .on(albums.id.eq(items.albumId))
+        .where(
+            items
+                .assetId
+                .eq(ASSETS.id)
+                .and(albums.ownerUserId.eq(userId))
+                .and(albums.kind.eq(AlbumKind.USER))
+                .and(matchesIdentifier(albums.id, albums.name, value)))
+        .exists();
+  }
+
+  private BooleanExpression assetHasTag(String value, UUID userId) {
+    QAssetTags assetTags = new QAssetTags("search_asset_tags");
+    QTags tags = new QTags("search_tags");
+    return SQLExpressions.selectOne()
+        .from(assetTags)
+        .join(tags)
+        .on(tags.id.eq(assetTags.tagId))
+        .where(
+            assetTags
+                .assetId
+                .eq(ASSETS.id)
+                .and(tags.ownerUserId.eq(userId))
+                .and(matchesIdentifier(tags.id, tags.name, value)))
+        .exists();
+  }
+
+  private BooleanExpression assetInStarred(UUID userId) {
+    QAlbumItems items = new QAlbumItems("search_starred_items");
+    QAlbums albums = new QAlbums("search_starred_albums");
+    return SQLExpressions.selectOne()
+        .from(items)
+        .join(albums)
+        .on(albums.id.eq(items.albumId))
+        .where(
+            items
+                .assetId
+                .eq(ASSETS.id)
+                .and(albums.ownerUserId.eq(userId))
+                .and(albums.kind.eq(AlbumKind.STARRED)))
+        .exists();
+  }
+
+  private BooleanExpression matchesIdentifier(
+      com.querydsl.core.types.dsl.ComparablePath<UUID> id,
+      com.querydsl.core.types.dsl.StringPath name,
+      String value) {
+    try {
+      return id.eq(UUID.fromString(value)).or(name.lower().eq(value.toLowerCase(Locale.ROOT)));
+    } catch (IllegalArgumentException exception) {
+      return name.lower().eq(value.toLowerCase(Locale.ROOT));
+    }
+  }
+
+  private OffsetDateTime dateBoundary(String value) {
+    return LocalDate.parse(value).atStartOfDay(searchProperties.getTimeZone()).toOffsetDateTime();
+  }
+
+  private BrowseRows browseByIds(UUID userId, boolean admin, List<UUID> assetIds, Long count) {
+    Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
+    for (UUID assetId : assetIds) {
+      assetContexts.put(assetId, null);
+    }
+    return browseByIds(userId, admin, assetContexts, count);
+  }
+
+  private BrowseRows browseByIds(
+      UUID userId, boolean admin, Map<UUID, UUID> assetContexts, Long count) {
+    int totalCount = count == null ? 0 : Math.toIntExact(count);
+    if (assetContexts.isEmpty()) {
+      return new BrowseRows(List.of(), totalCount);
+    }
+    List<UUID> assetIds = List.copyOf(assetContexts.keySet());
+    List<AssetFileRow> rows =
+        baseFileQuery()
+            .leftJoin(ASSET_METADATA)
+            .on(ASSET_METADATA.assetId.eq(ASSETS.id))
+            .where(
+                readableWhere(userId, admin, null)
+                    .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
+                    .and(ASSETS.id.in(assetIds)))
+            .orderBy(ASSET_FILES.status.asc(), ASSET_FILES.normalizedPath.asc())
+            .fetch()
+            .stream()
+            .map(this::toAssetFileRow)
+            .toList();
+    Map<UUID, AssetGroup> groups = new LinkedHashMap<>();
+    for (AssetFileRow row : rows) {
+      groups.computeIfAbsent(row.assetId(), ignored -> new AssetGroup(row)).add(row);
+    }
+    return new BrowseRows(
+        assetIds.stream()
+            .map(groups::get)
+            .filter(java.util.Objects::nonNull)
+            .map(group -> group.toSummary(assetContexts.get(group.assetId())))
+            .toList(),
+        totalCount);
+  }
+
+  private AssetFileRow toAssetFileRow(Tuple row) {
+    return new AssetFileRow(
+        row.get(ASSETS.id),
+        row.get(ASSETS.contentHash),
+        row.get(ASSETS.mediaType),
+        value(row.get(ASSETS.availableFileCount)),
+        row.get(ASSETS.lastObservedAt),
+        row.get(ASSET_FILES.id),
+        row.get(ASSET_FILES.libraryId),
+        row.get(LIBRARIES.name),
+        row.get(ASSET_FILES.path),
+        row.get(ASSET_FILES.normalizedPath),
+        row.get(ASSET_FILES.fileName),
+        row.get(ASSET_FILES.sizeBytes),
+        row.get(ASSET_FILES.modifiedAt),
+        row.get(ASSET_FILES.status),
+        row.get(ASSET_METADATA.capturedAt),
+        row.get(ASSET_METADATA.width),
+        row.get(ASSET_METADATA.height),
+        row.get(ASSET_METADATA.orientation),
+        row.get(ASSET_METADATA.fileExtension),
+        row.get(ASSET_METADATA.mimeType),
+        row.get(ASSET_METADATA.metadataStatus),
+        row.get(ASSET_METADATA.metadataExtractedAt),
+        row.get(ASSET_METADATA.metadataErrorCode),
+        row.get(ASSET_METADATA.metadataErrorMessage),
+        row.get(ASSET_METADATA.cameraMake),
+        row.get(ASSET_METADATA.cameraModel),
+        row.get(ASSET_METADATA.lensModel),
+        row.get(ASSET_METADATA.focalLength),
+        row.get(ASSET_METADATA.aperture),
+        row.get(ASSET_METADATA.exposureTime),
+        row.get(ASSET_METADATA.iso),
+        row.get(ASSET_METADATA.latitude),
+        row.get(ASSET_METADATA.longitude),
+        row.get(ASSET_METADATA.title),
+        row.get(ASSET_METADATA.description),
+        row.get(ASSET_METADATA.keywords),
+        row.get(ASSET_METADATA.durationMs),
+        row.get(ASSET_METADATA.displayRotation),
+        row.get(ASSET_METADATA.container),
+        row.get(ASSET_METADATA.videoCodec),
+        row.get(ASSET_METADATA.audioCodec),
+        row.get(ASSET_METADATA.frameRate),
+        row.get(ASSET_METADATA.bitrate),
+        row.get(ASSET_METADATA.hasAudio));
+  }
+
+  private static String folderPath(String normalizedPath) {
+    int lastSlash = normalizedPath.lastIndexOf('/');
+    if (lastSlash <= 0) {
+      return normalizedPath;
+    }
+    return normalizedPath.substring(0, lastSlash);
+  }
+
+  private int value(Integer value) {
+    return value == null ? 0 : value;
+  }
+
+  private static boolean isImageMedia(String mimeType, String mediaType) {
+    if (mimeType != null && mimeType.startsWith(IMAGE_MIME_PREFIX)) {
+      return true;
+    }
+    if (mediaType == null || mediaType.isBlank()) {
+      return false;
+    }
+    String normalized = mediaType.toLowerCase(Locale.ROOT);
+    return normalized.equals("image") || normalized.startsWith(IMAGE_MIME_PREFIX);
+  }
+
+  private static List<String> splitKeywords(String keywords) {
+    if (keywords == null || keywords.isBlank()) {
+      return List.of();
+    }
+    return keywords.lines().map(String::trim).filter(value -> !value.isBlank()).distinct().toList();
+  }
+
+  record AssetSearchCriteria(
+      UUID libraryId,
+      String folder,
+      boolean includeDescendants,
+      SearchQuery query,
+      String availability,
+      String fileType,
+      Boolean duplicatesOnly,
+      List<UUID> tagIds,
+      UUID tagOwnerUserId,
+      int page,
+      int pageSize) {}
+
+  record BrowseRows(List<AssetSummaryRow> assets, int totalCount) {}
+
+  record FolderRow(UUID libraryId, String libraryName, String folderPath, UUID assetId) {}
+
+  record LibraryRootRow(UUID libraryId, String normalizedPath) {}
+
+  record AssetFileRow(
+      UUID assetId,
+      String contentHash,
+      String mediaType,
+      int availableFileCount,
+      OffsetDateTime observedAt,
+      UUID fileId,
+      UUID libraryId,
+      String libraryName,
+      String path,
+      String normalizedPath,
+      String fileName,
+      long sizeBytes,
+      OffsetDateTime modifiedAt,
+      String status,
+      OffsetDateTime capturedAt,
+      Integer width,
+      Integer height,
+      Integer orientation,
+      String fileExtension,
+      String mimeType,
+      String extractionStatus,
+      OffsetDateTime extractedAt,
+      String errorCode,
+      String errorMessage,
+      String cameraMake,
+      String cameraModel,
+      String lensModel,
+      Double focalLength,
+      Double aperture,
+      String exposureTime,
+      Integer iso,
+      Double latitude,
+      Double longitude,
+      String title,
+      String description,
+      String keywords,
+      Long durationMs,
+      Integer displayRotation,
+      String container,
+      String videoCodec,
+      String audioCodec,
+      String frameRate,
+      Long bitrate,
+      Boolean hasAudio) {
+    String folderPath() {
+      return AssetRepository.folderPath(normalizedPath);
+    }
+  }
+
+  record AssetSummaryRow(
+      UUID assetId,
+      String fileName,
+      String displayPath,
+      String folderPath,
+      UUID libraryId,
+      String libraryName,
+      String availability,
+      String identityStatus,
+      int duplicateCount,
+      OffsetDateTime capturedAt,
+      OffsetDateTime observedAt,
+      String mediaType,
+      String mimeType,
+      Integer width,
+      Integer height,
+      String contentHash,
+      boolean previewable) {}
+
+  record AssetDetailRow(
+      UUID assetId,
+      String contentHash,
+      String identityStatus,
+      String mediaType,
+      String availability,
+      int duplicateCount,
+      AssetDetailResponse.Metadata metadata,
+      List<AssetDetailResponse.FileOccurrence> files) {
+    static AssetDetailRow from(List<AssetFileRow> rows) {
+      AssetFileRow first = rows.get(0);
+      List<AssetFileRow> active =
+          rows.stream().filter(row -> FILE_STATUS_ACTIVE.equals(row.status())).toList();
+      AssetFileRow metadataSource = active.isEmpty() ? first : active.get(0);
+      return new AssetDetailRow(
+          first.assetId(),
+          first.contentHash(),
+          AssetIdentity.statusFor(first.contentHash()),
+          first.mediaType(),
+          first.availableFileCount() > 0 ? AVAILABILITY_AVAILABLE : AVAILABILITY_MISSING,
+          active.size(),
+          new AssetDetailResponse.Metadata(
+              metadataSource.capturedAt(),
+              metadataSource.width(),
+              metadataSource.height(),
+              metadataSource.orientation(),
+              metadataSource.fileExtension(),
+              metadataSource.mimeType(),
+              metadataSource.extractionStatus(),
+              metadataSource.extractedAt(),
+              metadataSource.errorCode(),
+              metadataSource.errorMessage(),
+              metadataSource.cameraMake(),
+              metadataSource.cameraModel(),
+              metadataSource.lensModel(),
+              metadataSource.focalLength(),
+              metadataSource.aperture(),
+              metadataSource.exposureTime(),
+              metadataSource.iso(),
+              metadataSource.latitude(),
+              metadataSource.longitude(),
+              metadataSource.title(),
+              metadataSource.description(),
+              splitKeywords(metadataSource.keywords()),
+              metadataSource.durationMs(),
+              metadataSource.displayRotation(),
+              metadataSource.container(),
+              metadataSource.videoCodec(),
+              metadataSource.audioCodec(),
+              metadataSource.frameRate(),
+              metadataSource.bitrate(),
+              metadataSource.hasAudio()),
+          rows.stream()
+              .map(
+                  row ->
+                      new AssetDetailResponse.FileOccurrence(
+                          row.fileId(),
+                          row.libraryId(),
+                          row.libraryName(),
+                          row.path(),
+                          row.folderPath(),
+                          row.fileName(),
+                          row.sizeBytes(),
+                          row.modifiedAt(),
+                          row.status()))
+              .toList());
+    }
+  }
+
+  record MetadataCandidateRow(
+      UUID assetId,
+      UUID assetFileId,
+      String path,
+      String normalizedPath,
+      String fileName,
+      long sizeBytes,
+      OffsetDateTime modifiedAt,
+      String mediaType) {}
+
+  record MetadataUpdate(
+      UUID assetId,
+      OffsetDateTime capturedAt,
+      Integer width,
+      Integer height,
+      Integer orientation,
+      String fileExtension,
+      String mimeType,
+      String cameraMake,
+      String cameraModel,
+      String sourceVersion,
+      String extractionStatus,
+      OffsetDateTime extractedAt,
+      String errorCode,
+      String errorMessage,
+      String extractor,
+      String extractorVersion,
+      Integer schemaVersion,
+      Long sourceFileSize,
+      OffsetDateTime sourceModifiedAt,
+      String lensModel,
+      Double focalLength,
+      Double aperture,
+      String exposureTime,
+      Integer iso,
+      Double latitude,
+      Double longitude,
+      String title,
+      String description,
+      String keywords,
+      Long durationMs,
+      Integer displayRotation,
+      String container,
+      String videoCodec,
+      String audioCodec,
+      String frameRate,
+      Long bitrate,
+      Boolean hasAudio,
+      Long metadataExtractionDurationMs) {}
+
+  private static final class AssetGroup {
+    private final AssetFileRow first;
+    private final List<AssetFileRow> files = new ArrayList<>();
+
+    private AssetGroup(AssetFileRow first) {
+      this.first = first;
     }
 
-    private BooleanExpression assetInFolder(String value, UUID userId, boolean admin) {
-        QAssetFiles files = new QAssetFiles("search_folder_files");
-        QLibraries libraries = new QLibraries("search_folder_libraries");
-        QLibraryMembers members = new QLibraryMembers("search_folder_members");
-        String folder = value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
-        BooleanBuilder predicate = new BooleanBuilder(files.assetId.eq(ASSETS.id))
-                .and(files.status.eq(FILE_STATUS_ACTIVE))
-                .and(files.normalizedPath.startsWith(folder + "/"))
-                .and(libraries.status.eq(STATUS_ACTIVE));
-        if (!admin) {
-            predicate.and(members.userId.eq(userId));
-        }
-        return SQLExpressions.selectOne().from(files)
-                .join(libraries).on(libraries.id.eq(files.libraryId))
-                .leftJoin(members).on(members.libraryId.eq(libraries.id))
-                .where(predicate).exists();
+    private void add(AssetFileRow row) {
+      files.add(row);
     }
 
-    private BooleanExpression assetInAlbum(String value, UUID userId) {
-        QAlbumItems items = new QAlbumItems("search_album_items");
-        QAlbums albums = new QAlbums("search_albums");
-        return SQLExpressions.selectOne().from(items)
-                .join(albums).on(albums.id.eq(items.albumId))
-                .where(items.assetId.eq(ASSETS.id)
-                        .and(albums.ownerUserId.eq(userId))
-                        .and(albums.kind.eq(AlbumKind.USER))
-                        .and(matchesIdentifier(albums.id, albums.name, value)))
-                .exists();
+    private AssetSummaryRow toSummary() {
+      return toSummary(null);
     }
 
-    private BooleanExpression assetHasTag(String value, UUID userId) {
-        QAssetTags assetTags = new QAssetTags("search_asset_tags");
-        QTags tags = new QTags("search_tags");
-        return SQLExpressions.selectOne().from(assetTags)
-                .join(tags).on(tags.id.eq(assetTags.tagId))
-                .where(assetTags.assetId.eq(ASSETS.id)
-                        .and(tags.ownerUserId.eq(userId))
-                        .and(matchesIdentifier(tags.id, tags.name, value)))
-                .exists();
+    private AssetSummaryRow toSummary(UUID preferredLibraryId) {
+      List<AssetFileRow> active =
+          files.stream().filter(row -> FILE_STATUS_ACTIVE.equals(row.status())).toList();
+      AssetFileRow display =
+          preferredFile(preferredLibraryId)
+              .orElseGet(() -> active.isEmpty() ? first : active.get(0));
+      return new AssetSummaryRow(
+          first.assetId(),
+          display.fileName(),
+          display.path(),
+          display.folderPath(),
+          display.libraryId(),
+          display.libraryName(),
+          first.availableFileCount() > 0 ? AVAILABILITY_AVAILABLE : AVAILABILITY_MISSING,
+          AssetIdentity.statusFor(first.contentHash()),
+          active.size(),
+          display.capturedAt(),
+          first.observedAt(),
+          first.mediaType(),
+          display.mimeType(),
+          display.width(),
+          display.height(),
+          first.contentHash(),
+          isPreviewable(display));
     }
 
-    private BooleanExpression assetInStarred(UUID userId) {
-        QAlbumItems items = new QAlbumItems("search_starred_items");
-        QAlbums albums = new QAlbums("search_starred_albums");
-        return SQLExpressions.selectOne().from(items)
-                .join(albums).on(albums.id.eq(items.albumId))
-                .where(items.assetId.eq(ASSETS.id)
-                        .and(albums.ownerUserId.eq(userId))
-                        .and(albums.kind.eq(AlbumKind.STARRED)))
-                .exists();
+    private UUID assetId() {
+      return first.assetId();
     }
 
-    private BooleanExpression matchesIdentifier(
-            com.querydsl.core.types.dsl.ComparablePath<UUID> id,
-            com.querydsl.core.types.dsl.StringPath name,
-            String value
-    ) {
-        try {
-            return id.eq(UUID.fromString(value)).or(name.lower().eq(value.toLowerCase(Locale.ROOT)));
-        } catch (IllegalArgumentException exception) {
-            return name.lower().eq(value.toLowerCase(Locale.ROOT));
-        }
+    private Optional<AssetFileRow> preferredFile(UUID preferredLibraryId) {
+      if (preferredLibraryId == null) {
+        return Optional.empty();
+      }
+      Optional<AssetFileRow> activePreferred =
+          files.stream()
+              .filter(row -> preferredLibraryId.equals(row.libraryId()))
+              .filter(row -> FILE_STATUS_ACTIVE.equals(row.status()))
+              .findFirst();
+      return activePreferred.isPresent()
+          ? activePreferred
+          : files.stream().filter(row -> preferredLibraryId.equals(row.libraryId())).findFirst();
     }
 
-    private OffsetDateTime dateBoundary(String value) {
-        return LocalDate.parse(value).atStartOfDay(searchProperties.getTimeZone()).toOffsetDateTime();
+    private boolean isPreviewable(AssetFileRow row) {
+      return FILE_STATUS_ACTIVE.equals(row.status())
+          && isImageMedia(row.mimeType(), row.mediaType());
     }
-
-    private BrowseRows browseByIds(UUID userId, boolean admin, List<UUID> assetIds, Long count) {
-        Map<UUID, UUID> assetContexts = new LinkedHashMap<>();
-        for (UUID assetId : assetIds) {
-            assetContexts.put(assetId, null);
-        }
-        return browseByIds(userId, admin, assetContexts, count);
-    }
-
-    private BrowseRows browseByIds(UUID userId, boolean admin, Map<UUID, UUID> assetContexts, Long count) {
-        int totalCount = count == null ? 0 : Math.toIntExact(count);
-        if (assetContexts.isEmpty()) {
-            return new BrowseRows(List.of(), totalCount);
-        }
-        List<UUID> assetIds = List.copyOf(assetContexts.keySet());
-        List<AssetFileRow> rows = baseFileQuery()
-                .leftJoin(ASSET_METADATA).on(ASSET_METADATA.assetId.eq(ASSETS.id))
-                .where(readableWhere(userId, admin, null)
-                        .and(ASSET_FILES.status.eq(FILE_STATUS_ACTIVE))
-                        .and(ASSETS.id.in(assetIds)))
-                .orderBy(ASSET_FILES.status.asc(), ASSET_FILES.normalizedPath.asc())
-                .fetch().stream().map(this::toAssetFileRow).toList();
-        Map<UUID, AssetGroup> groups = new LinkedHashMap<>();
-        for (AssetFileRow row : rows) {
-            groups.computeIfAbsent(row.assetId(), ignored -> new AssetGroup(row)).add(row);
-        }
-        return new BrowseRows(assetIds.stream()
-                .map(groups::get)
-                .filter(java.util.Objects::nonNull)
-                .map(group -> group.toSummary(assetContexts.get(group.assetId())))
-                .toList(), totalCount);
-    }
-
-    private AssetFileRow toAssetFileRow(Tuple row) {
-        return new AssetFileRow(
-                row.get(ASSETS.id),
-                row.get(ASSETS.contentHash),
-                row.get(ASSETS.mediaType),
-                value(row.get(ASSETS.availableFileCount)),
-                row.get(ASSETS.lastObservedAt),
-                row.get(ASSET_FILES.id),
-                row.get(ASSET_FILES.libraryId),
-                row.get(LIBRARIES.name),
-                row.get(ASSET_FILES.path),
-                row.get(ASSET_FILES.normalizedPath),
-                row.get(ASSET_FILES.fileName),
-                row.get(ASSET_FILES.sizeBytes),
-                row.get(ASSET_FILES.modifiedAt),
-                row.get(ASSET_FILES.status),
-                row.get(ASSET_METADATA.capturedAt),
-                row.get(ASSET_METADATA.width),
-                row.get(ASSET_METADATA.height),
-                row.get(ASSET_METADATA.orientation),
-                row.get(ASSET_METADATA.fileExtension),
-                row.get(ASSET_METADATA.mimeType),
-                row.get(ASSET_METADATA.metadataStatus),
-                row.get(ASSET_METADATA.metadataExtractedAt),
-                row.get(ASSET_METADATA.metadataErrorCode),
-                row.get(ASSET_METADATA.metadataErrorMessage),
-                row.get(ASSET_METADATA.cameraMake),
-                row.get(ASSET_METADATA.cameraModel),
-                row.get(ASSET_METADATA.lensModel),
-                row.get(ASSET_METADATA.focalLength),
-                row.get(ASSET_METADATA.aperture),
-                row.get(ASSET_METADATA.exposureTime),
-                row.get(ASSET_METADATA.iso),
-                row.get(ASSET_METADATA.latitude),
-                row.get(ASSET_METADATA.longitude),
-                row.get(ASSET_METADATA.title),
-                row.get(ASSET_METADATA.description),
-                row.get(ASSET_METADATA.keywords),
-                row.get(ASSET_METADATA.durationMs),
-                row.get(ASSET_METADATA.displayRotation),
-                row.get(ASSET_METADATA.container),
-                row.get(ASSET_METADATA.videoCodec),
-                row.get(ASSET_METADATA.audioCodec),
-                row.get(ASSET_METADATA.frameRate),
-                row.get(ASSET_METADATA.bitrate),
-                row.get(ASSET_METADATA.hasAudio)
-        );
-    }
-
-    private static String folderPath(String normalizedPath) {
-        int lastSlash = normalizedPath.lastIndexOf('/');
-        if (lastSlash <= 0) {
-            return normalizedPath;
-        }
-        return normalizedPath.substring(0, lastSlash);
-    }
-
-    private int value(Integer value) {
-        return value == null ? 0 : value;
-    }
-
-    private static boolean isImageMedia(String mimeType, String mediaType) {
-        if (mimeType != null && mimeType.startsWith(IMAGE_MIME_PREFIX)) {
-            return true;
-        }
-        if (mediaType == null || mediaType.isBlank()) {
-            return false;
-        }
-        String normalized = mediaType.toLowerCase(Locale.ROOT);
-        return normalized.equals("image") || normalized.startsWith(IMAGE_MIME_PREFIX);
-    }
-
-    private static List<String> splitKeywords(String keywords) {
-        if (keywords == null || keywords.isBlank()) {
-            return List.of();
-        }
-        return keywords.lines()
-                .map(String::trim)
-                .filter(value -> !value.isBlank())
-                .distinct()
-                .toList();
-    }
-
-    record AssetSearchCriteria(
-            UUID libraryId,
-            String folder,
-            boolean includeDescendants,
-            SearchQuery query,
-            String availability,
-            String fileType,
-            Boolean duplicatesOnly,
-            List<UUID> tagIds,
-            UUID tagOwnerUserId,
-            int page,
-            int pageSize
-    ) {
-    }
-
-    record BrowseRows(List<AssetSummaryRow> assets, int totalCount) {
-    }
-
-    record FolderRow(UUID libraryId, String libraryName, String folderPath, UUID assetId) {
-    }
-
-    record LibraryRootRow(UUID libraryId, String normalizedPath) {
-    }
-
-    record AssetFileRow(
-            UUID assetId,
-            String contentHash,
-            String mediaType,
-            int availableFileCount,
-            OffsetDateTime observedAt,
-            UUID fileId,
-            UUID libraryId,
-            String libraryName,
-            String path,
-            String normalizedPath,
-            String fileName,
-            long sizeBytes,
-            OffsetDateTime modifiedAt,
-            String status,
-            OffsetDateTime capturedAt,
-            Integer width,
-            Integer height,
-            Integer orientation,
-            String fileExtension,
-            String mimeType,
-            String extractionStatus,
-            OffsetDateTime extractedAt,
-            String errorCode,
-            String errorMessage,
-            String cameraMake,
-            String cameraModel,
-            String lensModel,
-            Double focalLength,
-            Double aperture,
-            String exposureTime,
-            Integer iso,
-            Double latitude,
-            Double longitude,
-            String title,
-            String description,
-            String keywords,
-            Long durationMs,
-            Integer displayRotation,
-            String container,
-            String videoCodec,
-            String audioCodec,
-            String frameRate,
-            Long bitrate,
-            Boolean hasAudio
-    ) {
-        String folderPath() {
-            return AssetRepository.folderPath(normalizedPath);
-        }
-    }
-
-    record AssetSummaryRow(
-            UUID assetId,
-            String fileName,
-            String displayPath,
-            String folderPath,
-            UUID libraryId,
-            String libraryName,
-            String availability,
-            String identityStatus,
-            int duplicateCount,
-            OffsetDateTime capturedAt,
-            OffsetDateTime observedAt,
-            String mediaType,
-            String mimeType,
-            Integer width,
-            Integer height,
-            String contentHash,
-            boolean previewable
-    ) {
-    }
-
-    record AssetDetailRow(
-            UUID assetId,
-            String contentHash,
-            String identityStatus,
-            String mediaType,
-            String availability,
-            int duplicateCount,
-            AssetDetailResponse.Metadata metadata,
-            List<AssetDetailResponse.FileOccurrence> files
-    ) {
-        static AssetDetailRow from(List<AssetFileRow> rows) {
-            AssetFileRow first = rows.get(0);
-            List<AssetFileRow> active = rows.stream()
-                    .filter(row -> FILE_STATUS_ACTIVE.equals(row.status()))
-                    .toList();
-            AssetFileRow metadataSource = active.isEmpty() ? first : active.get(0);
-            return new AssetDetailRow(
-                    first.assetId(),
-                    first.contentHash(),
-                    AssetIdentity.statusFor(first.contentHash()),
-                    first.mediaType(),
-                    first.availableFileCount() > 0 ? AVAILABILITY_AVAILABLE : AVAILABILITY_MISSING,
-                    active.size(),
-                    new AssetDetailResponse.Metadata(
-                            metadataSource.capturedAt(),
-                            metadataSource.width(),
-                            metadataSource.height(),
-                            metadataSource.orientation(),
-                            metadataSource.fileExtension(),
-                            metadataSource.mimeType(),
-                            metadataSource.extractionStatus(),
-                            metadataSource.extractedAt(),
-                            metadataSource.errorCode(),
-                            metadataSource.errorMessage(),
-                            metadataSource.cameraMake(),
-                            metadataSource.cameraModel(),
-                            metadataSource.lensModel(),
-                            metadataSource.focalLength(),
-                            metadataSource.aperture(),
-                            metadataSource.exposureTime(),
-                            metadataSource.iso(),
-                            metadataSource.latitude(),
-                            metadataSource.longitude(),
-                            metadataSource.title(),
-                            metadataSource.description(),
-                            splitKeywords(metadataSource.keywords()),
-                            metadataSource.durationMs(),
-                            metadataSource.displayRotation(),
-                            metadataSource.container(),
-                            metadataSource.videoCodec(),
-                            metadataSource.audioCodec(),
-                            metadataSource.frameRate(),
-                            metadataSource.bitrate(),
-                            metadataSource.hasAudio()
-                    ),
-                    rows.stream()
-                            .map(row -> new AssetDetailResponse.FileOccurrence(
-                                    row.fileId(),
-                                    row.libraryId(),
-                                    row.libraryName(),
-                                    row.path(),
-                                    row.folderPath(),
-                                    row.fileName(),
-                                    row.sizeBytes(),
-                                    row.modifiedAt(),
-                                    row.status()
-                            ))
-                            .toList()
-            );
-        }
-    }
-
-    record MetadataCandidateRow(
-            UUID assetId,
-            UUID assetFileId,
-            String path,
-            String normalizedPath,
-            String fileName,
-            long sizeBytes,
-            OffsetDateTime modifiedAt,
-            String mediaType
-    ) {
-    }
-
-    record MetadataUpdate(
-            UUID assetId,
-            OffsetDateTime capturedAt,
-            Integer width,
-            Integer height,
-            Integer orientation,
-            String fileExtension,
-            String mimeType,
-            String cameraMake,
-            String cameraModel,
-            String sourceVersion,
-            String extractionStatus,
-            OffsetDateTime extractedAt,
-            String errorCode,
-            String errorMessage,
-            String extractor,
-            String extractorVersion,
-            Integer schemaVersion,
-            Long sourceFileSize,
-            OffsetDateTime sourceModifiedAt,
-            String lensModel,
-            Double focalLength,
-            Double aperture,
-            String exposureTime,
-            Integer iso,
-            Double latitude,
-            Double longitude,
-            String title,
-            String description,
-            String keywords,
-            Long durationMs,
-            Integer displayRotation,
-            String container,
-            String videoCodec,
-            String audioCodec,
-            String frameRate,
-            Long bitrate,
-            Boolean hasAudio,
-            Long metadataExtractionDurationMs
-    ) {
-    }
-
-    private static final class AssetGroup {
-        private final AssetFileRow first;
-        private final List<AssetFileRow> files = new ArrayList<>();
-
-        private AssetGroup(AssetFileRow first) {
-            this.first = first;
-        }
-
-        private void add(AssetFileRow row) {
-            files.add(row);
-        }
-
-        private AssetSummaryRow toSummary() {
-            return toSummary(null);
-        }
-
-        private AssetSummaryRow toSummary(UUID preferredLibraryId) {
-            List<AssetFileRow> active = files.stream()
-                    .filter(row -> FILE_STATUS_ACTIVE.equals(row.status()))
-                    .toList();
-            AssetFileRow display = preferredFile(preferredLibraryId).orElseGet(() -> active.isEmpty() ? first : active.get(0));
-            return new AssetSummaryRow(
-                    first.assetId(),
-                    display.fileName(),
-                    display.path(),
-                    display.folderPath(),
-                    display.libraryId(),
-                    display.libraryName(),
-                    first.availableFileCount() > 0 ? AVAILABILITY_AVAILABLE : AVAILABILITY_MISSING,
-                    AssetIdentity.statusFor(first.contentHash()),
-                    active.size(),
-                    display.capturedAt(),
-                    first.observedAt(),
-                    first.mediaType(),
-                    display.mimeType(),
-                    display.width(),
-                    display.height(),
-                    first.contentHash(),
-                    isPreviewable(display)
-            );
-        }
-
-        private UUID assetId() {
-            return first.assetId();
-        }
-
-        private Optional<AssetFileRow> preferredFile(UUID preferredLibraryId) {
-            if (preferredLibraryId == null) {
-                return Optional.empty();
-            }
-            Optional<AssetFileRow> activePreferred = files.stream()
-                    .filter(row -> preferredLibraryId.equals(row.libraryId()))
-                    .filter(row -> FILE_STATUS_ACTIVE.equals(row.status()))
-                    .findFirst();
-            return activePreferred.isPresent()
-                    ? activePreferred
-                    : files.stream().filter(row -> preferredLibraryId.equals(row.libraryId())).findFirst();
-        }
-
-        private boolean isPreviewable(AssetFileRow row) {
-            return FILE_STATUS_ACTIVE.equals(row.status()) && isImageMedia(row.mimeType(), row.mediaType());
-        }
-    }
+  }
 }

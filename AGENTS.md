@@ -15,6 +15,9 @@ Pixierge is a Spring Boot API plus React TypeScript web app.
 - Start the local stack: `docker compose up --build`
 - Backend unit tests: `cd backend && mvn clean test`
 - Backend unit + integration/REST tests: `cd backend && mvn clean verify`
+- Backend format: `cd backend && mvn spotless:apply`
+- Backend format check: `cd backend && mvn spotless:check`
+- Backend lint: `cd backend && mvn pmd:check`
 - Frontend dependencies: `cd frontend && npm install`
 - Frontend tests: `cd frontend && npm test`
 - Frontend build: `cd frontend && npm run build`
@@ -36,6 +39,7 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean verify
 - Add integration, Playwright E2E, and visual regression tests when the task has behavior that can be meaningfully covered at those levels.
 - Prefer focused unit tests for business logic and boundary/error behavior; use integration tests for database, Querydsl, migration, security, and cross-layer behavior.
 - Use Maven for backend build work.
+- Run `mvn spotless:apply` after every backend source change before handoff. Run `mvn spotless:check` when verifying formatting without changing source files.
 - Use Querydsl for repository SQL access instead of handwritten SQL strings.
 - Import Java types normally; avoid fully qualified class names in method signatures, fields, and local declarations unless needed to resolve a real naming conflict.
 - Keep backend classes purposeful. Add or keep a class when it owns testable behavior, a stable domain/API boundary, an integration boundary, real reuse, or meaningful caller clarity.

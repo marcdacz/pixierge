@@ -1,4 +1,3 @@
 package com.pixierge.api.assets;
 
-public record AdminBatchActionResponse(int processedCount, int failedCount) {
-}
+public record AdminBatchActionResponse(int processedCount, int failedCount) {}

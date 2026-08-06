@@ -9,28 +9,30 @@ import org.springframework.stereotype.Component;
 @Component
 class ScanCatalogSubtreeJobHandler implements BackgroundJobHandler {
 
-    private final ScanService scanService;
-    private final ObjectMapper objectMapper;
+  private final ScanService scanService;
+  private final ObjectMapper objectMapper;
 
-    ScanCatalogSubtreeJobHandler(ScanService scanService, ObjectMapper objectMapper) {
-        this.scanService = scanService;
-        this.objectMapper = objectMapper;
-    }
+  ScanCatalogSubtreeJobHandler(ScanService scanService, ObjectMapper objectMapper) {
+    this.scanService = scanService;
+    this.objectMapper = objectMapper;
+  }
 
-    @Override
-    public String jobType() {
-        return ScanJobTypes.LIBRARY_CATALOG_SUBTREE;
-    }
+  @Override
+  public String jobType() {
+    return ScanJobTypes.LIBRARY_CATALOG_SUBTREE;
+  }
 
-    @Override
-    public void handle(BackgroundJobRecord job) throws JsonProcessingException {
-        ScanCatalogJobPayload payload = objectMapper.readValue(job.payloadJson(), ScanCatalogJobPayload.class);
-        scanService.executeCatalogJob(payload, job.id());
-    }
+  @Override
+  public void handle(BackgroundJobRecord job) throws JsonProcessingException {
+    ScanCatalogJobPayload payload =
+        objectMapper.readValue(job.payloadJson(), ScanCatalogJobPayload.class);
+    scanService.executeCatalogJob(payload, job.id());
+  }
 
-    @Override
-    public void afterComplete(BackgroundJobRecord job) throws JsonProcessingException {
-        ScanCatalogJobPayload payload = objectMapper.readValue(job.payloadJson(), ScanCatalogJobPayload.class);
-        scanService.tryCompleteCatalogScan(payload);
-    }
+  @Override
+  public void afterComplete(BackgroundJobRecord job) throws JsonProcessingException {
+    ScanCatalogJobPayload payload =
+        objectMapper.readValue(job.payloadJson(), ScanCatalogJobPayload.class);
+    scanService.tryCompleteCatalogScan(payload);
+  }
 }
