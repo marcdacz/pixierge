@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+staged=$(git diff --cached --name-only)
+
+case "$staged" in
+  *backend/*.java*)
+    echo "Checking backend formatting..."
+    (cd backend && mvn spotless:check)
+    ;;
+esac
+
+case "$staged" in
+  *frontend/*)
+    echo "Checking frontend formatting..."
+    (cd frontend && npm run format:check)
+    ;;
+esac
