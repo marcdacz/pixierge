@@ -57,15 +57,11 @@ export function AssignmentPicker({
   const matches = useMemo(
     () =>
       destinations.filter(
-        (item) =>
-          !selectedIds.has(item.id) &&
-          item.name.toLowerCase().includes(normalizedQuery.toLowerCase())
+        (item) => !selectedIds.has(item.id) && item.name.toLowerCase().includes(normalizedQuery.toLowerCase())
       ),
     [destinations, normalizedQuery, selectedIds]
   );
-  const exactMatch = destinations.some(
-    (item) => item.name.toLowerCase() === normalizedQuery.toLowerCase()
-  );
+  const exactMatch = destinations.some((item) => item.name.toLowerCase() === normalizedQuery.toLowerCase());
   const canCreate = normalizedQuery.length > 0 && !exactMatch;
   const showSuggestions = normalizedQuery.length > 0 && !loading && !error;
   const optionCount = showSuggestions ? matches.length + (canCreate ? 1 : 0) : 0;
@@ -268,16 +264,12 @@ export function AssignmentPicker({
                   Create {createVerb} “{normalizedQuery}”
                 </button>
               )}
-              {matches.length === 0 && !canCreate && (
-                <p className="p-3 text-sm text-muted-foreground">No matches.</p>
-              )}
+              {matches.length === 0 && !canCreate && <p className="p-3 text-sm text-muted-foreground">No matches.</p>}
             </div>
           )}
         </div>
         {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
-        {(mutationError || error) && (
-          <p className="text-sm text-destructive">{mutationError ?? error}</p>
-        )}
+        {(mutationError || error) && <p className="text-sm text-destructive">{mutationError ?? error}</p>}
         <p className="text-xs text-muted-foreground">Press Enter to apply · Esc to cancel</p>
       </div>
     </div>

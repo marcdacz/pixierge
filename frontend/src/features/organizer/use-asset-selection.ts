@@ -18,33 +18,31 @@ export function useAssetSelection(browseContextKey: string) {
     setAnchorId(assetId);
   }, []);
 
-  const selectClick = useCallback((
-    assetId: string,
-    index: number,
-    modifiers: ClickModifiers,
-    orderedIds: string[]
-  ) => {
-    if (modifiers.shiftKey && anchorId) {
-      const anchorIndex = orderedIds.indexOf(anchorId);
-      if (anchorIndex >= 0) {
-        const [start, end] = [anchorIndex, index].sort((left, right) => left - right);
-        setSelectedIds(new Set(orderedIds.slice(start, end + 1)));
+  const selectClick = useCallback(
+    (assetId: string, index: number, modifiers: ClickModifiers, orderedIds: string[]) => {
+      if (modifiers.shiftKey && anchorId) {
+        const anchorIndex = orderedIds.indexOf(anchorId);
+        if (anchorIndex >= 0) {
+          const [start, end] = [anchorIndex, index].sort((left, right) => left - right);
+          setSelectedIds(new Set(orderedIds.slice(start, end + 1)));
+          return;
+        }
+      }
+
+      if (modifiers.metaKey || modifiers.ctrlKey) {
+        setSelectedIds((current) => {
+          const next = new Set(current);
+          next.has(assetId) ? next.delete(assetId) : next.add(assetId);
+          return next;
+        });
+        setAnchorId(assetId);
         return;
       }
-    }
 
-    if (modifiers.metaKey || modifiers.ctrlKey) {
-      setSelectedIds((current) => {
-        const next = new Set(current);
-        next.has(assetId) ? next.delete(assetId) : next.add(assetId);
-        return next;
-      });
-      setAnchorId(assetId);
-      return;
-    }
-
-    selectOnly(assetId);
-  }, [anchorId, selectOnly]);
+      selectOnly(assetId);
+    },
+    [anchorId, selectOnly]
+  );
 
   return { selectedIds, anchorId, clear, isSelected: (id: string) => selectedIds.has(id), selectOnly, selectClick };
 }

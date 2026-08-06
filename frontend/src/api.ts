@@ -429,10 +429,7 @@ export async function fetchSetupStatus(): Promise<SetupStatusResponse> {
   return requestJson<SetupStatusResponse>('/api/setup/status');
 }
 
-export async function createFirstAdmin(input: {
-  username: string;
-  password: string;
-}): Promise<AuthResponse> {
+export async function createFirstAdmin(input: { username: string; password: string }): Promise<AuthResponse> {
   return requestJson<AuthResponse>('/api/setup/admin', {
     method: 'POST',
     body: JSON.stringify(input)
@@ -461,7 +458,10 @@ export async function fetchUsers(): Promise<UserSummary[]> {
   return requestJson<UserSummary[]>('/api/admin/users');
 }
 
-export async function createUser(input: { username: string; password: string }, csrfToken: string): Promise<UserSummary> {
+export async function createUser(
+  input: { username: string; password: string },
+  csrfToken: string
+): Promise<UserSummary> {
   return requestJson<UserSummary>('/api/admin/users', {
     method: 'POST',
     body: JSON.stringify(input),
@@ -477,7 +477,11 @@ export async function resetUserPassword(userId: string, input: { password: strin
   });
 }
 
-export async function updateUserStatus(userId: string, input: { active: boolean }, csrfToken: string): Promise<UserSummary> {
+export async function updateUserStatus(
+  userId: string,
+  input: { active: boolean },
+  csrfToken: string
+): Promise<UserSummary> {
   return requestJson<UserSummary>(`/api/admin/users/${userId}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
@@ -485,7 +489,11 @@ export async function updateUserStatus(userId: string, input: { active: boolean 
   });
 }
 
-export async function deleteUser(userId: string, input: { replacementUserId: string }, csrfToken: string): Promise<void> {
+export async function deleteUser(
+  userId: string,
+  input: { replacementUserId: string },
+  csrfToken: string
+): Promise<void> {
   await requestWithoutBodyWithJson(`/api/admin/users/${userId}`, {
     method: 'DELETE',
     body: JSON.stringify(input),
@@ -607,18 +615,27 @@ export async function fetchLibraryMemberCandidates(libraryId: string): Promise<L
 }
 
 export async function addLibraryMember(
-  libraryId: string, input: { userId: string; role: LibraryMember['role'] }, csrfToken: string
+  libraryId: string,
+  input: { userId: string; role: LibraryMember['role'] },
+  csrfToken: string
 ): Promise<LibraryMember> {
   return requestJson<LibraryMember>(`/api/libraries/${libraryId}/members`, {
-    method: 'POST', body: JSON.stringify(input), csrfToken
+    method: 'POST',
+    body: JSON.stringify(input),
+    csrfToken
   });
 }
 
 export async function updateLibraryMemberRole(
-  libraryId: string, userId: string, input: { role: LibraryMember['role'] }, csrfToken: string
+  libraryId: string,
+  userId: string,
+  input: { role: LibraryMember['role'] },
+  csrfToken: string
 ): Promise<LibraryMember> {
   return requestJson<LibraryMember>(`/api/libraries/${libraryId}/members/${userId}`, {
-    method: 'PATCH', body: JSON.stringify(input), csrfToken
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    csrfToken
   });
 }
 
@@ -674,17 +691,19 @@ export async function fetchLibraryTree(libraryId?: string): Promise<LibraryTreeR
   return requestJson<LibraryTreeResponse>(`/api/library-tree${queryString(params)}`);
 }
 
-export async function fetchAssets(input: {
-  libraryId?: string;
-  folder?: string;
-  includeDescendants?: boolean;
-  q?: string;
-  availability?: string;
-  fileType?: string;
-  duplicatesOnly?: boolean;
-  page?: number;
-  pageSize?: number;
-} = {}): Promise<AssetBrowseResponse> {
+export async function fetchAssets(
+  input: {
+    libraryId?: string;
+    folder?: string;
+    includeDescendants?: boolean;
+    q?: string;
+    availability?: string;
+    fileType?: string;
+    duplicatesOnly?: boolean;
+    page?: number;
+    pageSize?: number;
+  } = {}
+): Promise<AssetBrowseResponse> {
   const params = new URLSearchParams();
   if (input.libraryId) {
     params.set('libraryId', input.libraryId);
@@ -721,11 +740,7 @@ export async function parseSearch(query: string): Promise<SearchParseResponse> {
   return requestJson<SearchParseResponse>(`/api/search/parse?${params.toString()}`);
 }
 
-export async function fetchSearchSuggestions(
-  field: string,
-  query: string,
-  limit = 8
-): Promise<SearchSuggestion[]> {
+export async function fetchSearchSuggestions(field: string, query: string, limit = 8): Promise<SearchSuggestion[]> {
   const params = new URLSearchParams({ field, q: query, limit: String(limit) });
   return requestJson<SearchSuggestion[]>(`/api/search/suggestions?${params.toString()}`);
 }
@@ -737,12 +752,28 @@ export async function fetchAsset(assetId: string): Promise<AssetDetail> {
 export async function fetchAlbums(scope?: 'mine' | 'shared'): Promise<AlbumSummary[]> {
   return requestJson<AlbumSummary[]>(scope === 'shared' ? '/api/albums?scope=shared' : '/api/albums');
 }
-export async function fetchAlbumMembers(albumId: string): Promise<AlbumMember[]> { return requestJson<AlbumMember[]>(`/api/albums/${albumId}/members`); }
-export async function fetchAlbumMemberCandidates(albumId: string): Promise<Array<{ userId: string; username: string }>> { return requestJson<Array<{ userId: string; username: string }>>(`/api/albums/${albumId}/members/candidates`); }
-export async function addAlbumMember(albumId: string, input: { userId: string; role: 'viewer' | 'editor' }, csrfToken: string): Promise<AlbumMember> {
-  return requestJson<AlbumMember>(`/api/albums/${albumId}/members`, { method: 'POST', body: JSON.stringify(input), csrfToken });
+export async function fetchAlbumMembers(albumId: string): Promise<AlbumMember[]> {
+  return requestJson<AlbumMember[]>(`/api/albums/${albumId}/members`);
 }
-export async function removeAlbumMember(albumId: string, userId: string, csrfToken: string): Promise<void> { await requestWithoutBody(`/api/albums/${albumId}/members/${userId}`, { method: 'DELETE', csrfToken }); }
+export async function fetchAlbumMemberCandidates(
+  albumId: string
+): Promise<Array<{ userId: string; username: string }>> {
+  return requestJson<Array<{ userId: string; username: string }>>(`/api/albums/${albumId}/members/candidates`);
+}
+export async function addAlbumMember(
+  albumId: string,
+  input: { userId: string; role: 'viewer' | 'editor' },
+  csrfToken: string
+): Promise<AlbumMember> {
+  return requestJson<AlbumMember>(`/api/albums/${albumId}/members`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    csrfToken
+  });
+}
+export async function removeAlbumMember(albumId: string, userId: string, csrfToken: string): Promise<void> {
+  await requestWithoutBody(`/api/albums/${albumId}/members/${userId}`, { method: 'DELETE', csrfToken });
+}
 
 export async function createAlbum(input: { name: string }, csrfToken: string): Promise<AlbumSummary> {
   return requestJson<AlbumSummary>('/api/albums', { method: 'POST', body: JSON.stringify(input), csrfToken });
@@ -753,7 +784,11 @@ export async function updateAlbum(
   input: Partial<Pick<AlbumSummary, 'name' | 'coverAssetId'>>,
   csrfToken: string
 ): Promise<AlbumSummary> {
-  return requestJson<AlbumSummary>(`/api/albums/${albumId}`, { method: 'PATCH', body: JSON.stringify(input), csrfToken });
+  return requestJson<AlbumSummary>(`/api/albums/${albumId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    csrfToken
+  });
 }
 
 export async function deleteAlbum(albumId: string, csrfToken: string): Promise<void> {
@@ -764,12 +799,24 @@ export async function fetchAlbumAssets(albumId: string, page = 0, pageSize = 48)
   return requestJson<AssetBrowseResponse>(`/api/albums/${albumId}/assets?page=${page}&pageSize=${pageSize}`);
 }
 
-export async function addAlbumItems(albumIds: string[], items: AssetAssignmentItem[], csrfToken: string): Promise<void> {
-  await requestWithoutBodyWithJson('/api/album-items', { method: 'POST', body: JSON.stringify({ albumIds, items }), csrfToken });
+export async function addAlbumItems(
+  albumIds: string[],
+  items: AssetAssignmentItem[],
+  csrfToken: string
+): Promise<void> {
+  await requestWithoutBodyWithJson('/api/album-items', {
+    method: 'POST',
+    body: JSON.stringify({ albumIds, items }),
+    csrfToken
+  });
 }
 
 export async function removeAlbumItems(albumId: string, assetIds: string[], csrfToken: string): Promise<void> {
-  await requestWithoutBodyWithJson(`/api/albums/${albumId}/items`, { method: 'DELETE', body: JSON.stringify({ assetIds }), csrfToken });
+  await requestWithoutBodyWithJson(`/api/albums/${albumId}/items`, {
+    method: 'DELETE',
+    body: JSON.stringify({ assetIds }),
+    csrfToken
+  });
 }
 
 export async function fetchStarred(): Promise<AlbumSummary> {
@@ -864,17 +911,25 @@ export async function fetchTagAssets(tagId: string, page = 0, pageSize = 48): Pr
 }
 
 export async function addAssetTags(tagIds: string[], items: AssetAssignmentItem[], csrfToken: string): Promise<void> {
-  await requestWithoutBodyWithJson('/api/asset-tags', { method: 'POST', body: JSON.stringify({ tagIds, items }), csrfToken });
+  await requestWithoutBodyWithJson('/api/asset-tags', {
+    method: 'POST',
+    body: JSON.stringify({ tagIds, items }),
+    csrfToken
+  });
 }
 
-export async function backfillAssetMetadata(csrfToken: string): Promise<{ processedCount: number; failedCount: number }> {
+export async function backfillAssetMetadata(
+  csrfToken: string
+): Promise<{ processedCount: number; failedCount: number }> {
   return requestJson<{ processedCount: number; failedCount: number }>('/api/assets/metadata/backfill', {
     method: 'POST',
     csrfToken
   });
 }
 
-export async function recoverDeadLetterMetadata(csrfToken: string): Promise<{ processedCount: number; failedCount: number }> {
+export async function recoverDeadLetterMetadata(
+  csrfToken: string
+): Promise<{ processedCount: number; failedCount: number }> {
   return requestJson<{ processedCount: number; failedCount: number }>('/api/assets/metadata/recover-dead-letters', {
     method: 'POST',
     csrfToken
@@ -922,10 +977,7 @@ async function requestJson<T>(
   return response.json() as Promise<T>;
 }
 
-async function requestWithoutBody(
-  path: string,
-  options: { method: string; csrfToken?: string }
-): Promise<void> {
+async function requestWithoutBody(path: string, options: { method: string; csrfToken?: string }): Promise<void> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: options.method,
     credentials: 'include',
@@ -961,17 +1013,19 @@ async function responseErrorMessage(response: Response): Promise<string> {
   }
 
   try {
-    const body = await response.json() as {
+    const body = (await response.json()) as {
       detail?: unknown;
       error?: unknown;
       message?: unknown;
       title?: unknown;
     };
-    return stringValue(body.detail)
-      ?? stringValue(body.message)
-      ?? stringValue(body.error)
-      ?? nonGenericTitle(body.title, response.status)
-      ?? fallback;
+    return (
+      stringValue(body.detail) ??
+      stringValue(body.message) ??
+      stringValue(body.error) ??
+      nonGenericTitle(body.title, response.status) ??
+      fallback
+    );
   } catch (error) {
     return fallback;
   }

@@ -142,7 +142,7 @@ describe('UsersSettings', () => {
         return json({ detail: 'Password must be at least 12 characters' }, 400);
       }
       if (path === '/api/admin/users/user-2' && method(init) === 'PATCH') {
-        users = users.map((user) => user.id === 'user-2' ? { ...user, status: 'disabled' as const } : user);
+        users = users.map((user) => (user.id === 'user-2' ? { ...user, status: 'disabled' as const } : user));
         return json(users.find((user) => user.id === 'user-2'));
       }
       return json({}, 404);
@@ -175,10 +175,12 @@ function method(init?: RequestInit) {
 }
 
 function json(body: unknown, status = 200) {
-  return Promise.resolve(new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' }
-  }));
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  );
 }
 
 function empty() {

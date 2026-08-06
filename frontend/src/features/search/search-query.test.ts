@@ -37,9 +37,7 @@ describe('search-query helpers', () => {
     expect(fromRepeated.extensions).toEqual(['.jpg', '.raw']);
     expect(composeSearchQuery(fromRepeated)).toBe('extension:.jpg,.raw');
 
-    const fromComma = filtersFromParsed('', [
-      { field: 'extension', value: '.jpg,.heic,raw', negated: false }
-    ]);
+    const fromComma = filtersFromParsed('', [{ field: 'extension', value: '.jpg,.heic,raw', negated: false }]);
     expect(fromComma.extensions).toEqual(['.jpg', '.heic', '.raw']);
     expect(composeSearchQuery(fromComma)).toBe('extension:.jpg,.heic,.raw');
   });
@@ -53,9 +51,7 @@ describe('search-query helpers', () => {
       { field: 'tag', value: 'Family', negated: false },
       { field: 'tag', value: 'Holiday', negated: false }
     ]);
-    expect(composeSearchQuery(fromRepeated)).toBe(
-      'library:Events,Japan album:Summer,Winter tag:Family,Holiday'
-    );
+    expect(composeSearchQuery(fromRepeated)).toBe('library:Events,Japan album:Summer,Winter tag:Family,Holiday');
 
     const fromComma = filtersFromParsed('', [
       { field: 'library', value: 'Events,Japan', negated: false },
@@ -65,17 +61,11 @@ describe('search-query helpers', () => {
     expect(fromComma.libraries).toEqual(['Events', 'Japan']);
     expect(fromComma.albums).toEqual(['Summer', 'Japan 2025']);
     expect(fromComma.tags).toEqual(['Family', 'Holiday']);
-    expect(composeSearchQuery(fromComma)).toBe(
-      'library:Events,Japan album:Summer,"Japan 2025" tag:Family,Holiday'
-    );
+    expect(composeSearchQuery(fromComma)).toBe('library:Events,Japan album:Summer,"Japan 2025" tag:Family,Holiday');
   });
 
   it('splits quoted comma-separated values', () => {
-    expect(splitCommaValues('Events,"Japan 2025",Vacation')).toEqual([
-      'Events',
-      'Japan 2025',
-      'Vacation'
-    ]);
+    expect(splitCommaValues('Events,"Japan 2025",Vacation')).toEqual(['Events', 'Japan 2025', 'Vacation']);
   });
 
   it('round-trips parsed clauses into filter state', () => {

@@ -11,9 +11,7 @@ describe('InlineNameField', () => {
   it('commits a trimmed name on Enter', async () => {
     const onCommit = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(
-      <InlineNameField ariaLabel="Folder name" initialValue="Events" onCancel={vi.fn()} onCommit={onCommit} />
-    );
+    render(<InlineNameField ariaLabel="Folder name" initialValue="Events" onCancel={vi.fn()} onCommit={onCommit} />);
 
     const input = screen.getByRole('textbox', { name: 'Folder name' });
     await user.clear(input);
@@ -25,9 +23,7 @@ describe('InlineNameField', () => {
     const onCommit = vi.fn();
     const onCancel = vi.fn();
     const user = userEvent.setup();
-    render(
-      <InlineNameField ariaLabel="Library name" initialValue="fambam" onCancel={onCancel} onCommit={onCommit} />
-    );
+    render(<InlineNameField ariaLabel="Library name" initialValue="fambam" onCancel={onCancel} onCommit={onCommit} />);
 
     await user.type(screen.getByRole('textbox', { name: 'Library name' }), 'Changed{Escape}');
     expect(onCommit).not.toHaveBeenCalled();

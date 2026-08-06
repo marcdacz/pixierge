@@ -67,7 +67,9 @@ export function AlbumsHome({ auth }: { auth: AuthResponse }) {
       const [mine, shared] = await Promise.all([fetchAlbums('mine'), fetchAlbums('shared')]);
       const next = [...mine, ...shared];
       setAlbums(next);
-      setActiveId((current) => (current && next.some((album) => album.id === current) ? current : next[0]?.id ?? null));
+      setActiveId((current) =>
+        current && next.some((album) => album.id === current) ? current : (next[0]?.id ?? null)
+      );
       setError(null);
     } catch {
       setError('Albums could not be loaded.');
@@ -292,17 +294,111 @@ export function AlbumsHome({ auth }: { auth: AuthResponse }) {
             onLoadMore={() => setPage((current) => current + 1)}
             showSectionHeaders={false}
             title={
-              <div className="flex items-center gap-2"><InlineEditableTitle aria-label="Album name" onSave={async (name) => { await rename(active.id, name); }} value={active.name} /><Button aria-label={`Share ${active.name}`} onClick={() => void openSharing(active.id)} size="icon" type="button" variant="ghost"><Share2 className="h-4 w-4" aria-hidden /></Button></div>
+              <div className="flex items-center gap-2">
+                <InlineEditableTitle
+                  aria-label="Album name"
+                  onSave={async (name) => {
+                    await rename(active.id, name);
+                  }}
+                  value={active.name}
+                />
+                <Button
+                  aria-label={`Share ${active.name}`}
+                  onClick={() => void openSharing(active.id)}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Share2 className="h-4 w-4" aria-hidden />
+                </Button>
+              </div>
             }
           />
         )}
       </div>
       {sharingAlbumId && (
-        <div aria-modal="true" className="absolute inset-0 z-30 grid place-items-center bg-background/70 p-4 backdrop-blur-sm" role="dialog" aria-label="Share album">
+        <div
+          aria-modal="true"
+          className="absolute inset-0 z-30 grid place-items-center bg-background/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-label="Share album"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-lg font-semibold">Share album</h2><p className="text-sm text-muted-foreground">Viewers can browse approved items. Editors can curate items they can already read.</p></div><Button aria-label="Close sharing" onClick={() => setSharingAlbumId(null)} size="icon" type="button" variant="ghost"><X className="h-4 w-4" /></Button></div>
-            <div className="grid gap-3"><label className="grid gap-1 text-sm font-medium">Recipient<select className="h-9 rounded-md border border-input bg-background px-2" value={shareUserId} onChange={(event) => setShareUserId(event.target.value)}><option value="">Select a user</option>{shareCandidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.username}</option>)}</select></label><label className="grid gap-1 text-sm font-medium">Role<select className="h-9 rounded-md border border-input bg-background px-2" value={shareRole} onChange={(event) => setShareRole(event.target.value as 'viewer' | 'editor')}><option value="viewer">Viewer</option><option value="editor">Editor</option></select></label><p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">Private items stay hidden until their source-library owner or an administrator approves them for this recipient.</p><Button disabled={!shareUserId} onClick={() => void share()} type="button">Share album</Button></div>
-            {members.length > 0 && <ul className="mt-5 grid gap-2 border-t pt-4">{members.map((member) => <li className="flex items-center justify-between text-sm" key={member.userId}><span>{member.username} <span className="text-muted-foreground">· {member.role}</span></span><Button onClick={() => void removeAlbumMember(sharingAlbumId, member.userId, auth.csrfToken).then(() => setMembers((current) => current.filter((item) => item.userId !== member.userId)))} size="sm" type="button" variant="ghost">Remove</Button></li>)}</ul>}
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Share album</h2>
+                <p className="text-sm text-muted-foreground">
+                  Viewers can browse approved items. Editors can curate items they can already read.
+                </p>
+              </div>
+              <Button
+                aria-label="Close sharing"
+                onClick={() => setSharingAlbumId(null)}
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="grid gap-3">
+              <label className="grid gap-1 text-sm font-medium">
+                Recipient
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-2"
+                  value={shareUserId}
+                  onChange={(event) => setShareUserId(event.target.value)}
+                >
+                  <option value="">Select a user</option>
+                  {shareCandidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.username}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Role
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-2"
+                  value={shareRole}
+                  onChange={(event) => setShareRole(event.target.value as 'viewer' | 'editor')}
+                >
+                  <option value="viewer">Viewer</option>
+                  <option value="editor">Editor</option>
+                </select>
+              </label>
+              <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                Private items stay hidden until their source-library owner or an administrator approves them for this
+                recipient.
+              </p>
+              <Button disabled={!shareUserId} onClick={() => void share()} type="button">
+                Share album
+              </Button>
+            </div>
+            {members.length > 0 && (
+              <ul className="mt-5 grid gap-2 border-t pt-4">
+                {members.map((member) => (
+                  <li className="flex items-center justify-between text-sm" key={member.userId}>
+                    <span>
+                      {member.username} <span className="text-muted-foreground">· {member.role}</span>
+                    </span>
+                    <Button
+                      onClick={() =>
+                        void removeAlbumMember(sharingAlbumId, member.userId, auth.csrfToken).then(() =>
+                          setMembers((current) => current.filter((item) => item.userId !== member.userId))
+                        )
+                      }
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      Remove
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}

@@ -1,12 +1,6 @@
 import { Calendar, Check, ChevronDown, ChevronRight, Images, type LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import {
-  assetThumbnailUrl,
-  fetchAlbums,
-  fetchTags,
-  parseSearch,
-  type LibrarySummary
-} from '@/api';
+import { assetThumbnailUrl, fetchAlbums, fetchTags, parseSearch, type LibrarySummary } from '@/api';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
@@ -32,8 +26,7 @@ type SearchFiltersProps = {
   onQueryChange: (query: string) => void;
 };
 
-const FILTER_SECTION_TITLE_CLASS =
-  'text-xs font-medium uppercase tracking-wide text-muted-foreground';
+const FILTER_SECTION_TITLE_CLASS = 'text-xs font-medium uppercase tracking-wide text-muted-foreground';
 
 const FILTER_FIELD_CLASS =
   'h-8 min-w-0 w-full rounded-md border border-input bg-background px-3 text-left text-sm text-muted-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25';
@@ -128,9 +121,7 @@ export function SearchFilters({ libraries, query, onQueryChange }: SearchFilters
           onClick={() => commit({ ...filters, libraries: [] })}
         />
         {libraries.map((library) => {
-          const active = filters.libraries.some(
-            (value) => value.toLowerCase() === library.name.toLowerCase()
-          );
+          const active = filters.libraries.some((value) => value.toLowerCase() === library.name.toLowerCase());
           return (
             <FilterRow
               active={active}
@@ -161,9 +152,7 @@ export function SearchFilters({ libraries, query, onQueryChange }: SearchFilters
                 imageUrl={album.coverAssetId ? assetThumbnailUrl(album.coverAssetId, 'tiny') : null}
                 key={album.name}
                 label={album.name}
-                onClick={() =>
-                  commit({ ...filters, albums: toggleMultiValue(filters.albums, album.name, !active) })
-                }
+                onClick={() => commit({ ...filters, albums: toggleMultiValue(filters.albums, album.name, !active) })}
               />
             );
           })
@@ -205,10 +194,7 @@ export function SearchFilters({ libraries, query, onQueryChange }: SearchFilters
 
       <FilterSection title="Extension">
         <div className={FILTER_FIELD_WRAP_CLASS}>
-          <ExtensionFilter
-            onChange={(extensions) => commit({ ...filters, extensions })}
-            values={filters.extensions}
-          />
+          <ExtensionFilter onChange={(extensions) => commit({ ...filters, extensions })} values={filters.extensions} />
         </div>
       </FilterSection>
 
@@ -337,13 +323,7 @@ function FilterRowIcon({ icon: RowIcon, imageUrl }: { icon?: LucideIcon; imageUr
   return null;
 }
 
-function ExtensionFilter({
-  values,
-  onChange
-}: {
-  values: string[];
-  onChange: (values: string[]) => void;
-}) {
+function ExtensionFilter({ values, onChange }: { values: string[]; onChange: (values: string[]) => void }) {
   const [customDraft, setCustomDraft] = useState('');
   const knownLower = new Set(SEARCH_EXTENSION_OPTIONS.map((option) => option.toLowerCase()));
   const customValues = values.filter((value) => !knownLower.has(value.toLowerCase()));
@@ -384,10 +364,7 @@ function ExtensionFilter({
             onChange([]);
           }}
         >
-          <Check
-            aria-hidden
-            className={cn('h-3.5 w-3.5', values.length > 0 && 'opacity-0')}
-          />
+          <Check aria-hidden className={cn('h-3.5 w-3.5', values.length > 0 && 'opacity-0')} />
           Any extension
         </DropdownMenuItem>
         {SEARCH_EXTENSION_OPTIONS.map((extension) => {
@@ -660,10 +637,7 @@ function detectCapturedMode({ after, before, on }: CapturedDates): CapturedMode 
   return 'range';
 }
 
-function capturedSummary(
-  { after, before, on }: CapturedDates,
-  editor: 'on' | 'range' | null
-): string {
+function capturedSummary({ after, before, on }: CapturedDates, editor: 'on' | 'range' | null): string {
   const mode = detectCapturedMode({ after, before, on });
   if (editor === 'on' || mode === 'on') return on ? `On ${on}` : 'On date';
   if (editor === 'range' || mode === 'range') return 'Custom';

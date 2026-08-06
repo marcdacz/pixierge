@@ -215,23 +215,26 @@ export async function mockPixiergeApi(page: Page) {
     createdAt: string;
     updatedAt: string;
   }> = [];
-  const libraries = new Map<string, {
-    id: string;
-    name: string;
-    status: 'active' | 'archived';
-    sources: {
+  const libraries = new Map<
+    string,
+    {
       id: string;
-      path: string;
-      available: boolean;
-      unavailableReason: string | null;
-      createdAt: string;
-    }[];
-    exclusionPatterns: {
-      id: string;
-      pattern: string;
-      createdAt: string;
-    }[];
-  }>();
+      name: string;
+      status: 'active' | 'archived';
+      sources: {
+        id: string;
+        path: string;
+        available: boolean;
+        unavailableReason: string | null;
+        createdAt: string;
+      }[];
+      exclusionPatterns: {
+        id: string;
+        pattern: string;
+        createdAt: string;
+      }[];
+    }
+  >();
 
   await page.route('**/api/**', async (route) => {
     const request = route.request();
@@ -415,9 +418,7 @@ export async function mockPixiergeApi(page: Page) {
 
     if (path === '/api/scans/active') {
       await route.fulfill({
-        json: scanStatus === 'running'
-          ? [activeScanResponse('library-1', 'Family Photos', null, 'running')]
-          : []
+        json: scanStatus === 'running' ? [activeScanResponse('library-1', 'Family Photos', null, 'running')] : []
       });
       return;
     }
@@ -435,7 +436,9 @@ export async function mockPixiergeApi(page: Page) {
 
     if (path === '/api/admin/users' && request.method() === 'POST') {
       const body = await request.postDataJSON();
-      const username = String(body.username ?? '').trim().toLowerCase();
+      const username = String(body.username ?? '')
+        .trim()
+        .toLowerCase();
       if (users.some((user) => user.username.toLowerCase() === username)) {
         await route.fulfill({ status: 409, json: { detail: 'Username already exists' } });
         return;
@@ -462,7 +465,9 @@ export async function mockPixiergeApi(page: Page) {
     if (adminUserMatch && request.method() === 'PATCH') {
       const body = await request.postDataJSON();
       users = users.map((user) =>
-        user.id === adminUserMatch[1] ? { ...user, status: body.active ? 'active' as const : 'disabled' as const } : user
+        user.id === adminUserMatch[1]
+          ? { ...user, status: body.active ? ('active' as const) : ('disabled' as const) }
+          : user
       );
       await route.fulfill({ json: users.find((user) => user.id === adminUserMatch[1]) });
       return;
@@ -503,7 +508,8 @@ export async function mockPixiergeApi(page: Page) {
             attempts: 3,
             maxAttempts: 3,
             lastErrorCode: 'metadata_error',
-            lastErrorMessage: 'NullPointerException: Cannot invoke "java.util.Collection.iterator()" because "<parameter1>" is null',
+            lastErrorMessage:
+              'NullPointerException: Cannot invoke "java.util.Collection.iterator()" because "<parameter1>" is null',
             updatedAt: '2026-07-25T10:34:27Z',
             completedAt: '2026-07-25T10:34:27Z'
           })),
@@ -548,9 +554,7 @@ export async function mockPixiergeApi(page: Page) {
       };
       schedulerRuns = [run, ...schedulerRuns];
       schedulerJobs = schedulerJobs.map((job) =>
-        job.id === jobId
-          ? { ...job, lastRunAt: run.finishedAt, lastStatus: 'succeeded' }
-          : job
+        job.id === jobId ? { ...job, lastRunAt: run.finishedAt, lastStatus: 'succeeded' } : job
       );
       await route.fulfill({ status: 202, json: run });
       return;
@@ -618,9 +622,10 @@ export async function mockPixiergeApi(page: Page) {
 
     if (path === '/api/starred/assets' && request.method() === 'GET') {
       await route.fulfill({
-        json: starred && starred.itemCount > 0
-          ? browseWithStarred(assetBrowseResponse)
-          : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
+        json:
+          starred && starred.itemCount > 0
+            ? browseWithStarred(assetBrowseResponse)
+            : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
       });
       return;
     }
@@ -666,9 +671,10 @@ export async function mockPixiergeApi(page: Page) {
     if (albumAssetsMatch && request.method() === 'GET') {
       const album = albums.find((item) => item.id === albumAssetsMatch[1]);
       await route.fulfill({
-        json: album && album.itemCount > 0
-          ? browseWithStarred(assetBrowseResponse)
-          : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
+        json:
+          album && album.itemCount > 0
+            ? browseWithStarred(assetBrowseResponse)
+            : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
       });
       return;
     }
@@ -736,9 +742,10 @@ export async function mockPixiergeApi(page: Page) {
     if (tagAssetsMatch && request.method() === 'GET') {
       const tag = tags.find((item) => item.id === tagAssetsMatch[1]);
       await route.fulfill({
-        json: tag && tag.assetCount > 0
-          ? browseWithStarred(assetBrowseResponse)
-          : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
+        json:
+          tag && tag.assetCount > 0
+            ? browseWithStarred(assetBrowseResponse)
+            : { sections: [], totalCount: 0, page: 0, pageSize: 48, hasNext: false }
       });
       return;
     }
@@ -759,23 +766,28 @@ export async function mockPixiergeApi(page: Page) {
   });
 }
 
-function libraryResponses(libraries: Map<string, {
-  id: string;
-  name: string;
-  status: 'active' | 'archived';
-  sources: {
+function libraryResponses(
+  libraries: Map<
+    string,
+    {
       id: string;
-      path: string;
-      available: boolean;
-      unavailableReason: string | null;
-      createdAt: string;
-    }[];
-    exclusionPatterns: {
-      id: string;
-      pattern: string;
-      createdAt: string;
-    }[];
-}>) {
+      name: string;
+      status: 'active' | 'archived';
+      sources: {
+        id: string;
+        path: string;
+        available: boolean;
+        unavailableReason: string | null;
+        createdAt: string;
+      }[];
+      exclusionPatterns: {
+        id: string;
+        pattern: string;
+        createdAt: string;
+      }[];
+    }
+  >
+) {
   return [...libraries.values()].map((library) => {
     const availableSourceCount = library.sources.filter((source) => source.available).length;
 
@@ -876,9 +888,7 @@ function mockSearchSuggestions(field: string, partial: string) {
     ]
   };
   const normalized = partial.toLowerCase();
-  return (suggestions[field] ?? []).filter((suggestion) =>
-    suggestion.label.toLowerCase().startsWith(normalized)
-  );
+  return (suggestions[field] ?? []).filter((suggestion) => suggestion.label.toLowerCase().startsWith(normalized));
 }
 
 function scanResponse(libraryId: string, rootId: string | null, status: 'running' | 'completed' = 'completed') {

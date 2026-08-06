@@ -1,28 +1,13 @@
 import { Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import {
-  fetchSearchSuggestions,
-  parseSearch,
-  type SearchParseResponse,
-  type SearchSuggestion
-} from '@/api';
+import { fetchSearchSuggestions, parseSearch, type SearchParseResponse, type SearchSuggestion } from '@/api';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { quoteIfNeeded, joinCommaValues, normalizeExtension, splitCommaValues } from '@/features/search/search-query';
 
 const SEARCH_PARSE_DEBOUNCE_MS = 250;
 const SEARCH_SUGGEST_DEBOUNCE_MS = 150;
-const SEARCH_FIELDS = [
-  'library',
-  'folder',
-  'album',
-  'tag',
-  'extension',
-  'after',
-  'before',
-  'on',
-  'is'
-] as const;
+const SEARCH_FIELDS = ['library', 'folder', 'album', 'tag', 'extension', 'after', 'before', 'on', 'is'] as const;
 const DYNAMIC_FIELDS = new Set(['library', 'folder', 'album', 'tag', 'extension', 'is']);
 const MULTI_VALUE_FIELDS = new Set(['library', 'album', 'tag', 'extension']);
 const STARRED_SUGGESTION: SearchSuggestion = { value: 'is:starred', label: 'starred' };
@@ -145,7 +130,9 @@ export function StructuredSearch({
             setParsed({
               ...emptyParse(composed),
               valid: false,
-              errors: [{ code: 'PARSE_FAILED', message: 'Search could not be validated.', start: 0, end: composed.length }]
+              errors: [
+                { code: 'PARSE_FAILED', message: 'Search could not be validated.', start: 0, end: composed.length }
+              ]
             });
           }
         });
@@ -169,9 +156,10 @@ export function StructuredSearch({
         setActiveSuggestion(0);
         return;
       }
-      const fieldSuggestions = SEARCH_FIELDS
-        .filter((field) => field.startsWith(partial))
-        .map((field) => ({ value: `${field}:`, label: `${field}:` }));
+      const fieldSuggestions = SEARCH_FIELDS.filter((field) => field.startsWith(partial)).map((field) => ({
+        value: `${field}:`,
+        label: `${field}:`
+      }));
       const starredMatches = 'starred'.startsWith(partial);
       setSuggestions(starredMatches ? [...fieldSuggestions, STARRED_SUGGESTION] : fieldSuggestions);
       setActiveSuggestion(0);
@@ -273,7 +261,10 @@ export function StructuredSearch({
   }
 
   function removePill(id: string) {
-    emit(pills.filter((pill) => pill.id !== id), draft);
+    emit(
+      pills.filter((pill) => pill.id !== id),
+      draft
+    );
     focusDraft();
   }
 
@@ -330,7 +321,10 @@ export function StructuredSearch({
           if (!disabled) inputRef.current?.focus();
         }}
       >
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
         {pills.map((pill) => (
           <Badge key={pill.id} className="max-w-full gap-1" variant="secondary">
             <PillLabel pill={pill} />
@@ -368,13 +362,20 @@ export function StructuredSearch({
       </div>
       {showPanel && (
         <div className="absolute left-0 right-0 top-[calc(100%+0.375rem)] z-50 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg">
-          {parsed.errors[0] && <p className="px-2 py-1 text-xs text-destructive" id="search-error">{parsed.errors[0].message}</p>}
+          {parsed.errors[0] && (
+            <p className="px-2 py-1 text-xs text-destructive" id="search-error">
+              {parsed.errors[0].message}
+            </p>
+          )}
           {suggestions.length > 0 && (
             <div aria-label="Search suggestions" className="grid gap-0.5" role="listbox">
               {suggestions.map((suggestion, index) => (
                 <button
                   aria-selected={index === activeSuggestion}
-                  className={cn('rounded-sm px-2 py-1.5 text-left text-sm', index === activeSuggestion && 'bg-accent text-accent-foreground')}
+                  className={cn(
+                    'rounded-sm px-2 py-1.5 text-left text-sm',
+                    index === activeSuggestion && 'bg-accent text-accent-foreground'
+                  )}
                   data-testid={`structured-search-suggestion-${searchTestIdPart(suggestion.value)}`}
                   key={`${suggestion.value}:${index}`}
                   onMouseDown={(event) => event.preventDefault()}
@@ -397,12 +398,7 @@ function isSearchField(field: string): boolean {
   return (SEARCH_FIELDS as readonly string[]).includes(field);
 }
 
-function pillsForFieldValue(
-  field: string,
-  value: string,
-  negated: boolean,
-  nextId: () => string
-): SearchPill[] {
+function pillsForFieldValue(field: string, value: string, negated: boolean, nextId: () => string): SearchPill[] {
   const values = MULTI_VALUE_FIELDS.has(field) ? splitCommaValues(value) : [unquote(value)];
   const normalized =
     field === 'extension'
@@ -423,17 +419,12 @@ function mergeMultiValuePills(pills: SearchPill[]): SearchPill[] {
       merged.push(pill);
       continue;
     }
-    const existing = merged.find(
-      (entry) => entry.field === pill.field && entry.negated === pill.negated
-    );
+    const existing = merged.find((entry) => entry.field === pill.field && entry.negated === pill.negated);
     if (!existing) {
       merged.push({ ...pill, value: joinCommaValues(splitCommaValues(pill.value)) });
       continue;
     }
-    const values = [
-      ...splitCommaValues(existing.value),
-      ...splitCommaValues(pill.value)
-    ];
+    const values = [...splitCommaValues(existing.value), ...splitCommaValues(pill.value)];
     const unique: string[] = [];
     for (const value of values) {
       if (!unique.some((entry) => entry.toLowerCase() === value.toLowerCase())) {
@@ -476,7 +467,12 @@ function searchPillRemoveTestId(pill: SearchPill) {
 }
 
 function searchTestIdPart(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'empty';
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'empty'
+  );
 }
 
 function unquote(value: string): string {
@@ -506,9 +502,7 @@ function PillLabel({ pill }: { pill: SearchPill }) {
   const prefix = `${pill.negated ? 'Not ' : ''}${pill.field}:`;
   return (
     <>
-      <KeywordMark>{prefix}</KeywordMark>
-      {' '}
-      <span className="truncate">{pill.value}</span>
+      <KeywordMark>{prefix}</KeywordMark> <span className="truncate">{pill.value}</span>
     </>
   );
 }

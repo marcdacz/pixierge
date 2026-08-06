@@ -68,14 +68,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -406,7 +399,7 @@ export function UsersSettings({
 
     try {
       const updated = await updateUserStatus(user.id, { active: user.status !== 'active' }, auth.csrfToken);
-      setUsers((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setUsers((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setStatusMessage(`${updated.username} is ${updated.status}.`);
     } catch (error) {
       const message = messageForError(error, 'User status could not be changed.');
@@ -485,7 +478,11 @@ export function UsersSettings({
 
       {loadError && <Alert>{loadError}</Alert>}
       {formError && <Alert>{formError}</Alert>}
-      {statusMessage && <p className="text-sm text-muted-foreground" role="status">{statusMessage}</p>}
+      {statusMessage && (
+        <p className="text-sm text-muted-foreground" role="status">
+          {statusMessage}
+        </p>
+      )}
       {loading && <p className="text-sm text-muted-foreground">Loading users...</p>}
 
       {!loading && users.length === 0 ? (
@@ -520,7 +517,11 @@ export function UsersSettings({
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
-                        {user.roles.map((role) => <Badge key={role} variant="secondary">{role}</Badge>)}
+                        {user.roles.map((role) => (
+                          <Badge key={role} variant="secondary">
+                            {role}
+                          </Badge>
+                        ))}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -577,7 +578,10 @@ export function UsersSettings({
       )}
 
       {resetTarget && (
-        <form className="grid gap-3 rounded-md border border-border p-4 md:grid-cols-[minmax(0,1fr)_auto_auto]" onSubmit={submitReset}>
+        <form
+          className="grid gap-3 rounded-md border border-border p-4 md:grid-cols-[minmax(0,1fr)_auto_auto]"
+          onSubmit={submitReset}
+        >
           <div className="grid gap-2">
             <Label htmlFor="reset-user-password">New password for {resetTarget.username}</Label>
             <Input
@@ -653,9 +657,12 @@ function DeleteUserDialog({
         role="dialog"
       >
         <div className="grid gap-2">
-          <h2 className="text-lg font-semibold" id={titleId}>Delete {user.username}?</h2>
+          <h2 className="text-lg font-semibold" id={titleId}>
+            Delete {user.username}?
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Owned library membership, albums, and tags will move to the selected active user. Sessions for {user.username} will be revoked.
+            Owned library membership, albums, and tags will move to the selected active user. Sessions for{' '}
+            {user.username} will be revoked.
           </p>
         </div>
 
@@ -672,7 +679,9 @@ function DeleteUserDialog({
               <option value="">No active replacement available</option>
             ) : (
               eligibleReplacementUsers.map((replacementUser) => (
-                <option key={replacementUser.id} value={replacementUser.id}>{replacementUser.username}</option>
+                <option key={replacementUser.id} value={replacementUser.id}>
+                  {replacementUser.username}
+                </option>
               ))
             )}
           </select>
@@ -709,14 +718,7 @@ function DeleteUserDialog({
   );
 }
 
-function SourcesSettings({
-  auth,
-  error,
-  libraries,
-  loading,
-  onError,
-  onLibrariesChange
-}: SettingsPageProps) {
+function SourcesSettings({ auth, error, libraries, loading, onError, onLibrariesChange }: SettingsPageProps) {
   const [libraryName, setLibraryName] = useState('');
   const [selectedLibraryId, setSelectedLibraryId] = useState<string | null>(libraries[0]?.id ?? null);
   const [showArchived, setShowArchived] = useState(false);
@@ -727,7 +729,8 @@ function SourcesSettings({
   const [submitting, setSubmitting] = useState(false);
   const activeLibraries = libraries.filter((library) => library.status === 'active');
   const visibleLibraries = showArchived ? libraries : activeLibraries;
-  const selectedLibrary = visibleLibraries.find((library) => library.id === selectedLibraryId) ?? visibleLibraries[0] ?? null;
+  const selectedLibrary =
+    visibleLibraries.find((library) => library.id === selectedLibraryId) ?? visibleLibraries[0] ?? null;
   const sourceCount = activeLibraries.reduce((total, library) => total + library.sourceCount, 0);
   const archivedCount = libraries.length - activeLibraries.length;
 
@@ -892,7 +895,15 @@ function SourcesSettings({
   );
 }
 
-function LibraryMembersPanel({ auth, libraryId, onError }: { auth: AuthResponse; libraryId: string; onError: SettingsPageProps['onError'] }) {
+function LibraryMembersPanel({
+  auth,
+  libraryId,
+  onError
+}: {
+  auth: AuthResponse;
+  libraryId: string;
+  onError: SettingsPageProps['onError'];
+}) {
   const [members, setMembers] = useState<LibraryMember[]>([]);
   const [users, setUsers] = useState<LibraryMember[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -902,7 +913,10 @@ function LibraryMembersPanel({ auth, libraryId, onError }: { auth: AuthResponse;
 
   async function load() {
     try {
-      const [nextMembers, nextUsers] = await Promise.all([fetchLibraryMembers(libraryId), fetchLibraryMemberCandidates(libraryId)]);
+      const [nextMembers, nextUsers] = await Promise.all([
+        fetchLibraryMembers(libraryId),
+        fetchLibraryMemberCandidates(libraryId)
+      ]);
       // Older servers may not expose membership yet while a browser reloads during deployment.
       setMembers(Array.isArray(nextMembers) ? nextMembers : []);
       setUsers(Array.isArray(nextUsers) ? nextUsers : []);
@@ -912,50 +926,137 @@ function LibraryMembersPanel({ auth, libraryId, onError }: { auth: AuthResponse;
     }
   }
 
-  useEffect(() => { void load(); }, [libraryId]);
+  useEffect(() => {
+    void load();
+  }, [libraryId]);
   const availableUsers = users.filter((user) => !members.some((member) => member.userId === user.userId));
 
   async function addMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedUserId) return;
-    setPending(true); setMessage(null);
+    setPending(true);
+    setMessage(null);
     try {
       await addLibraryMember(libraryId, { userId: selectedUserId, role }, auth.csrfToken);
-      setSelectedUserId(''); setRole('member'); await load();
-    } catch (error) { setMessage(messageForError(error, 'Member could not be added.')); }
-    finally { setPending(false); }
+      setSelectedUserId('');
+      setRole('member');
+      await load();
+    } catch (error) {
+      setMessage(messageForError(error, 'Member could not be added.'));
+    } finally {
+      setPending(false);
+    }
   }
 
   async function changeRole(member: LibraryMember, nextRole: LibraryMember['role']) {
-    setPending(true); setMessage(null);
-    try { await updateLibraryMemberRole(libraryId, member.userId, { role: nextRole }, auth.csrfToken); await load(); }
-    catch (error) { setMessage(messageForError(error, 'Member role could not be changed.')); }
-    finally { setPending(false); }
+    setPending(true);
+    setMessage(null);
+    try {
+      await updateLibraryMemberRole(libraryId, member.userId, { role: nextRole }, auth.csrfToken);
+      await load();
+    } catch (error) {
+      setMessage(messageForError(error, 'Member role could not be changed.'));
+    } finally {
+      setPending(false);
+    }
   }
 
   async function remove(member: LibraryMember) {
-    setPending(true); setMessage(null);
-    try { await removeLibraryMember(libraryId, member.userId, auth.csrfToken); await load(); }
-    catch (error) { setMessage(messageForError(error, 'Member could not be removed.')); }
-    finally { setPending(false); }
+    setPending(true);
+    setMessage(null);
+    try {
+      await removeLibraryMember(libraryId, member.userId, auth.csrfToken);
+      await load();
+    } catch (error) {
+      setMessage(messageForError(error, 'Member could not be removed.'));
+    } finally {
+      setPending(false);
+    }
   }
 
-  return <section aria-label="Library members" className="grid gap-4 rounded-md border border-border p-4">
-    <div><h3 className="text-base font-semibold text-foreground">Members</h3><p className="text-sm text-muted-foreground">Owners and admins can manage access. A library must retain an owner.</p></div>
-    {message && <Alert>{message}</Alert>}
-    <form className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_auto]" onSubmit={addMember}>
-      <select aria-label="User to add" className="h-10 rounded-md border border-border bg-background px-3 text-sm" value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)}>
-        <option value="">Select active user</option>{availableUsers.map((user) => <option key={user.userId} value={user.userId}>{user.username}</option>)}
-      </select>
-      <select aria-label="New member role" className="h-10 rounded-md border border-border bg-background px-3 text-sm" value={role} onChange={(event) => setRole(event.target.value as LibraryMember['role'])}>
-        <option value="member">Member</option><option value="admin">Admin</option><option value="owner">Owner</option>
-      </select>
-      <Button disabled={pending || !selectedUserId} type="submit"><Plus className="h-4 w-4" aria-hidden />Add member</Button>
-    </form>
-    <div className="overflow-x-auto rounded-md border border-border"><Table><TableHeader><TableRow><TableHead>User</TableHead><TableHead>Role</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>
-      {members.map((member) => <TableRow key={member.userId}><TableCell className="font-medium">{member.username}</TableCell><TableCell><select aria-label={`${member.username} role`} className="h-8 rounded border border-border bg-background px-2 text-sm" disabled={pending} value={member.role} onChange={(event) => void changeRole(member, event.target.value as LibraryMember['role'])}><option value="owner">Owner</option><option value="admin">Admin</option><option value="member">Member</option></select></TableCell><TableCell><Button disabled={pending} onClick={() => void remove(member)} size="sm" type="button" variant="ghost"><Trash2 className="h-4 w-4" aria-hidden />Remove</Button></TableCell></TableRow>)}
-    </TableBody></Table></div>
-  </section>;
+  return (
+    <section aria-label="Library members" className="grid gap-4 rounded-md border border-border p-4">
+      <div>
+        <h3 className="text-base font-semibold text-foreground">Members</h3>
+        <p className="text-sm text-muted-foreground">
+          Owners and admins can manage access. A library must retain an owner.
+        </p>
+      </div>
+      {message && <Alert>{message}</Alert>}
+      <form className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_auto]" onSubmit={addMember}>
+        <select
+          aria-label="User to add"
+          className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+          value={selectedUserId}
+          onChange={(event) => setSelectedUserId(event.target.value)}
+        >
+          <option value="">Select active user</option>
+          {availableUsers.map((user) => (
+            <option key={user.userId} value={user.userId}>
+              {user.username}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="New member role"
+          className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+          value={role}
+          onChange={(event) => setRole(event.target.value as LibraryMember['role'])}
+        >
+          <option value="member">Member</option>
+          <option value="admin">Admin</option>
+          <option value="owner">Owner</option>
+        </select>
+        <Button disabled={pending || !selectedUserId} type="submit">
+          <Plus className="h-4 w-4" aria-hidden />
+          Add member
+        </Button>
+      </form>
+      <div className="overflow-x-auto rounded-md border border-border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>User</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {members.map((member) => (
+              <TableRow key={member.userId}>
+                <TableCell className="font-medium">{member.username}</TableCell>
+                <TableCell>
+                  <select
+                    aria-label={`${member.username} role`}
+                    className="h-8 rounded border border-border bg-background px-2 text-sm"
+                    disabled={pending}
+                    value={member.role}
+                    onChange={(event) => void changeRole(member, event.target.value as LibraryMember['role'])}
+                  >
+                    <option value="owner">Owner</option>
+                    <option value="admin">Admin</option>
+                    <option value="member">Member</option>
+                  </select>
+                </TableCell>
+                <TableCell>
+                  <Button
+                    disabled={pending}
+                    onClick={() => void remove(member)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                    Remove
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
+  );
 }
 
 function SourceStat({ label, value, warning = false }: { label: string; value: number; warning?: boolean }) {
@@ -1345,7 +1446,8 @@ function LibrarySourceCard({
                 <TooltipContent>
                   Docker sources must use container paths. Mount your folders under{' '}
                   <span className="font-mono">/photos</span>, then add paths like{' '}
-                  <span className="font-mono">/photos/pictures</span> or <span className="font-mono">/photos/archive</span>.
+                  <span className="font-mono">/photos/pictures</span> or{' '}
+                  <span className="font-mono">/photos/archive</span>.
                 </TooltipContent>
               </Tooltip>
             </div>

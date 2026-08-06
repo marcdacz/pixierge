@@ -12,14 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -149,13 +142,9 @@ export function SchedulerDetails({ auth, onError }: SchedulerDetailsProps) {
             <TableBody>
               {jobs.map((job) => {
                 const jobBusy = isJobBusy(job, startingJobIds);
-                const runNowLabel = jobBusy
-                  ? `Running · ${job.displayName}`
-                  : `Run now · ${job.displayName}`;
+                const runNowLabel = jobBusy ? `Running · ${job.displayName}` : `Run now · ${job.displayName}`;
                 const editScheduleLabel = `Edit schedule · ${job.displayName}`;
-                const toggleEnabledLabel = job.enabled
-                  ? `Disable · ${job.displayName}`
-                  : `Enable · ${job.displayName}`;
+                const toggleEnabledLabel = job.enabled ? `Disable · ${job.displayName}` : `Enable · ${job.displayName}`;
                 return (
                   <TableRow data-testid={`scheduler-job-${job.id}`} key={job.id}>
                     <TableCell className="min-w-[22rem] align-top">

@@ -1,17 +1,9 @@
 import { RefreshCw, Settings } from 'lucide-react';
 import type { ActiveScan, ScanError, ScanRun } from '@/api';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useScanActivity } from '@/features/scans/scan-activity-context';
-import {
-  formatScanDuration,
-  formatScanTimestamp,
-  isScanInProgress
-} from '@/features/scans/scan-utils';
+import { formatScanDuration, formatScanTimestamp, isScanInProgress } from '@/features/scans/scan-utils';
 import { ScanStatsGrid } from '@/features/scans/scan-stats-grid';
 import { cn } from '@/lib/utils';
 
@@ -52,7 +44,13 @@ export function ScanActivityButton({ canOpenSettings = true, onOpenSettings }: S
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button aria-label="Scan activity" data-testid="scan-activity-trigger" size="icon" type="button" variant="ghost">
+        <Button
+          aria-label="Scan activity"
+          data-testid="scan-activity-trigger"
+          size="icon"
+          type="button"
+          variant="ghost"
+        >
           <RefreshCw className={cn('h-4 w-4', spinning && 'animate-spin')} aria-hidden />
         </Button>
       </DropdownMenuTrigger>
@@ -101,9 +99,7 @@ export function ScanActivityButton({ canOpenSettings = true, onOpenSettings }: S
                   </div>
                 ))}
                 {scan.errors.length > 3 && (
-                  <span className="text-muted-foreground">
-                    +{scan.errors.length - 3} more recorded for this scan
-                  </span>
+                  <span className="text-muted-foreground">+{scan.errors.length - 3} more recorded for this scan</span>
                 )}
               </div>
             )}
@@ -122,9 +118,9 @@ function useDisplayScans(activeScans: ActiveScan[], trackedScan: ScanRun | null)
     return [];
   }
   if (
-    isScanInProgress(trackedScan)
-    || trackedScan.status === 'completed_with_errors'
-    || trackedScan.status === 'failed'
+    isScanInProgress(trackedScan) ||
+    trackedScan.status === 'completed_with_errors' ||
+    trackedScan.status === 'failed'
   ) {
     return [fromTrackedScan(trackedScan)];
   }

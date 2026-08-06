@@ -54,7 +54,7 @@ export function TagsHome({ auth }: { auth: AuthResponse }) {
     try {
       const next = await fetchTags();
       setTags(next);
-      setActiveId((current) => (current && next.some((tag) => tag.id === current) ? current : next[0]?.id ?? null));
+      setActiveId((current) => (current && next.some((tag) => tag.id === current) ? current : (next[0]?.id ?? null)));
       setError(null);
     } catch {
       setError('Tags could not be loaded.');

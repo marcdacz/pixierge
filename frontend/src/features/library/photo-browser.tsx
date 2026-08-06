@@ -17,10 +17,7 @@ import {
 } from '@/api';
 import { Alert } from '@/components/ui/alert';
 import { AssignmentPicker, type AssignmentDestination } from '@/features/organizer/assignment-picker';
-import {
-  AssetContextMenu,
-  type AssetContextMenuAction
-} from '@/features/organizer/asset-context-menu';
+import { AssetContextMenu, type AssetContextMenuAction } from '@/features/organizer/asset-context-menu';
 import { writeAssetDragData } from '@/features/organizer/drag-types';
 import { useAssetSelection } from '@/features/organizer/use-asset-selection';
 import {
@@ -119,9 +116,7 @@ export function PhotoBrowser({
         ...section,
         assets: section.assets.map((asset) => {
           const override = starredOverrides.get(asset.id);
-          return override === undefined || override === asset.starred
-            ? asset
-            : { ...asset, starred: override };
+          return override === undefined || override === asset.starred ? asset : { ...asset, starred: override };
         })
       }))
     };
@@ -130,8 +125,9 @@ export function PhotoBrowser({
   const selection = useAssetSelection(browseContextKey);
   const selectedAssets = useMemo(
     () =>
-      displayAssets?.sections.flatMap((section) => section.assets).filter((asset) => selection.selectedIds.has(asset.id)) ??
-      [],
+      displayAssets?.sections
+        .flatMap((section) => section.assets)
+        .filter((asset) => selection.selectedIds.has(asset.id)) ?? [],
     [displayAssets?.sections, selection.selectedIds]
   );
   const selectedAssetSummary = useMemo(
@@ -487,7 +483,9 @@ export function PhotoBrowser({
               <div className="flex min-w-0 flex-wrap items-baseline gap-2">
                 {title}
                 {displayAssets && (
-                  <span className="shrink-0 text-sm text-muted-foreground">{formatItemCount(displayAssets.totalCount)}</span>
+                  <span className="shrink-0 text-sm text-muted-foreground">
+                    {formatItemCount(displayAssets.totalCount)}
+                  </span>
                 )}
               </div>
               {description}
@@ -507,7 +505,10 @@ export function PhotoBrowser({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto [overflow-anchor:none]" ref={scrollContainerRef}>
+      <div
+        className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto [overflow-anchor:none]"
+        ref={scrollContainerRef}
+      >
         {(error || browseError) && <Alert>{browseError ?? error}</Alert>}
         {loadingAssets && <p className="text-sm text-muted-foreground">Loading assets...</p>}
         {!loadingAssets && displayAssets?.sections.length === 0 && (
@@ -528,7 +529,9 @@ export function PhotoBrowser({
             showSectionHeaders={showSectionHeaders}
           />
         )}
-        {displayAssets && displayAssets.hasNext && onLoadMore && <div aria-hidden className="h-px shrink-0" ref={loadMoreRef} />}
+        {displayAssets && displayAssets.hasNext && onLoadMore && (
+          <div aria-hidden className="h-px shrink-0" ref={loadMoreRef} />
+        )}
         {loadingMore && <p className="pb-4 text-sm text-muted-foreground">Loading more...</p>}
       </div>
 

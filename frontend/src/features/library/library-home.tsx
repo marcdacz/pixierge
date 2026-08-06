@@ -1,12 +1,4 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  Folder,
-  FolderOpen,
-  HardDrive,
-  Pencil,
-  SlidersHorizontal
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, HardDrive, Pencil, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import {
   fetchAssets,
@@ -77,12 +69,14 @@ export function LibraryHome({
         </div>
         {error && <Alert>{error}</Alert>}
         <EmptyPanel
-          action={onConfigureSources ? (
-            <Button className="mt-2" onClick={onConfigureSources} type="button">
-              <SlidersHorizontal className="h-4 w-4" aria-hidden />
-              Configure sources
-            </Button>
-          ) : null}
+          action={
+            onConfigureSources ? (
+              <Button className="mt-2" onClick={onConfigureSources} type="button">
+                <SlidersHorizontal className="h-4 w-4" aria-hidden />
+                Configure sources
+              </Button>
+            ) : null
+          }
           description="Configure named libraries and source folders to start building your catalog."
           icon={FolderOpen}
           title="Empty library"
@@ -123,9 +117,11 @@ function LibraryBrowser({
   const [selectedLibraryId, setSelectedLibraryId] = useState<string | undefined>(defaultLibraryId);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const [expandedLibraries, setExpandedLibraries] = useState<Set<string>>(() => new Set());
-  const { collapsed: treeCollapsed, setCollapsed: setTreeCollapsed, isLowResolution } = useBrowseSidebarState(
-    BROWSE_SIDEBAR_COLLAPSED_KEYS.libraries
-  );
+  const {
+    collapsed: treeCollapsed,
+    setCollapsed: setTreeCollapsed,
+    isLowResolution
+  } = useBrowseSidebarState(BROWSE_SIDEBAR_COLLAPSED_KEYS.libraries);
   const [page, setPage] = useState(0);
   const [assets, setAssets] = useState<AssetBrowseResponse | null>(null);
   const [loadingTree, setLoadingTree] = useState(false);
@@ -333,10 +329,7 @@ function LibraryBrowser({
     try {
       await onRenameLibrary(libraryId, name);
     } catch (renameError) {
-      onError?.(
-        'Library could not be renamed',
-        messageForError(renameError, 'Check the name and try again.')
-      );
+      onError?.('Library could not be renamed', messageForError(renameError, 'Check the name and try again.'));
       throw renameError;
     }
   }
@@ -388,12 +381,8 @@ function LibraryBrowser({
                 libraryId={section.libraryId}
                 nodes={section.nodes}
                 onClearSelection={() => updateFolder(null, section.libraryId)}
-                onRenameFolder={
-                  auth ? (path, name) => renameFolder(section.libraryId, path, name) : undefined
-                }
-                onRenameLibrary={
-                  onRenameLibrary ? (name) => renameLibrary(section.libraryId, name) : undefined
-                }
+                onRenameFolder={auth ? (path, name) => renameFolder(section.libraryId, path, name) : undefined}
+                onRenameLibrary={onRenameLibrary ? (name) => renameLibrary(section.libraryId, name) : undefined}
                 onSelect={(path) => updateFolder(path, section.libraryId)}
                 onToggleExpanded={toggleExpanded}
                 onToggleLibraryExpanded={toggleLibraryExpanded}
@@ -556,18 +545,20 @@ function FolderTreeNode({
         onToggleExpanded={() => onToggleExpanded(node.path)}
         renameAriaLabel="Folder name"
       />
-      {hasChildren && expanded && node.children.map((child) => (
-        <FolderTreeNode
-          depth={depth + 1}
-          expandedPaths={expandedPaths}
-          key={child.id}
-          node={child}
-          onRename={onRename}
-          onSelect={onSelect}
-          onToggleExpanded={onToggleExpanded}
-          selectedFolder={selectedFolder}
-        />
-      ))}
+      {hasChildren &&
+        expanded &&
+        node.children.map((child) => (
+          <FolderTreeNode
+            depth={depth + 1}
+            expandedPaths={expandedPaths}
+            key={child.id}
+            node={child}
+            onRename={onRename}
+            onSelect={onSelect}
+            onToggleExpanded={onToggleExpanded}
+            selectedFolder={selectedFolder}
+          />
+        ))}
     </div>
   );
 }

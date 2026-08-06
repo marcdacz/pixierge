@@ -20,7 +20,10 @@ export function TableRow({ className, ...props }: ComponentProps<'tr'>) {
 export function TableHead({ className, ...props }: ComponentProps<'th'>) {
   return (
     <th
-      className={cn('h-11 px-4 text-left align-middle text-xs font-semibold uppercase text-muted-foreground', className)}
+      className={cn(
+        'h-11 px-4 text-left align-middle text-xs font-semibold uppercase text-muted-foreground',
+        className
+      )}
       {...props}
     />
   );

@@ -147,7 +147,13 @@ export function BrowseSidebar({
           <h2 className="text-sm font-medium text-foreground">{title}</h2>
           <div className="flex shrink-0 items-center gap-1">
             {headerActions}
-            <Button aria-label={`Hide ${title.toLowerCase()}`} onClick={onHide} size="icon" type="button" variant="ghost">
+            <Button
+              aria-label={`Hide ${title.toLowerCase()}`}
+              onClick={onHide}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
               <ChevronsLeft className="h-4 w-4" aria-hidden />
             </Button>
           </div>

@@ -18,12 +18,7 @@ type AssetContextMenuProps = {
 
 const VIEWPORT_PADDING = 8;
 
-function clampMenuPosition(
-  x: number,
-  y: number,
-  width: number,
-  height: number
-): { left: number; top: number } {
+function clampMenuPosition(x: number, y: number, width: number, height: number): { left: number; top: number } {
   const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - width - VIEWPORT_PADDING);
   const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - height - VIEWPORT_PADDING);
   return {

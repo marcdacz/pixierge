@@ -160,9 +160,7 @@ describe('SearchFilters', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'On date…' }));
     fireEvent.change(screen.getByLabelText('On date'), { target: { value: '2024-06-01' } });
     await waitFor(() => {
-      expect(onQueryChange).toHaveBeenCalledWith(
-        'extension:.jpg,.heic,.raw on:2024-06-01'
-      );
+      expect(onQueryChange).toHaveBeenCalledWith('extension:.jpg,.heic,.raw on:2024-06-01');
     });
 
     expect(screen.getByRole('button', { name: 'Open On date calendar' })).toBeInTheDocument();
@@ -176,9 +174,7 @@ describe('SearchFilters', () => {
     fireEvent.change(screen.getByLabelText('Captured after date'), { target: { value: '2026-07-15' } });
     fireEvent.change(screen.getByLabelText('Captured before date'), { target: { value: '2026-07-08' } });
     await waitFor(() => {
-      expect(onQueryChange).toHaveBeenCalledWith(
-        'extension:.jpg,.heic,.raw after:2026-07-08 before:2026-07-15'
-      );
+      expect(onQueryChange).toHaveBeenCalledWith('extension:.jpg,.heic,.raw after:2026-07-08 before:2026-07-15');
     });
     expect(screen.getByLabelText('Captured after date')).toHaveValue('2026-07-08');
     expect(screen.getByLabelText('Captured before date')).toHaveValue('2026-07-15');
@@ -247,7 +243,8 @@ function stubSearchApis({
 }
 
 function parseStub(query: string) {
-  const clauses: Array<{ field: string; value: string; negated: boolean; start: number; end: number; label: string }> = [];
+  const clauses: Array<{ field: string; value: string; negated: boolean; start: number; end: number; label: string }> =
+    [];
   for (const match of query.matchAll(/(?:^|\s)([a-z]+):([^\s]+)/g)) {
     const field = match[1];
     const value = match[2];

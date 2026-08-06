@@ -1,10 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  fetchAssets,
-  type AssetBrowseResponse,
-  type AuthResponse,
-  type LibrarySummary
-} from '@/api';
+import { fetchAssets, type AssetBrowseResponse, type AuthResponse, type LibrarySummary } from '@/api';
 import { Alert } from '@/components/ui/alert';
 import {
   BrowseSidebar,

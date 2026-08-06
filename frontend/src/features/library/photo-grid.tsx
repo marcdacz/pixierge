@@ -1,15 +1,4 @@
-import {
-  ChevronLeft,
-  ChevronRight,
-  FileImage,
-  Star,
-  Image,
-  Info,
-  Minus,
-  MoreHorizontal,
-  Plus,
-  X
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileImage, Star, Image, Info, Minus, MoreHorizontal, Plus, X } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -193,9 +182,7 @@ export function AssetGrid({
               ) : (
                 <h3 className="text-lg font-semibold text-foreground">{section.folderName}</h3>
               )}
-              <span className="shrink-0 text-sm text-muted-foreground">
-                {formatItemCount(section.assets.length)}
-              </span>
+              <span className="shrink-0 text-sm text-muted-foreground">{formatItemCount(section.assets.length)}</span>
             </div>
           </div>
           <div
@@ -214,13 +201,7 @@ export function AssetGrid({
   );
 }
 
-export function ThumbnailSizeControls({
-  onChange,
-  value
-}: {
-  onChange: (value: number) => void;
-  value: number;
-}) {
+export function ThumbnailSizeControls({ onChange, value }: { onChange: (value: number) => void; value: number }) {
   return (
     <div className="flex h-10 items-center gap-1.5" title="Thumbnail size">
       <Image aria-hidden className="size-3 shrink-0 text-muted-foreground" />
@@ -247,13 +228,7 @@ export function ThumbnailSizeControls({
   );
 }
 
-function AssetFocusZoomControls({
-  onChange,
-  value
-}: {
-  onChange: (value: number) => void;
-  value: number;
-}) {
+function AssetFocusZoomControls({ onChange, value }: { onChange: (value: number) => void; value: number }) {
   return (
     <div className="flex h-10 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5" title="Zoom">
       <Minus aria-hidden className="size-3 shrink-0 text-muted-foreground" />
@@ -663,11 +638,7 @@ export function AssetFocus({
     <div className={cn('grid min-h-0 grid-rows-[minmax(0,1fr)]', BROWSE_LAYOUT_HEIGHT_CLASS)}>
       {loading && <p className="text-sm text-muted-foreground">Loading asset...</p>}
       {asset && (
-        <div
-          className="relative min-h-0 overflow-hidden"
-          onMouseLeave={hideControls}
-          onMouseMove={revealControls}
-        >
+        <div className="relative min-h-0 overflow-hidden" onMouseLeave={hideControls} onMouseMove={revealControls}>
           {hasPrevious && (
             <button
               aria-label="Previous photo"
@@ -741,12 +712,7 @@ export function AssetFocus({
               </Button>
             )}
           </div>
-          <div
-            className={cn(
-              'absolute bottom-3 left-1/2 z-20 -translate-x-1/2',
-              overlayControlsClass
-            )}
-          >
+          <div className={cn('absolute bottom-3 left-1/2 z-20 -translate-x-1/2', overlayControlsClass)}>
             <AssetFocusZoomControls
               onChange={(nextZoom) => {
                 applyZoom(nextZoom);
@@ -816,7 +782,9 @@ export function AssetFocus({
                 <div className="grid content-start gap-5">
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1 grid gap-1">
-                      <h1 className="break-words text-xl font-semibold text-foreground">{activeFile?.fileName ?? 'Asset'}</h1>
+                      <h1 className="break-words text-xl font-semibold text-foreground">
+                        {activeFile?.fileName ?? 'Asset'}
+                      </h1>
                       <p className="break-all text-sm text-muted-foreground">{activeFile?.path ?? asset.contentHash}</p>
                     </div>
                     <Button
@@ -851,7 +819,9 @@ export function AssetFocus({
                         asset.metadata.aperture != null ? `f/${asset.metadata.aperture}` : null,
                         asset.metadata.iso != null ? `ISO ${asset.metadata.iso}` : null,
                         asset.metadata.focalLength != null ? `${asset.metadata.focalLength}mm` : null
-                      ].filter(Boolean).join(' · ')}
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
                     />
                     {asset.mediaType === 'video' && (
                       <>
@@ -860,10 +830,15 @@ export function AssetFocus({
                         )}
                         <OptionalDetailRow
                           label="Video"
-                          value={[asset.metadata.container, asset.metadata.videoCodec, asset.metadata.frameRate].filter(Boolean).join(' · ')}
+                          value={[asset.metadata.container, asset.metadata.videoCodec, asset.metadata.frameRate]
+                            .filter(Boolean)
+                            .join(' · ')}
                         />
                         {asset.metadata.hasAudio != null && (
-                          <DetailRow label="Audio" value={asset.metadata.hasAudio ? asset.metadata.audioCodec ?? 'Present' : 'None'} />
+                          <DetailRow
+                            label="Audio"
+                            value={asset.metadata.hasAudio ? (asset.metadata.audioCodec ?? 'Present') : 'None'}
+                          />
                         )}
                       </>
                     )}

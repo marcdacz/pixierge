@@ -17,7 +17,10 @@ describe('AssignmentPicker', () => {
     render(
       <AssignmentPicker
         createVerb="album"
-        destinations={[{ id: '1', name: 'Family Events' }, { id: '2', name: 'Travel' }]}
+        destinations={[
+          { id: '1', name: 'Family Events' },
+          { id: '2', name: 'Travel' }
+        ]}
         onApply={onApply}
         onClose={onClose}
         onCreate={onCreate}

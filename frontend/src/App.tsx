@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SearchX } from 'lucide-react';
-import { fetchLibraries, fetchSession, fetchSetupStatus, updateLibrary, type AuthResponse, type LibrarySummary } from '@/api';
+import {
+  fetchLibraries,
+  fetchSession,
+  fetchSetupStatus,
+  updateLibrary,
+  type AuthResponse,
+  type LibrarySummary
+} from '@/api';
 import { AppFrame } from '@/components/app-frame';
 import { Button } from '@/components/ui/button';
 import { ToastViewport, type ToastMessage } from '@/components/ui/toast';
@@ -42,14 +49,14 @@ const settingsViews: SettingsView[] = ['configuration', 'users', 'scheduler', 'b
 
 function settingsViewFromPath(pathname: string): SettingsView {
   const section = pathname.split('/')[2];
-  return settingsViews.includes(section as SettingsView) ? section as SettingsView : 'configuration';
+  return settingsViews.includes(section as SettingsView) ? (section as SettingsView) : 'configuration';
 }
 
 function appViewFromLocation() {
   if (window.location.pathname.startsWith('/settings')) {
     return 'settings' as AppView;
   }
-  return initialSearchQuery() ? 'search' as AppView : 'libraries' as AppView;
+  return initialSearchQuery() ? ('search' as AppView) : ('libraries' as AppView);
 }
 
 function pushAppPath(view: AppView, settingsView: SettingsView = 'configuration') {
@@ -67,7 +74,9 @@ export function App() {
   const initialQuery = initialSearchQuery();
   const [appState, setAppState] = useState<AppState>({ state: 'loading' });
   const [currentView, setCurrentView] = useState<AppView>(appViewFromLocation());
-  const [currentSettingsView, setCurrentSettingsView] = useState<SettingsView>(settingsViewFromPath(window.location.pathname));
+  const [currentSettingsView, setCurrentSettingsView] = useState<SettingsView>(
+    settingsViewFromPath(window.location.pathname)
+  );
   const [libraries, setLibraries] = useState<LibrarySummary[]>([]);
   const [librariesLoading, setLibrariesLoading] = useState(false);
   const [librariesError, setLibrariesError] = useState<string | null>(null);
@@ -194,25 +203,31 @@ export function App() {
     }
   }, [appState.state, loadLibraries]);
 
-  const handleSearchInputChange = useCallback((value: string) => {
-    setSearchInput(value);
-    if (value.trim() && currentView !== 'search') {
-      pushAppPath('search');
-      setCurrentView('search');
-    }
-  }, [currentView]);
+  const handleSearchInputChange = useCallback(
+    (value: string) => {
+      setSearchInput(value);
+      if (value.trim() && currentView !== 'search') {
+        pushAppPath('search');
+        setCurrentView('search');
+      }
+    },
+    [currentView]
+  );
 
-  const handleValidSearchQuery = useCallback((value: string) => {
-    if (!value.trim() && currentView !== 'search') {
-      return;
-    }
-    setActiveSearchQuery(value);
-    setRetainedSearchQuery(value);
-    syncSearchUrl(value);
-    if (value.trim()) {
-      setCurrentView('search');
-    }
-  }, [currentView]);
+  const handleValidSearchQuery = useCallback(
+    (value: string) => {
+      if (!value.trim() && currentView !== 'search') {
+        return;
+      }
+      setActiveSearchQuery(value);
+      setRetainedSearchQuery(value);
+      syncSearchUrl(value);
+      if (value.trim()) {
+        setCurrentView('search');
+      }
+    },
+    [currentView]
+  );
 
   const handleSearchPageQueryChange = useCallback((value: string) => {
     setSearchInput(value);
@@ -222,27 +237,30 @@ export function App() {
     setCurrentView('search');
   }, []);
 
-  const handleViewChange = useCallback((view: AppView) => {
-    if (view === currentView) {
-      if (view === 'settings') {
-        pushAppPath('settings', currentSettingsView);
+  const handleViewChange = useCallback(
+    (view: AppView) => {
+      if (view === currentView) {
+        if (view === 'settings') {
+          pushAppPath('settings', currentSettingsView);
+        }
+        return;
       }
-      return;
-    }
-    if (currentView === 'search' && view !== 'search') {
-      setSearchInput('');
-      setActiveSearchQuery('');
-      syncSearchUrl('');
-    }
-    if (view === 'search') {
-      setSearchInput(retainedSearchQuery);
-      setActiveSearchQuery(retainedSearchQuery);
-      syncSearchUrl(retainedSearchQuery);
-    } else {
-      pushAppPath(view, currentSettingsView);
-    }
-    setCurrentView(view);
-  }, [currentSettingsView, currentView, retainedSearchQuery]);
+      if (currentView === 'search' && view !== 'search') {
+        setSearchInput('');
+        setActiveSearchQuery('');
+        syncSearchUrl('');
+      }
+      if (view === 'search') {
+        setSearchInput(retainedSearchQuery);
+        setActiveSearchQuery(retainedSearchQuery);
+        syncSearchUrl(retainedSearchQuery);
+      } else {
+        pushAppPath(view, currentSettingsView);
+      }
+      setCurrentView(view);
+    },
+    [currentSettingsView, currentView, retainedSearchQuery]
+  );
 
   const handleSettingsViewChange = useCallback((view: SettingsView) => {
     setSearchInput('');
@@ -290,7 +308,16 @@ export function App() {
         <AppFrame
           auth={appState.auth}
           canOpenSettings={canOpenSettings}
-          contentMode={currentView === 'settings' || currentView === 'search' || currentView === 'libraries' || currentView === 'starred' || currentView === 'albums' || currentView === 'tags' ? 'edge' : 'constrained'}
+          contentMode={
+            currentView === 'settings' ||
+            currentView === 'search' ||
+            currentView === 'libraries' ||
+            currentView === 'starred' ||
+            currentView === 'albums' ||
+            currentView === 'tags'
+              ? 'edge'
+              : 'constrained'
+          }
           currentView={currentView}
           libraries={libraries}
           onLibrarySearchChange={handleSearchInputChange}
@@ -302,9 +329,7 @@ export function App() {
           showLibrarySearch
           onViewChange={handleViewChange}
         >
-          {settingsNotFound && (
-            <NotFoundPage onBackToLibraries={() => handleViewChange('libraries')} />
-          )}
+          {settingsNotFound && <NotFoundPage onBackToLibraries={() => handleViewChange('libraries')} />}
           {!settingsNotFound && currentView === 'search' && (
             <SearchHome
               auth={appState.auth}

@@ -28,7 +28,11 @@ type OrganizerSidebarProps = {
   loading?: boolean;
   error?: string | null;
   emptyLabel?: string;
-  onDropAssets?: (rowId: string, assetIds: string[], items: Array<{ assetId: string; sourceLibraryId: string }>) => void;
+  onDropAssets?: (
+    rowId: string,
+    assetIds: string[],
+    items: Array<{ assetId: string; sourceLibraryId: string }>
+  ) => void;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   isLowResolution: boolean;
@@ -53,8 +57,8 @@ export function OrganizerSidebar({
   onDropAssets,
   collapsed,
   onCollapsedChange,
-  isLowResolution
-  , onShare
+  isLowResolution,
+  onShare
 }: OrganizerSidebarProps) {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -189,7 +193,17 @@ export function OrganizerSidebar({
                     </Button>
                   )}
                   {onShare && (
-                    <Button aria-label={`Share ${row.label}`} className="size-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 group-focus-within:opacity-100" onClick={(event) => { event.stopPropagation(); onShare(row.id); }} size="icon" type="button" variant="ghost">
+                    <Button
+                      aria-label={`Share ${row.label}`}
+                      className="size-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 group-focus-within:opacity-100"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onShare(row.id);
+                      }}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                    >
                       <Share2 className="h-3 w-3" aria-hidden />
                     </Button>
                   )}

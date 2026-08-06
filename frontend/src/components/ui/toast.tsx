@@ -31,7 +31,13 @@ export function ToastViewport({ onDismiss, toasts }: ToastViewportProps) {
               <p className="text-sm font-semibold">{toast.title}</p>
               {toast.description && <p className="text-sm text-muted-foreground">{toast.description}</p>}
             </div>
-            <Button aria-label="Dismiss notification" onClick={() => onDismiss(toast.id)} size="icon" type="button" variant="ghost">
+            <Button
+              aria-label="Dismiss notification"
+              onClick={() => onDismiss(toast.id)}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
               <X className="h-4 w-4" aria-hidden />
             </Button>
           </div>

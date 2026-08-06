@@ -146,9 +146,7 @@ describe('AssetTile', () => {
     });
 
     try {
-      render(
-        <AssetTile asset={asset} imageSource="grid" onOpen={vi.fn()} />
-      );
+      render(<AssetTile asset={asset} imageSource="grid" onOpen={vi.fn()} />);
 
       const sharp = document.querySelector(
         'img[src="http://localhost:8080/api/assets/asset-1/thumbnail?c=grid-cache-asset-1"]'
@@ -255,7 +253,9 @@ describe('AssetFocus', () => {
     const { container } = renderFocus({ onOpenActions, onContextMenu });
 
     await user.click(screen.getByRole('button', { name: 'Photo actions' }));
-    expect(onOpenActions).toHaveBeenCalledWith(expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }));
+    expect(onOpenActions).toHaveBeenCalledWith(
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) })
+    );
 
     const surface = container.querySelector('.absolute.inset-0.overflow-hidden.bg-black');
     expect(surface).not.toBeNull();
@@ -323,13 +323,7 @@ describe('AssetFocus', () => {
 
 describe('AssetTile starred', () => {
   it('shows a star badge when the asset is starred', () => {
-    render(
-      <AssetTile
-        asset={{ ...asset, starred: true }}
-        imageSource="grid"
-        onOpen={vi.fn()}
-      />
-    );
+    render(<AssetTile asset={{ ...asset, starred: true }} imageSource="grid" onOpen={vi.fn()} />);
     expect(screen.getByLabelText('Starred')).toBeInTheDocument();
   });
 
@@ -420,9 +414,7 @@ describe('AssetGrid', () => {
       />
     );
 
-    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-size')).toBe(
-      '100%'
-    );
+    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-size')).toBe('100%');
   });
 
   it('shows an item count beside each section title', () => {

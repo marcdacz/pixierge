@@ -19,6 +19,9 @@ Pixierge is a Spring Boot API plus React TypeScript web app.
 - Backend format check: `cd backend && mvn spotless:check`
 - Backend lint: `cd backend && mvn pmd:check`
 - Frontend dependencies: `cd frontend && npm install`
+- Frontend format: `cd frontend && npm run format`
+- Frontend format check: `cd frontend && npm run format:check`
+- Frontend lint: `cd frontend && npm run lint`
 - Frontend tests: `cd frontend && npm test`
 - Frontend build: `cd frontend && npm run build`
 - Frontend E2E tests: `cd frontend && npm run test:e2e`
@@ -48,6 +51,7 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean verify
 - Add Flyway migrations under `backend/src/main/resources/db/migration/`.
 - During early development, when migrations are squashed or deleted, run backend tests with `mvn clean verify` so stale copied migrations are removed from `target/classes` and integration tests see the current schema.
 - Keep React code typed and covered by nearby Vitest tests when behavior changes.
+- Run `npm run format` after every frontend source change before handoff. Run `npm run format:check` when verifying formatting without changing source files, and run `npm run lint` for frontend static analysis.
 - Prefer shared React components and small feature components over repeating markup, styling, or state logic across screens.
 - Keep frontend code minimal: add abstractions only when they remove real duplication or match an established local pattern.
 - Avoid frontend layout magic numbers; use named constants, CSS variables, or theme tokens for repeated structural dimensions.

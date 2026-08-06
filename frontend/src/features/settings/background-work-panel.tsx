@@ -29,14 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatScanTimestamp } from '@/features/scans/scan-utils';
 import { AssetFocus } from '@/features/library/photo-grid';
 import { cn } from '@/lib/utils';
@@ -105,9 +98,7 @@ export function BackgroundWorkHealthPanel({
               aria-selected={selected}
               className={cn(
                 'rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                selected
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                selected ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
               )}
               data-testid={tab.testId}
               id={`background-tab-${tab.id}`}
@@ -205,8 +196,9 @@ function BackgroundJobsPanel({
     .reduce((total, queue) => total + queue.count, 0);
   const watcherHealthy = health.watcher.status === 'healthy' || health.watcher.status === 'started';
   const activeJobs = activity.jobs.filter((job) => job.status === 'pending' || job.status === 'running');
-  const hasDeadLetterMetadata = health.queues.some((queue) =>
-    queue.jobType === 'asset-metadata-backfill' && queue.status === 'dead_letter' && queue.count > 0);
+  const hasDeadLetterMetadata = health.queues.some(
+    (queue) => queue.jobType === 'asset-metadata-backfill' && queue.status === 'dead_letter' && queue.count > 0
+  );
   const toggleProblem = (problemId: string) => {
     setExpandedProblemIds((current) => {
       const next = new Set(current);
@@ -278,7 +270,11 @@ function BackgroundJobsPanel({
                     <TableRow key={`${queue.jobType}-${queue.status}`}>
                       <TableCell className="font-mono text-xs">{queue.jobType}</TableCell>
                       <TableCell>
-                        <Badge variant={queue.status === 'failed' || queue.status === 'dead_letter' ? 'warning' : 'secondary'}>
+                        <Badge
+                          variant={
+                            queue.status === 'failed' || queue.status === 'dead_letter' ? 'warning' : 'secondary'
+                          }
+                        >
                           {formatQueueStatus(queue.status)}
                         </Badge>
                       </TableCell>
@@ -370,13 +366,10 @@ function BackgroundJobsPanel({
         <CardContent>
           {hasDeadLetterMetadata && auth && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">Retry metadata files that stopped after all attempts were used.</p>
-              <Button
-                disabled={recovering}
-                onClick={() => void recoverMetadata()}
-                type="button"
-                variant="secondary"
-              >
+              <p className="text-sm text-muted-foreground">
+                Retry metadata files that stopped after all attempts were used.
+              </p>
+              <Button disabled={recovering} onClick={() => void recoverMetadata()} type="button" variant="secondary">
                 {recovering ? 'Retrying metadata...' : 'Retry failed metadata'}
               </Button>
             </div>
@@ -427,9 +420,7 @@ function BackgroundJobsPanel({
                           </TableCell>
                           <TableCell className="font-mono text-xs">{problem.jobType}</TableCell>
                           <TableCell className="max-w-xs">
-                            <span className="block truncate font-mono text-xs">
-                              {problemImpactedFile(problem)}
-                            </span>
+                            <span className="block truncate font-mono text-xs">{problemImpactedFile(problem)}</span>
                           </TableCell>
                           <TableCell>
                             <Badge variant="warning">{formatQueueStatus(problem.status)}</Badge>
@@ -438,9 +429,7 @@ function BackgroundJobsPanel({
                             {problem.attempts}/{problem.maxAttempts}
                           </TableCell>
                           <TableCell className="min-w-80 max-w-xl">
-                            <span className="block whitespace-normal break-words">
-                              {problemErrorSummary(problem)}
-                            </span>
+                            <span className="block whitespace-normal break-words">{problemErrorSummary(problem)}</span>
                           </TableCell>
                           <TableCell>{formatOptionalTimestamp(problem.updatedAt)}</TableCell>
                         </TableRow>
@@ -490,11 +479,15 @@ function ProblemDetails({ problem }: { problem: BackgroundJobProblemSummary }) {
       </dl>
       <div className="grid gap-2">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground">Full error</h3>
-        <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 font-mono text-xs text-foreground">{error}</pre>
+        <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 font-mono text-xs text-foreground">
+          {error}
+        </pre>
       </div>
       <div className="grid gap-2">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground">Job payload</h3>
-        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 font-mono text-xs text-foreground">{payload ?? 'No payload was recorded for this job.'}</pre>
+        <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-surface p-3 font-mono text-xs text-foreground">
+          {payload ?? 'No payload was recorded for this job.'}
+        </pre>
       </div>
     </div>
   );
@@ -638,239 +631,260 @@ function BackgroundFileActivityPanel({
 
   return (
     <>
-    {selectedAssetId && (
-      <div className="fixed inset-0 z-50 bg-background">
-        <AssetFocus
-          asset={selectedAsset}
-          hasNext={showNext}
-          hasPrevious={showPrevious}
-          loading={selectedAsset === null}
-          onClose={() => setSelectedAssetId(null)}
-          onNext={showNextAsset}
-          onPrevious={showPreviousAsset}
-        />
-      </div>
-    )}
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle>Recent file activity</CardTitle>
-          <Button data-testid="background-file-clear" disabled={!activity || activity.totalCount === 0} onClick={() => setClearConfirmationOpen(true)} size="sm" type="button" variant="ghost">
-            <Trash2 aria-hidden className="h-4 w-4" />
-            Clear history
-          </Button>
+      {selectedAssetId && (
+        <div className="fixed inset-0 z-50 bg-background">
+          <AssetFocus
+            asset={selectedAsset}
+            hasNext={showNext}
+            hasPrevious={showPrevious}
+            loading={selectedAsset === null}
+            onClose={() => setSelectedAssetId(null)}
+            onNext={showNextAsset}
+            onPrevious={showPreviousAsset}
+          />
         </div>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <div className="grid gap-3">
-          <div className="grid items-start gap-3 lg:grid-cols-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="background-file-search">Search file</Label>
-              <Input
-                data-testid="background-file-search"
-                id="background-file-search"
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Filename or path"
-                value={searchInput}
-              />
+      )}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>Recent file activity</CardTitle>
+            <Button
+              data-testid="background-file-clear"
+              disabled={!activity || activity.totalCount === 0}
+              onClick={() => setClearConfirmationOpen(true)}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <Trash2 aria-hidden className="h-4 w-4" />
+              Clear history
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3">
+            <div className="grid items-start gap-3 lg:grid-cols-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="background-file-search">Search file</Label>
+                <Input
+                  data-testid="background-file-search"
+                  id="background-file-search"
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Filename or path"
+                  value={searchInput}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label id="background-file-status-label">Status</Label>
+                <StatusMultiFilter
+                  onChange={(next) => {
+                    setStatuses(next);
+                    setPage(0);
+                  }}
+                  values={statuses}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label id="background-file-updated-label">Updated</Label>
+                <UpdatedDateFilter
+                  onChange={(next) => {
+                    setUpdatedFilter(next);
+                    setPage(0);
+                  }}
+                  value={updatedFilter}
+                />
+              </div>
             </div>
-            <div className="grid gap-1.5">
-              <Label id="background-file-status-label">Status</Label>
-              <StatusMultiFilter
+
+            {statuses.length > 0 && (
+              <StatusFilterPills
                 onChange={(next) => {
                   setStatuses(next);
                   setPage(0);
                 }}
                 values={statuses}
               />
-            </div>
-            <div className="grid gap-1.5">
-              <Label id="background-file-updated-label">Updated</Label>
-              <UpdatedDateFilter
+            )}
+
+            {(updatedFilter.mode === 'on' || updatedFilter.mode === 'range') && (
+              <UpdatedDateExtras
                 onChange={(next) => {
                   setUpdatedFilter(next);
                   setPage(0);
                 }}
                 value={updatedFilter}
               />
-            </div>
-          </div>
-
-          {statuses.length > 0 && (
-            <StatusFilterPills
-              onChange={(next) => {
-                setStatuses(next);
-                setPage(0);
-              }}
-              values={statuses}
-            />
-          )}
-
-          {(updatedFilter.mode === 'on' || updatedFilter.mode === 'range') && (
-            <UpdatedDateExtras
-              onChange={(next) => {
-                setUpdatedFilter(next);
-                setPage(0);
-              }}
-              value={updatedFilter}
-            />
-          )}
-        </div>
-
-        {loading && activity === null ? (
-          <p className="text-sm text-muted-foreground">Loading file activity...</p>
-        ) : loadError || activity === null ? (
-          <Alert>{loadError ?? 'File activity could not be loaded.'}</Alert>
-        ) : (
-          <>
-            {activity.items.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No file activity matches the current filters.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table className="table-fixed min-w-[56rem]">
-                  <colgroup>
-                    <col className="w-[6%]" />
-                    <col className="w-[41%]" />
-                    <col className="w-[15%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[18%]" />
-                  </colgroup>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead><span className="sr-only">View photo</span></TableHead>
-                      <TableHead>File</TableHead>
-                      <TableHead className="whitespace-nowrap">Status</TableHead>
-                      <TableHead className="whitespace-nowrap">Batch</TableHead>
-                      <TableHead className="whitespace-nowrap">Duration</TableHead>
-                      <TableHead className="whitespace-nowrap">Updated</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {activity.items.map((file, index) => (
-                      <TableRow key={`${file.path ?? file.fileName}-${file.status}-${file.updatedAt}-${index}`}>
-                        <TableCell className="align-top">
-                          {file.assetId && (
-                            <Button
-                              aria-label={`Open ${file.fileName}`}
-                              className="h-8 w-8"
-                              onClick={() => openViewer(file.assetId!)}
-                              size="icon"
-                              title="Open photo"
-                              type="button"
-                              variant="ghost"
-                            >
-                              <Maximize2 aria-hidden className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </TableCell>
-                        <TableCell className="min-w-[18rem] align-top">
-                          <span className="block break-words">{file.fileName}</span>
-                          {file.path && (
-                            <span className="mt-0.5 block break-all font-mono text-xs text-muted-foreground">
-                              {file.path}
-                            </span>
-                          )}
-                          {file.message && (
-                            <span className="mt-0.5 block break-words text-xs text-muted-foreground">{file.message}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap align-top">
-                          <Badge variant={file.status === 'failed' ? 'warning' : 'secondary'}>
-                            {formatQueueStatus(file.status)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap align-top">{file.batchLabel ?? '-'}</TableCell>
-                        <TableCell className="whitespace-nowrap align-top">{formatDuration(file.durationMs)}</TableCell>
-                        <TableCell className="whitespace-nowrap align-top">
-                          {formatOptionalTimestamp(file.updatedAt)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
             )}
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                Page {page + 1} of {totalPages} · {activity.totalCount}{' '}
-                {activity.totalCount === 1 ? 'file' : 'files'}
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span className="whitespace-nowrap">Per page</span>
-                  <span className="relative inline-flex">
-                    <select
-                      aria-label="Files per page"
-                      className={cn(FILTER_FIELD_CLASS, 'w-auto appearance-none pr-9')}
-                      data-testid="background-file-page-size"
-                      onChange={(event) => {
-                        const nextSize = Number(event.target.value) as FileActivityPageSize;
-                        setPageSize(nextSize);
-                        setPage(0);
-                      }}
-                      value={pageSize}
-                    >
-                      {FILE_ACTIVITY_PAGE_SIZES.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      aria-hidden
-                      className="pointer-events-none absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-                    />
-                  </span>
-                </label>
-                <Button
-                  data-testid="background-file-prev"
-                  disabled={page === 0 || loading}
-                  onClick={() => setPage((current) => Math.max(0, current - 1))}
-                  type="button"
-                  variant="secondary"
-                >
-                  Previous
-                </Button>
-                <Button
-                  data-testid="background-file-next"
-                  disabled={!activity.hasNext || loading}
-                  onClick={() => setPage((current) => current + 1)}
-                  type="button"
-                  variant="secondary"
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-    {clearConfirmationOpen && (
-      <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-        <div aria-modal="true" aria-labelledby="clear-file-activity-title" className="grid w-full max-w-md gap-4 rounded-md border border-border bg-surface p-5 text-foreground shadow-lg" role="dialog">
-          <div className="grid gap-2">
-            <h2 className="text-lg font-semibold" id="clear-file-activity-title">Clear activity history?</h2>
-            <p className="text-sm text-muted-foreground">This permanently removes completed file activity. Active processing will remain visible.</p>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button disabled={clearing} onClick={() => setClearConfirmationOpen(false)} type="button" variant="ghost">Cancel</Button>
-            <Button disabled={clearing} onClick={() => void clearActivity()} type="button" variant="secondary">Clear history</Button>
+
+          {loading && activity === null ? (
+            <p className="text-sm text-muted-foreground">Loading file activity...</p>
+          ) : loadError || activity === null ? (
+            <Alert>{loadError ?? 'File activity could not be loaded.'}</Alert>
+          ) : (
+            <>
+              {activity.items.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No file activity matches the current filters.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table className="table-fixed min-w-[56rem]">
+                    <colgroup>
+                      <col className="w-[6%]" />
+                      <col className="w-[41%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[18%]" />
+                    </colgroup>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>
+                          <span className="sr-only">View photo</span>
+                        </TableHead>
+                        <TableHead>File</TableHead>
+                        <TableHead className="whitespace-nowrap">Status</TableHead>
+                        <TableHead className="whitespace-nowrap">Batch</TableHead>
+                        <TableHead className="whitespace-nowrap">Duration</TableHead>
+                        <TableHead className="whitespace-nowrap">Updated</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {activity.items.map((file, index) => (
+                        <TableRow key={`${file.path ?? file.fileName}-${file.status}-${file.updatedAt}-${index}`}>
+                          <TableCell className="align-top">
+                            {file.assetId && (
+                              <Button
+                                aria-label={`Open ${file.fileName}`}
+                                className="h-8 w-8"
+                                onClick={() => openViewer(file.assetId!)}
+                                size="icon"
+                                title="Open photo"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <Maximize2 aria-hidden className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                          <TableCell className="min-w-[18rem] align-top">
+                            <span className="block break-words">{file.fileName}</span>
+                            {file.path && (
+                              <span className="mt-0.5 block break-all font-mono text-xs text-muted-foreground">
+                                {file.path}
+                              </span>
+                            )}
+                            {file.message && (
+                              <span className="mt-0.5 block break-words text-xs text-muted-foreground">
+                                {file.message}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap align-top">
+                            <Badge variant={file.status === 'failed' ? 'warning' : 'secondary'}>
+                              {formatQueueStatus(file.status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap align-top">{file.batchLabel ?? '-'}</TableCell>
+                          <TableCell className="whitespace-nowrap align-top">
+                            {formatDuration(file.durationMs)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap align-top">
+                            {formatOptionalTimestamp(file.updatedAt)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Page {page + 1} of {totalPages} · {activity.totalCount} {activity.totalCount === 1 ? 'file' : 'files'}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="whitespace-nowrap">Per page</span>
+                    <span className="relative inline-flex">
+                      <select
+                        aria-label="Files per page"
+                        className={cn(FILTER_FIELD_CLASS, 'w-auto appearance-none pr-9')}
+                        data-testid="background-file-page-size"
+                        onChange={(event) => {
+                          const nextSize = Number(event.target.value) as FileActivityPageSize;
+                          setPageSize(nextSize);
+                          setPage(0);
+                        }}
+                        value={pageSize}
+                      >
+                        {FILE_ACTIVITY_PAGE_SIZES.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        aria-hidden
+                        className="pointer-events-none absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                      />
+                    </span>
+                  </label>
+                  <Button
+                    data-testid="background-file-prev"
+                    disabled={page === 0 || loading}
+                    onClick={() => setPage((current) => Math.max(0, current - 1))}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    data-testid="background-file-next"
+                    disabled={!activity.hasNext || loading}
+                    onClick={() => setPage((current) => current + 1)}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+      {clearConfirmationOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+          <div
+            aria-modal="true"
+            aria-labelledby="clear-file-activity-title"
+            className="grid w-full max-w-md gap-4 rounded-md border border-border bg-surface p-5 text-foreground shadow-lg"
+            role="dialog"
+          >
+            <div className="grid gap-2">
+              <h2 className="text-lg font-semibold" id="clear-file-activity-title">
+                Clear activity history?
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                This permanently removes completed file activity. Active processing will remain visible.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button disabled={clearing} onClick={() => setClearConfirmationOpen(false)} type="button" variant="ghost">
+                Cancel
+              </Button>
+              <Button disabled={clearing} onClick={() => void clearActivity()} type="button" variant="secondary">
+                Clear history
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
     </>
   );
 }
 
-function BackgroundConfigurationPanel({
-  onError
-}: {
-  onError: (title: string, description?: string) => void;
-}) {
+function BackgroundConfigurationPanel({ onError }: { onError: (title: string, description?: string) => void }) {
   const [config, setConfig] = useState<BackgroundWorkConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -930,9 +944,9 @@ function BackgroundConfigurationPanel({
         <Alert data-testid="background-config-advice">
           These values are read-only here. Set them with environment variables such as
           `PIXIERGE_BACKGROUND_JOBS_MAX_CONCURRENT_JOBS`, `PIXIERGE_BACKGROUND_JOBS_MAX_CONCURRENT_METADATA_JOBS`,
-          `PIXIERGE_BACKGROUND_JOBS_IDENTITY_BATCH_SIZE`,
-          `PIXIERGE_BACKGROUND_JOBS_CLAIM_BATCH_SIZE`, and `PIXIERGE_BACKGROUND_JOBS_POLL_INTERVAL_MS` in
-          `.env` or `docker-compose.yml`, then restart the API for changes to take effect.
+          `PIXIERGE_BACKGROUND_JOBS_IDENTITY_BATCH_SIZE`, `PIXIERGE_BACKGROUND_JOBS_CLAIM_BATCH_SIZE`, and
+          `PIXIERGE_BACKGROUND_JOBS_POLL_INTERVAL_MS` in `.env` or `docker-compose.yml`, then restart the API for
+          changes to take effect.
         </Alert>
       </CardContent>
     </Card>
@@ -957,13 +971,7 @@ function ConfigStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StatusMultiFilter({
-  values,
-  onChange
-}: {
-  values: string[];
-  onChange: (values: string[]) => void;
-}) {
+function StatusMultiFilter({ values, onChange }: { values: string[]; onChange: (values: string[]) => void }) {
   function toggle(status: string, enabled: boolean) {
     const without = values.filter((entry) => entry.toLowerCase() !== status.toLowerCase());
     onChange(enabled ? [...without, status] : without);
@@ -975,8 +983,7 @@ function StatusMultiFilter({
       : values
           .map(
             (status) =>
-              FILE_STATUS_OPTIONS.find((option) => option.value === status)?.label ??
-              formatQueueStatus(status)
+              FILE_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? formatQueueStatus(status)
           )
           .join(', ');
 
@@ -1028,28 +1035,18 @@ function StatusMultiFilter({
   );
 }
 
-function StatusFilterPills({
-  values,
-  onChange
-}: {
-  values: string[];
-  onChange: (values: string[]) => void;
-}) {
+function StatusFilterPills({ values, onChange }: { values: string[]; onChange: (values: string[]) => void }) {
   return (
     <div className="flex flex-wrap gap-1.5" data-testid="background-file-status-pills">
       {values.map((status) => {
-        const label =
-          FILE_STATUS_OPTIONS.find((option) => option.value === status)?.label ??
-          formatQueueStatus(status);
+        const label = FILE_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? formatQueueStatus(status);
         return (
           <Badge className="gap-1 pr-1 font-medium" key={status} variant="secondary">
             {label}
             <button
               aria-label={`Remove ${label}`}
               className="rounded-sm px-0.5 text-muted-foreground hover:text-foreground"
-              onClick={() =>
-                onChange(values.filter((entry) => entry.toLowerCase() !== status.toLowerCase()))
-              }
+              onClick={() => onChange(values.filter((entry) => entry.toLowerCase() !== status.toLowerCase()))}
               type="button"
             >
               <X className="h-3 w-3" aria-hidden />
@@ -1061,13 +1058,7 @@ function StatusFilterPills({
   );
 }
 
-function UpdatedDateFilter({
-  value,
-  onChange
-}: {
-  value: UpdatedFilter;
-  onChange: (next: UpdatedFilter) => void;
-}) {
+function UpdatedDateFilter({ value, onChange }: { value: UpdatedFilter; onChange: (next: UpdatedFilter) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   function applyPreset(mode: UpdatedFilter['mode']) {
@@ -1347,7 +1338,8 @@ function problemImpactedFile(problem: BackgroundJobProblemSummary) {
     return fileName;
   }
 
-  const items = arrayProperty(payload, 'identityItems') ?? arrayProperty(payload, 'items') ?? arrayProperty(payload, 'files');
+  const items =
+    arrayProperty(payload, 'identityItems') ?? arrayProperty(payload, 'items') ?? arrayProperty(payload, 'files');
   const firstItemPath = firstItemFilePath(items);
   if (firstItemPath && items && items.length > 1) {
     return `${firstItemPath} (+${items.length - 1} more)`;

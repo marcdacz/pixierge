@@ -79,9 +79,7 @@ describe('SchedulerDetails', () => {
     const onError = vi.fn();
     const idleJob = createMetadataJob();
     const runningJob = { ...idleJob, lastStatus: 'running', lastRunAt: '2026-07-11T00:00:00Z' };
-    vi.mocked(fetchSchedulerJobs)
-      .mockResolvedValueOnce([idleJob])
-      .mockResolvedValue([runningJob]);
+    vi.mocked(fetchSchedulerJobs).mockResolvedValueOnce([idleJob]).mockResolvedValue([runningJob]);
 
     render(<SchedulerDetails auth={auth} onError={onError} />);
 

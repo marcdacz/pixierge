@@ -350,9 +350,7 @@ describe('App', () => {
   });
 
   it('shows first-admin setup when no users exist', async () => {
-    mockFetch([
-      { status: 200, body: { required: true } }
-    ]);
+    mockFetch([{ status: 200, body: { required: true } }]);
 
     render(<App />);
 
@@ -755,16 +753,12 @@ describe('App', () => {
     ).not.toBeNull();
     const thumbnailSize = screen.getByRole('slider', { name: 'Thumbnail size' });
     fireEvent.change(thumbnailSize, { target: { value: '3' } });
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe(
-      'calc((100% - 2 * 0.25rem) / 3)'
-    );
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('calc((100% - 2 * 0.25rem) / 3)');
     expect(
       document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/preview?c=grid-cache-asset-1"]')
     ).not.toBeNull();
     fireEvent.change(thumbnailSize, { target: { value: '4' } });
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe(
-      'calc((100% - 0.25rem) / 2)'
-    );
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('calc((100% - 0.25rem) / 2)');
     fireEvent.change(thumbnailSize, { target: { value: '5' } });
     expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('100%');
     expect(thumbnailSize).toHaveAttribute('aria-valuenow', '5');
@@ -1089,9 +1083,9 @@ describe('App', () => {
     });
 
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(
-      fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/assets?libraryId=library-1')).length
-    ).toBe(2);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/assets?libraryId=library-1')).length).toBe(
+      2
+    );
 
     intersectionObserver.restore();
   });
@@ -1102,8 +1096,22 @@ describe('App', () => {
       { status: 200, body: authBody },
       { status: 200, body: [] },
       { status: 200, body: globalExclusionPatterns },
-      { status: 201, body: { ...configuredLibraries[0], sourceCount: 0, availableSourceCount: 0, unavailableSourceCount: 0, sources: [] } },
-      { status: 200, body: [{ ...configuredLibraries[0], sourceCount: 0, availableSourceCount: 0, unavailableSourceCount: 0, sources: [] }] },
+      {
+        status: 201,
+        body: {
+          ...configuredLibraries[0],
+          sourceCount: 0,
+          availableSourceCount: 0,
+          unavailableSourceCount: 0,
+          sources: []
+        }
+      },
+      {
+        status: 200,
+        body: [
+          { ...configuredLibraries[0], sourceCount: 0, availableSourceCount: 0, unavailableSourceCount: 0, sources: [] }
+        ]
+      },
       { status: 201, body: configuredLibraries[0] },
       { status: 200, body: configuredLibraries }
     ]);
@@ -1343,7 +1351,9 @@ describe('App', () => {
     expect(await screen.findByText('No libraries match the current view.')).toBeInTheDocument();
 
     await userEvent.click(screen.getByLabelText('Show archived'));
-    expect(await screen.findByText('Archived libraries are hidden from normal browsing and cannot be scanned.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Archived libraries are hidden from normal browsing and cannot be scanned.')
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Unarchive' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Scan library' })).not.toBeInTheDocument();
 
@@ -1422,7 +1432,9 @@ function mockFetch(responses: MockResponse[]) {
       return jsonResponse(200, {
         ...assetDetail,
         id: 'asset-2',
-        files: [{ ...assetDetail.files[0], id: 'file-2', fileName: 'IMG_2999.HEIC', path: '/photos/family/IMG_2999.HEIC' }]
+        files: [
+          { ...assetDetail.files[0], id: 'file-2', fileName: 'IMG_2999.HEIC', path: '/photos/family/IMG_2999.HEIC' }
+        ]
       });
     }
     if (url.endsWith('/api/admin/background/config')) {

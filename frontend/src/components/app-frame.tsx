@@ -22,12 +22,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { ScanActivityButton } from '@/features/scans/scan-activity-button';
 import { StructuredSearch } from '@/features/search/structured-search';
@@ -55,9 +50,7 @@ const primaryNav: NavItemDefinition[] = [
   { icon: Tags, label: 'Tags', view: 'tags' }
 ];
 
-const utilityNav: NavItemDefinition[] = [
-  { icon: Settings, label: 'Settings', view: 'settings' }
-];
+const utilityNav: NavItemDefinition[] = [{ icon: Settings, label: 'Settings', view: 'settings' }];
 
 type NavItemDefinition = {
   icon: ComponentType<{ className?: string }>;
@@ -275,13 +268,7 @@ function TopBar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              aria-label="Profile"
-              data-testid="app-shell-profile"
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
+            <Button aria-label="Profile" data-testid="app-shell-profile" size="icon" type="button" variant="ghost">
               <UserCircle className="h-5 w-5" aria-hidden />
             </Button>
           </DropdownMenuTrigger>
@@ -298,15 +285,7 @@ function TopBar({
   );
 }
 
-function LibraryNav({
-  active,
-  expanded,
-  onSelect
-}: {
-  active: boolean;
-  expanded: boolean;
-  onSelect: () => void;
-}) {
+function LibraryNav({ active, expanded, onSelect }: { active: boolean; expanded: boolean; onSelect: () => void }) {
   return (
     <NavItem
       active={active}

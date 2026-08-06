@@ -46,19 +46,15 @@ export function SetupForm({ onSetup }: { onSetup: (auth: AuthResponse) => void }
           value={password}
         />
         {error && <Alert>{error}</Alert>}
-        <Button type="submit" disabled={submitting}>{submitting ? 'Creating...' : 'Create admin'}</Button>
+        <Button type="submit" disabled={submitting}>
+          {submitting ? 'Creating...' : 'Create admin'}
+        </Button>
       </form>
     </AuthCard>
   );
 }
 
-export function LoginForm({
-  notice,
-  onLogin
-}: {
-  notice?: string;
-  onLogin: (auth: AuthResponse) => void;
-}) {
+export function LoginForm({ notice, onLogin }: { notice?: string; onLogin: (auth: AuthResponse) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -79,10 +75,7 @@ export function LoginForm({
   }
 
   return (
-    <AuthCard
-      icon={<KeyRound className="h-5 w-5" aria-hidden />}
-      title="Sign in"
-    >
+    <AuthCard icon={<KeyRound className="h-5 w-5" aria-hidden />} title="Sign in">
       {notice && <Alert className="mb-4">{notice}</Alert>}
       <form className="grid gap-4" onSubmit={submit}>
         <Field autoComplete="username" label="Username" name="username" onChange={setUsername} value={username} />
@@ -95,7 +88,9 @@ export function LoginForm({
           value={password}
         />
         {error && <Alert>{error}</Alert>}
-        <Button type="submit" disabled={submitting}>{submitting ? 'Signing in...' : 'Sign in'}</Button>
+        <Button type="submit" disabled={submitting}>
+          {submitting ? 'Signing in...' : 'Sign in'}
+        </Button>
       </form>
     </AuthCard>
   );
@@ -143,13 +138,7 @@ function Field({
   return (
     <Label>
       {label}
-      <Input
-        name={name}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        required
-        {...props}
-      />
+      <Input name={name} value={value} onChange={(event) => onChange(event.target.value)} required {...props} />
     </Label>
   );
 }

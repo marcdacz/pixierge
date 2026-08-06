@@ -20,12 +20,7 @@ type ScanStatsGridProps = {
 
 export function ScanStatsGrid({ scan, includeScanned = false, className }: ScanStatsGridProps) {
   return (
-    <div
-      className={cn(
-        'grid grid-cols-1 gap-y-1 text-muted-foreground',
-        className
-      )}
-    >
+    <div className={cn('grid grid-cols-1 gap-y-1 text-muted-foreground', className)}>
       {includeScanned && <span>Scanned {scan.scannedFileCount}</span>}
       <span>Added {scan.addedCount}</span>
       <span>Unchanged {scan.unchangedCount}</span>
