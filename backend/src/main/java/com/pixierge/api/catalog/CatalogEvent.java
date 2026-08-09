@@ -11,5 +11,6 @@ record CatalogEvent(
     String aggregateType,
     UUID aggregateId,
     UUID actorUserId,
+    String actorUsername,
     String payloadJson,
     OffsetDateTime createdAt) {}

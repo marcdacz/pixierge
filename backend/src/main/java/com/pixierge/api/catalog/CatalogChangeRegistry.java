@@ -11,7 +11,8 @@ final class CatalogChangeRegistry {
           key(CatalogEventTypes.USER_OWNERSHIP_TRANSFERRED, 1),
           key(CatalogEventTypes.LIBRARY_CHANGED, 1),
           key(CatalogEventTypes.ALBUM_CHANGED, 1),
-          key(CatalogEventTypes.TAG_CHANGED, 1));
+          key(CatalogEventTypes.TAG_CHANGED, 1),
+          key(CatalogEventTypes.SYSTEM_CHANGED, 1));
 
   void validate(CatalogChange change) {
     if (change == null

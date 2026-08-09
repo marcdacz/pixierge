@@ -14,6 +14,7 @@ import {
   KeyRound,
   RefreshCw,
   RotateCcw,
+  ScrollText,
   SlidersHorizontal,
   Trash2,
   UserCog
@@ -64,6 +65,7 @@ import { ScanStatsGrid } from '@/features/scans/scan-stats-grid';
 import { BackgroundWorkHealthPanel } from '@/features/settings/background-work-panel';
 import { SchedulerDetails } from '@/features/settings/scheduler-details';
 import { CatalogExportPanel } from '@/features/settings/catalog-export-panel';
+import { AuditLogPanel } from '@/features/settings/audit-log-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,7 +75,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-export type SettingsView = 'configuration' | 'users' | 'scheduler' | 'background' | 'plugins' | 'backups';
+export type SettingsView = 'configuration' | 'users' | 'scheduler' | 'background' | 'plugins' | 'backups' | 'audit';
 
 type SettingsItem = {
   description: string;
@@ -114,10 +116,16 @@ const settingsItems: SettingsItem[] = [
     view: 'plugins'
   },
   {
-    description: 'Review catalog export health and recovery artifacts.',
+    description: 'Create database backups and restore them after recovery.',
     icon: Archive,
-    label: 'Backups',
+    label: 'Backup and Restore',
     view: 'backups'
+  },
+  {
+    description: 'Review important changes made to Pixierge.',
+    icon: ScrollText,
+    label: 'Audit log',
+    view: 'audit'
   }
 ];
 
@@ -305,6 +313,8 @@ function SettingsContent({
         <BackgroundWorkHealthPanel auth={auth} onError={onError} />
       ) : item.view === 'backups' ? (
         <CatalogExportPanel auth={auth} onError={onError} />
+      ) : item.view === 'audit' ? (
+        <AuditLogPanel onError={onError} />
       ) : (
         <EmptySettingsPage label={item.label} />
       )}

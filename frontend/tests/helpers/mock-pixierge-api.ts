@@ -163,6 +163,26 @@ export async function mockPixiergeApi(page: Page) {
     summaryJson: string | null;
     errorMessage: string | null;
   }> = [];
+  let catalogExports = [
+    {
+      id: 'catalog-export-1',
+      createdAt: '2026-08-07T00:42:00Z',
+      throughSequence: 188,
+      byteSize: 2457600,
+      checksum: 'a'.repeat(64),
+      status: 'completed' as const,
+      failureDetail: null
+    },
+    {
+      id: 'catalog-export-2',
+      createdAt: '2026-08-06T17:30:00Z',
+      throughSequence: 141,
+      byteSize: 2150400,
+      checksum: 'b'.repeat(64),
+      status: 'completed' as const,
+      failureDetail: null
+    }
+  ];
   let users = [
     {
       id: 'user-1',
@@ -431,6 +451,77 @@ export async function mockPixiergeApi(page: Page) {
 
     if (path === '/api/admin/users' && request.method() === 'GET') {
       await route.fulfill({ json: users });
+      return;
+    }
+
+    if (path === '/api/admin/catalog/status' && request.method() === 'GET') {
+      await route.fulfill({
+        json: {
+          status: 'current',
+          latestSequence: 188,
+          exportedThroughSequence: 188,
+          pendingEventCount: 0,
+          failureDetail: null
+        }
+      });
+      return;
+    }
+
+    if (path === '/api/admin/audit/events' && request.method() === 'GET') {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: 1,
+              createdAt: '2026-08-08T12:30:57Z',
+              actorUserId: 'user-1',
+              actorUsername: 'admin',
+              area: 'content',
+              action: 'album.changed',
+              resourceType: 'album',
+              resourceId: 'album-1',
+              details: { action: 'renamed' }
+            }
+          ],
+          page: 0,
+          pageSize: 25,
+          totalCount: 1,
+          hasNext: false
+        }
+      });
+      return;
+    }
+
+    if (path === '/api/admin/catalog/history' && request.method() === 'GET') {
+      const url = new URL(request.url());
+      const page = Number(url.searchParams.get('page') ?? 0);
+      const pageSize = Number(url.searchParams.get('pageSize') ?? 25);
+      const start = page * pageSize;
+      const items = catalogExports.slice(start, start + pageSize);
+      await route.fulfill({
+        json: {
+          items,
+          page,
+          pageSize,
+          totalCount: catalogExports.length,
+          hasNext: start + pageSize < catalogExports.length
+        }
+      });
+      return;
+    }
+
+    if (path === '/api/admin/catalog/export' && request.method() === 'POST') {
+      const exportItem = {
+        id: `catalog-export-${catalogExports.length + 1}`,
+        createdAt: '2026-08-07T01:00:00Z',
+        throughSequence: 188,
+        byteSize: 2457600,
+        checksum: 'c'.repeat(64),
+        status: 'completed' as const,
+        failureDetail: null
+      };
+      catalogExports = [exportItem, ...catalogExports];
+      await route.fulfill({ status: 202, json: exportItem });
       return;
     }
 

@@ -21,4 +21,8 @@ record CatalogSnapshotResponse(
     String failureDetail) {}
 
 record CatalogHistoryResponse(
-    List<CatalogSnapshotResponse> items, int page, int pageSize, boolean hasNext) {}
+    List<CatalogSnapshotResponse> items,
+    int page,
+    int pageSize,
+    long totalCount,
+    boolean hasNext) {}

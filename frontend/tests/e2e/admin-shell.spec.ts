@@ -73,7 +73,11 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   await admin.openSettingsSection('plugins');
   await expect(page.getByRole('heading', { name: 'Plugins' })).toBeVisible();
   await admin.openSettingsSection('backups');
-  await expect(page.getByRole('heading', { name: 'Backups' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Backup and Restore' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Database backups' })).toBeVisible();
+  await admin.openSettingsSection('audit');
+  await expect(page.getByRole('heading', { name: 'Audit log', level: 3 })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'admin' })).toBeVisible();
 
   await admin.logout();
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();

@@ -1,6 +1,7 @@
 package com.pixierge.api.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -9,9 +10,12 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pixierge.api.assets.StorageProperties;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.OffsetDateTime;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -99,13 +103,42 @@ class CatalogServiceTest {
     CatalogRepository repository = mock(CatalogRepository.class);
     when(repository.history(0, 26))
         .thenReturn(List.of(snapshot("completed", null), snapshot("completed", null)));
+    when(repository.snapshotCount()).thenReturn(2L);
 
     CatalogHistoryResponse history = service(repository).history(-2, 100);
 
     assertThat(history.page()).isZero();
     assertThat(history.pageSize()).isEqualTo(25);
+    assertThat(history.totalCount()).isEqualTo(2L);
     assertThat(history.hasNext()).isFalse();
     verify(repository).history(0, 26);
+    verify(repository).snapshotCount();
+  }
+
+  @Test
+  void auditsPagedEventsAndDeletesExpiredRows() {
+    CatalogRepository repository = mock(CatalogRepository.class);
+    CatalogEvent event = event(4, "{\"action\":\"renamed\"}");
+    when(repository.auditHistory(0, 26, "album", null, null, null)).thenReturn(List.of(event));
+    when(repository.auditCount("album", null, null, null)).thenReturn(1L);
+    when(repository.deleteAuditBefore(any())).thenReturn(3L);
+    CatalogService service = service(repository);
+
+    CatalogService.AuditHistoryResponse history =
+        service.auditHistory(-1, 100, "album", null, null, null);
+
+    assertThat(history)
+        .extracting(
+            CatalogService.AuditHistoryResponse::page,
+            CatalogService.AuditHistoryResponse::pageSize,
+            CatalogService.AuditHistoryResponse::totalCount,
+            CatalogService.AuditHistoryResponse::hasNext)
+        .containsExactly(0, 25, 1L, false);
+    assertThat(history.items().getFirst())
+        .extracting(
+            CatalogService.AuditEventResponse::area, CatalogService.AuditEventResponse::action)
+        .containsExactly("users", "user.created");
+    assertThat(service.deleteExpiredAuditEvents()).isEqualTo(3L);
   }
 
   @Test
@@ -139,6 +172,63 @@ class CatalogServiceTest {
     assertThat(Files.readString(storageRoot.resolve(snapshot.getValue().storagePath()))).isEmpty();
   }
 
+  @Test
+  void downloadReadsACompletedExportAfterCheckingItsIntegrity() throws Exception {
+    CatalogRepository repository = mock(CatalogRepository.class);
+    byte[] bytes = "catalog export".getBytes(StandardCharsets.UTF_8);
+    Path relative = Path.of("catalog", "events.ndjson");
+    Files.createDirectories(storageRoot.resolve(relative).getParent());
+    Files.write(storageRoot.resolve(relative), bytes);
+    when(repository.snapshot(EVENT_ID))
+        .thenReturn(
+            Optional.of(
+                new CatalogSnapshot(
+                    EVENT_ID,
+                    CREATED_AT,
+                    7,
+                    relative.toString(),
+                    sha256(bytes),
+                    bytes.length,
+                    "completed",
+                    null)));
+
+    CatalogService.CatalogExportDownload download = service(repository).download(EVENT_ID);
+
+    assertThat(download.fileName()).isEqualTo("catalog-export-" + EVENT_ID + ".ndjson");
+    assertThat(download.byteSize()).isEqualTo(bytes.length);
+    assertThat(Files.readAllBytes(download.path())).isEqualTo(bytes);
+  }
+
+  @Test
+  void downloadRejectsMissingOrAlteredExports() throws Exception {
+    CatalogRepository repository = mock(CatalogRepository.class);
+    when(repository.snapshot(EVENT_ID)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service(repository).download(EVENT_ID))
+        .isInstanceOf(CatalogService.CatalogExportNotFoundException.class);
+
+    byte[] bytes = "altered export".getBytes(StandardCharsets.UTF_8);
+    Path relative = Path.of("catalog", "altered.ndjson");
+    Files.createDirectories(storageRoot.resolve(relative).getParent());
+    Files.write(storageRoot.resolve(relative), bytes);
+    when(repository.snapshot(EVENT_ID))
+        .thenReturn(
+            Optional.of(
+                new CatalogSnapshot(
+                    EVENT_ID,
+                    CREATED_AT,
+                    7,
+                    relative.toString(),
+                    "incorrect-checksum",
+                    bytes.length,
+                    "completed",
+                    null)));
+
+    assertThatThrownBy(() -> service(repository).download(EVENT_ID))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Catalog export integrity check failed");
+  }
+
   private CatalogService service(CatalogRepository repository) {
     StorageProperties properties = new StorageProperties();
     properties.setRoot(storageRoot.toString());
@@ -147,11 +237,24 @@ class CatalogServiceTest {
 
   private CatalogEvent event(long sequence, String payload) {
     return new CatalogEvent(
-        sequence, EVENT_ID, 1, "user.created", "user", AGGREGATE_ID, null, payload, CREATED_AT);
+        sequence,
+        EVENT_ID,
+        1,
+        "user.created",
+        "user",
+        AGGREGATE_ID,
+        null,
+        null,
+        payload,
+        CREATED_AT);
   }
 
   private CatalogSnapshot snapshot(String status, String failure) {
     return new CatalogSnapshot(
         EVENT_ID, CREATED_AT, 7, "catalog/events.ndjson", "checksum", 12, status, failure);
+  }
+
+  private String sha256(byte[] bytes) throws Exception {
+    return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
   }
 }

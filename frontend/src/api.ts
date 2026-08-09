@@ -316,7 +316,52 @@ export type CatalogSnapshot = {
   failureDetail: string | null;
 };
 
-export type CatalogHistory = { items: CatalogSnapshot[]; page: number; pageSize: number; hasNext: boolean };
+export type CatalogHistory = {
+  items: CatalogSnapshot[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  hasNext: boolean;
+};
+
+export type DatabaseBackup = {
+  id: string;
+  createdAt: string;
+  byteSize: number;
+  checksum: string;
+  postgresVersion: string;
+  schemaVersion: string;
+  status: string;
+  failureDetail: string | null;
+};
+
+export type DatabaseBackupHistory = {
+  items: DatabaseBackup[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  hasNext: boolean;
+};
+
+export type AuditEvent = {
+  id: number;
+  createdAt: string;
+  actorUserId: string | null;
+  actorUsername: string | null;
+  area: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  details: unknown;
+};
+
+export type AuditHistory = {
+  items: AuditEvent[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  hasNext: boolean;
+};
 
 export type BackgroundJobStatusSummary = {
   jobType: string;
@@ -853,6 +898,40 @@ export async function fetchCatalogHistory(page = 0, pageSize = 10): Promise<Cata
 
 export async function exportCatalog(csrfToken: string): Promise<CatalogSnapshot> {
   return requestJson<CatalogSnapshot>('/api/admin/catalog/export', { method: 'POST', csrfToken });
+}
+
+export function catalogExportDownloadUrl(snapshotId: string): string {
+  return `${apiBaseUrl}/api/admin/catalog/history/${snapshotId}/download`;
+}
+
+export async function fetchDatabaseBackups(page = 0, pageSize = 25): Promise<DatabaseBackupHistory> {
+  return requestJson<DatabaseBackupHistory>(`/api/admin/backups?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function createDatabaseBackup(csrfToken: string): Promise<DatabaseBackup> {
+  return requestJson<DatabaseBackup>('/api/admin/backups', { method: 'POST', csrfToken });
+}
+
+export function databaseBackupDownloadUrl(backupId: string): string {
+  return `${apiBaseUrl}/api/admin/backups/${backupId}/download`;
+}
+
+export async function restoreDatabaseBackup(path: string, csrfToken: string): Promise<void> {
+  await requestWithoutBodyWithJson('/api/admin/backups/restore', {
+    method: 'POST',
+    csrfToken,
+    body: JSON.stringify({ path })
+  });
+}
+
+export async function fetchAuditEvents(
+  params: { page?: number; pageSize?: number; q?: string; actor?: string; from?: string; to?: string } = {}
+): Promise<AuditHistory> {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') query.set(key, String(value));
+  });
+  return requestJson<AuditHistory>(`/api/admin/audit/events?${query.toString()}`);
 }
 
 export async function fetchSchedulerJobs(): Promise<SchedulerJob[]> {

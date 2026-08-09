@@ -2,6 +2,8 @@ package com.pixierge.api.catalog;
 
 import com.pixierge.api.db.QCatalogEvents;
 import com.pixierge.api.db.QCatalogSnapshots;
+import com.pixierge.api.db.QUsers;
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.sql.SQLQueryFactory;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Repository;
 class CatalogRepository {
   private static final QCatalogEvents EVENTS = QCatalogEvents.catalogEvents;
   private static final QCatalogSnapshots SNAPSHOTS = QCatalogSnapshots.catalogSnapshots;
+  private static final QUsers ACTORS = new QUsers("audit_actor");
   private final SQLQueryFactory queryFactory;
 
   CatalogRepository(SQLQueryFactory queryFactory) {
@@ -43,7 +46,7 @@ class CatalogRepository {
   }
 
   List<CatalogEvent> allEventsThrough(long sequence) {
-    return events(EVENTS.sequence.loe(sequence));
+    return events(EVENTS.sequence.loe(sequence), 0, Long.MAX_VALUE, true);
   }
 
   Optional<Long> newestSequence() {
@@ -53,18 +56,14 @@ class CatalogRepository {
   Optional<Long> newestExportedSequence() {
     return Optional.ofNullable(
         queryFactory
-            .select(EVENTS.sequence.max())
-            .from(EVENTS)
-            .where(EVENTS.exportedAt.isNotNull())
+            .select(SNAPSHOTS.throughSequence.max())
+            .from(SNAPSHOTS)
+            .where(SNAPSHOTS.status.eq("completed"))
             .fetchOne());
   }
 
   void markExportedThrough(long sequence) {
-    queryFactory
-        .update(EVENTS)
-        .set(EVENTS.exportedAt, OffsetDateTime.now())
-        .where(EVENTS.sequence.loe(sequence).and(EVENTS.exportedAt.isNull()))
-        .execute();
+    // Export state was deliberately retired when catalog events became audit events.
   }
 
   void addSnapshot(CatalogSnapshot snapshot) {
@@ -102,7 +101,82 @@ class CatalogRepository {
         .toList();
   }
 
+  Optional<CatalogSnapshot> snapshot(UUID id) {
+    Tuple row =
+        queryFactory
+            .select(
+                SNAPSHOTS.id,
+                SNAPSHOTS.createdAt,
+                SNAPSHOTS.throughSequence,
+                SNAPSHOTS.storagePath,
+                SNAPSHOTS.checksum,
+                SNAPSHOTS.byteSize,
+                SNAPSHOTS.status,
+                SNAPSHOTS.failureDetail)
+            .from(SNAPSHOTS)
+            .where(SNAPSHOTS.id.eq(id))
+            .fetchOne();
+    return Optional.ofNullable(row).map(this::snapshot);
+  }
+
+  long snapshotCount() {
+    Long count = queryFactory.select(SNAPSHOTS.id.count()).from(SNAPSHOTS).fetchOne();
+    return count == null ? 0L : count;
+  }
+
+  List<CatalogEvent> auditHistory(
+      int offset, int limit, String query, UUID actorId, OffsetDateTime from, OffsetDateTime to) {
+    var condition = auditCondition(query, actorId, from, to);
+    return queryFactory
+        .select(
+            EVENTS.sequence,
+            EVENTS.eventId,
+            EVENTS.eventVersion,
+            EVENTS.eventType,
+            EVENTS.aggregateType,
+            EVENTS.aggregateId,
+            EVENTS.actorUserId,
+            ACTORS.username,
+            EVENTS.payloadJson,
+            EVENTS.createdAt)
+        .from(EVENTS)
+        .leftJoin(ACTORS)
+        .on(EVENTS.actorUserId.eq(ACTORS.id))
+        .where(condition)
+        .orderBy(EVENTS.sequence.desc())
+        .offset(offset)
+        .limit(limit)
+        .fetch()
+        .stream()
+        .map(row -> event(row, row.get(ACTORS.username)))
+        .toList();
+  }
+
+  long auditCount(String query, UUID actorId, OffsetDateTime from, OffsetDateTime to) {
+    Long count =
+        queryFactory
+            .select(EVENTS.sequence.count())
+            .from(EVENTS)
+            .where(auditCondition(query, actorId, from, to))
+            .fetchOne();
+    return count == null ? 0 : count;
+  }
+
+  long deleteAuditBefore(OffsetDateTime cutoff) {
+    return queryFactory.delete(EVENTS).where(EVENTS.createdAt.lt(cutoff)).execute();
+  }
+
   private List<CatalogEvent> events(com.querydsl.core.types.Predicate condition) {
+    return events(condition, 0, Long.MAX_VALUE, false);
+  }
+
+  private List<CatalogEvent> events(
+      com.querydsl.core.types.Predicate condition, long offset, long limit) {
+    return events(condition, offset, limit, false);
+  }
+
+  private List<CatalogEvent> events(
+      com.querydsl.core.types.Predicate condition, long offset, long limit, boolean ascending) {
     return queryFactory
         .select(
             EVENTS.sequence,
@@ -116,14 +190,27 @@ class CatalogRepository {
             EVENTS.createdAt)
         .from(EVENTS)
         .where(condition)
-        .orderBy(EVENTS.sequence.asc())
+        .orderBy(ascending ? EVENTS.sequence.asc() : EVENTS.sequence.desc())
+        .offset(offset)
+        .limit(limit)
         .fetch()
         .stream()
-        .map(this::event)
+        .map(row -> event(row, null))
         .toList();
   }
 
-  private CatalogEvent event(Tuple row) {
+  private BooleanBuilder auditCondition(
+      String query, UUID actorId, OffsetDateTime from, OffsetDateTime to) {
+    BooleanBuilder condition = new BooleanBuilder();
+    if (query != null && !query.isBlank())
+      condition.and(EVENTS.eventType.containsIgnoreCase(query.trim()));
+    if (actorId != null) condition.and(EVENTS.actorUserId.eq(actorId));
+    if (from != null) condition.and(EVENTS.createdAt.goe(from));
+    if (to != null) condition.and(EVENTS.createdAt.loe(to));
+    return condition;
+  }
+
+  private CatalogEvent event(Tuple row, String actorUsername) {
     return new CatalogEvent(
         row.get(EVENTS.sequence),
         row.get(EVENTS.eventId),
@@ -132,6 +219,7 @@ class CatalogRepository {
         row.get(EVENTS.aggregateType),
         row.get(EVENTS.aggregateId),
         row.get(EVENTS.actorUserId),
+        actorUsername,
         row.get(EVENTS.payloadJson),
         row.get(EVENTS.createdAt));
   }

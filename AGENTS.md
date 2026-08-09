@@ -27,6 +27,7 @@ cd backend && mvn -Dmaven.repo.local=/private/tmp/pixierge-m2 clean verify
 
 - Prefer small, focused changes that match the existing code style.
 - Each task should target at least 85% unit test coverage with a green relevant `./pmake test-*` run.
+- New or materially changed production code is incomplete until meaningful tests cover its success and failure paths and the configured coverage gate passes. Do not weaken, lower, or bypass coverage rules to finish a task; external-process and integration boundaries require deterministic fakes for unit tests plus integration coverage where applicable.
 - Tests must cover meaningful behavior, risk, or regression cases. Do not add getter/setter, DTO-only, or other coverage-padding tests just to raise a percentage.
 - Add integration, Playwright E2E, and visual regression tests when the task has behavior that can be meaningfully covered at those levels.
 - Prefer focused unit tests for business logic and boundary/error behavior; use integration tests for database, Querydsl, migration, security, and cross-layer behavior.

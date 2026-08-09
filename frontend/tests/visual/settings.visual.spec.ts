@@ -33,4 +33,32 @@ test.describe('visual', { tag: '@visual' }, () => {
       fullPage: true
     });
   });
+
+  test('backup and restore visual regression', async ({ page }) => {
+    await mockPixiergeApi(page);
+    await completeBrowsableLibrarySetup(page);
+    const admin = new AdminShellPage(page);
+
+    await admin.openSettings();
+    await admin.openSettingsSection('backups');
+    await expect(page.getByRole('heading', { name: 'Backup and Restore' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Database backups' })).toBeVisible();
+    await expect(page).toHaveScreenshot('settings-backup-and-restore.png', {
+      fullPage: true
+    });
+  });
+
+  test('audit log visual regression', async ({ page }) => {
+    await mockPixiergeApi(page);
+    await completeBrowsableLibrarySetup(page);
+    const admin = new AdminShellPage(page);
+
+    await admin.openSettings();
+    await admin.openSettingsSection('audit');
+    await expect(page.getByRole('heading', { name: 'Audit log', level: 3 })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'admin' })).toBeVisible();
+    await expect(page).toHaveScreenshot('settings-audit-log.png', {
+      fullPage: true
+    });
+  });
 });

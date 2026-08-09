@@ -9,6 +9,7 @@ public final class CatalogEventTypes {
   public static final String LIBRARY_CHANGED = "library.changed";
   public static final String ALBUM_CHANGED = "album.changed";
   public static final String TAG_CHANGED = "tag.changed";
+  public static final String SYSTEM_CHANGED = "system.changed";
 
   private CatalogEventTypes() {}
 }

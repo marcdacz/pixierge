@@ -29,7 +29,7 @@ public class QCatalogEvents extends RelationalPathBase<QCatalogEvents> {
       createDateTime("exportedAt", OffsetDateTime.class);
 
   public QCatalogEvents(String variable) {
-    super(QCatalogEvents.class, forVariable(variable), null, "catalog_events");
+    super(QCatalogEvents.class, forVariable(variable), null, "audit_events");
     addMetadata();
   }
 
@@ -67,6 +67,6 @@ public class QCatalogEvents extends RelationalPathBase<QCatalogEvents> {
 
   @Override
   public SchemaAndTable getSchemaAndTable() {
-    return new SchemaAndTable(null, "catalog_events");
+    return new SchemaAndTable(null, "audit_events");
   }
 }

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.pixierge.api.assets.StorageProperties;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -18,6 +19,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,7 +90,29 @@ public class CatalogService {
         rows.stream().limit(safePageSize).map(this::response).toList(),
         safePage,
         safePageSize,
+        repository.snapshotCount(),
         rows.size() > safePageSize);
+  }
+
+  @Transactional(readOnly = true)
+  public AuditHistoryResponse auditHistory(
+      int page, int pageSize, String query, UUID actorId, OffsetDateTime from, OffsetDateTime to) {
+    int safePage = Math.max(0, page);
+    int safeSize = Math.min(HISTORY_PAGE_SIZE, Math.max(1, pageSize));
+    List<CatalogEvent> events =
+        repository.auditHistory(safePage * safeSize, safeSize + 1, query, actorId, from, to);
+    return new AuditHistoryResponse(
+        events.stream().limit(safeSize).map(this::auditResponse).toList(),
+        safePage,
+        safeSize,
+        repository.auditCount(query, actorId, from, to),
+        events.size() > safeSize);
+  }
+
+  @Transactional
+  public long deleteExpiredAuditEvents() {
+    return repository.deleteAuditBefore(
+        OffsetDateTime.now(ZoneOffset.UTC).minus(90, ChronoUnit.DAYS));
   }
 
   @Transactional
@@ -129,6 +153,26 @@ public class CatalogService {
               sanitize(exception.getMessage()));
       repository.addSnapshot(failed);
       return response(failed);
+    }
+  }
+
+  @Transactional(readOnly = true)
+  public CatalogExportDownload download(UUID snapshotId) {
+    CatalogSnapshot snapshot =
+        repository
+            .snapshot(snapshotId)
+            .filter(candidate -> "completed".equals(candidate.status()))
+            .orElseThrow(() -> new CatalogExportNotFoundException(snapshotId));
+    try {
+      Path path = resolveStoragePath(Path.of(snapshot.storagePath()));
+      long byteSize = Files.size(path);
+      if (byteSize != snapshot.byteSize() || !sha256(path).equals(snapshot.checksum())) {
+        throw new IllegalStateException("Catalog export integrity check failed");
+      }
+      return new CatalogExportDownload(
+          "catalog-export-" + snapshot.id() + ".ndjson", path, byteSize);
+    } catch (IOException exception) {
+      throw new IllegalStateException("Catalog export could not be read", exception);
     }
   }
 
@@ -195,6 +239,22 @@ public class CatalogService {
     }
   }
 
+  private String sha256(Path path) throws IOException {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      try (InputStream input = Files.newInputStream(path)) {
+        byte[] buffer = new byte[1024 * 1024];
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+          digest.update(buffer, 0, read);
+        }
+      }
+      return java.util.HexFormat.of().formatHex(digest.digest());
+    } catch (NoSuchAlgorithmException exception) {
+      throw new IllegalStateException(exception);
+    }
+  }
+
   private String sanitize(String message) {
     return message == null
         ? "Catalog export failed"
@@ -210,5 +270,55 @@ public class CatalogService {
         snapshot.checksum(),
         snapshot.status(),
         snapshot.failureDetail());
+  }
+
+  private AuditEventResponse auditResponse(CatalogEvent event) {
+    return new AuditEventResponse(
+        event.sequence(),
+        event.createdAt(),
+        event.actorUserId(),
+        event.actorUsername(),
+        area(event.eventType()),
+        event.eventType(),
+        event.aggregateType(),
+        event.aggregateId(),
+        canonicalizePayload(event.payloadJson()));
+  }
+
+  private JsonNode canonicalizePayload(String payload) {
+    try {
+      return canonicalize(canonicalMapper.readTree(payload));
+    } catch (IOException exception) {
+      return canonicalMapper.createObjectNode();
+    }
+  }
+
+  private String area(String eventType) {
+    if (eventType.startsWith("user.")) return "users";
+    if (eventType.startsWith("library.")) return "libraries";
+    if (eventType.startsWith("album.") || eventType.startsWith("tag.")) return "content";
+    return "system";
+  }
+
+  public record CatalogExportDownload(String fileName, Path path, long byteSize) {}
+
+  public record AuditEventResponse(
+      long id,
+      OffsetDateTime createdAt,
+      UUID actorUserId,
+      String actorUsername,
+      String area,
+      String action,
+      String resourceType,
+      UUID resourceId,
+      JsonNode details) {}
+
+  public record AuditHistoryResponse(
+      List<AuditEventResponse> items, int page, int pageSize, long totalCount, boolean hasNext) {}
+
+  static final class CatalogExportNotFoundException extends RuntimeException {
+    CatalogExportNotFoundException(UUID snapshotId) {
+      super("Catalog export not found: " + snapshotId);
+    }
   }
 }
