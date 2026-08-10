@@ -51,3 +51,5 @@ docker-compose.local-test.yml
 
 # Local planning notes
 .plans/
+/frontend/docs/design-system/evidence/
+/frontend/docs/design-system/phase-0-evidence.md

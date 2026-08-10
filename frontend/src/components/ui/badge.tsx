@@ -7,8 +7,8 @@ const badgeVariants = cva('inline-flex min-h-6 items-center rounded-md border px
     variant: {
       default: 'border-transparent bg-primary text-primary-foreground',
       secondary: 'border-border bg-muted text-foreground',
-      success: 'border-zinc-600 bg-zinc-200 text-zinc-950',
-      warning: 'border-zinc-700 bg-zinc-900 text-zinc-300'
+      success: 'border-success bg-success-surface text-success-content',
+      warning: 'border-warning bg-warning-surface text-warning-content'
     }
   },
   defaultVariants: {
