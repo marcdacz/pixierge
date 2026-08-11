@@ -14,21 +14,20 @@ export function TableBody({ className, ...props }: ComponentProps<'tbody'>) {
 }
 
 export function TableRow({ className, ...props }: ComponentProps<'tr'>) {
-  return <tr className={cn('border-b border-border transition-colors hover:bg-muted/60', className)} {...props} />;
+  return (
+    <tr className={cn('border-b border-border transition-colors hover:bg-surface-hover/70', className)} {...props} />
+  );
 }
 
 export function TableHead({ className, ...props }: ComponentProps<'th'>) {
   return (
     <th
-      className={cn(
-        'h-11 px-4 text-left align-middle text-xs font-semibold uppercase text-muted-foreground',
-        className
-      )}
+      className={cn('h-11 px-4 text-left align-middle text-xs font-semibold uppercase text-content-subtle', className)}
       {...props}
     />
   );
 }
 
 export function TableCell({ className, ...props }: ComponentProps<'td'>) {
-  return <td className={cn('px-4 py-3 align-middle text-foreground', className)} {...props} />;
+  return <td className={cn('px-4 py-3 align-middle text-content', className)} {...props} />;
 }

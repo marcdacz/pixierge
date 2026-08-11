@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help build run stop test test-backend-unit test-backend-integration test-frontend-unit test-frontend-e2e test-frontend-vr lint format
+.PHONY: help build run stop storybook storybook-build test test-backend-unit test-backend-integration test-frontend-unit test-frontend-e2e test-frontend-vr lint format
 
 help:
 	@echo "Usage: ./pmake <target>"
@@ -9,6 +9,8 @@ help:
 	@echo "  build   Build the backend and frontend"
 	@echo "  run     Start the local Docker Compose stack"
 	@echo "  stop    Stop the local Docker Compose stack"
+	@echo "  storybook                  Serve frontend Storybook locally"
+	@echo "  storybook-build            Build static frontend Storybook"
 	@echo "  test                       Run every test target"
 	@echo "  test-backend-unit          Run backend unit tests"
 	@echo "  test-backend-integration   Run backend unit and integration tests"
@@ -27,6 +29,12 @@ run:
 
 stop:
 	docker compose down
+
+storybook:
+	npm --prefix frontend run storybook
+
+storybook-build:
+	npm --prefix frontend run build-storybook
 
 test: test-backend-unit test-backend-integration test-frontend-unit test-frontend-e2e test-frontend-vr
 

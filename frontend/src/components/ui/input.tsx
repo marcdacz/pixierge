@@ -6,7 +6,7 @@ export function Input({ className, ref, ...props }: ComponentProps<'input'>) {
     <input
       ref={ref}
       className={cn(
-        'h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-60',
+        'h-10 w-full rounded-md border border-border-strong bg-surface-sunken px-3 text-sm text-content outline-none transition-colors placeholder:text-content-subtle focus-visible:border-focus focus-visible:ring-2 focus-visible:ring-focus-shadow disabled:cursor-not-allowed disabled:opacity-60',
         className
       )}
       {...props}

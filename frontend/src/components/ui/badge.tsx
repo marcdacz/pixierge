@@ -2,13 +2,16 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import type { ComponentProps } from 'react';
 import { cn } from '@/lib/utils';
 
-const badgeVariants = cva('inline-flex min-h-6 items-center rounded-md border px-2 py-0.5 text-xs font-semibold', {
+const badgeVariants = cva('inline-flex min-h-6 items-center rounded-chip border px-2 py-0.5 text-xs font-semibold', {
   variants: {
     variant: {
-      default: 'border-transparent bg-primary text-primary-foreground',
-      secondary: 'border-border bg-muted text-foreground',
+      default: 'border-info bg-info-surface text-info-content',
+      secondary: 'border-border bg-surface-hover text-content',
       success: 'border-success bg-success-surface text-success-content',
-      warning: 'border-warning bg-warning-surface text-warning-content'
+      warning: 'border-warning bg-warning-surface text-warning-content',
+      danger: 'border-danger bg-danger-surface text-danger-content',
+      processing: 'border-processing bg-processing-surface text-processing-content',
+      unavailable: 'border-unavailable bg-unavailable-surface text-unavailable-content'
     }
   },
   defaultVariants: {
