@@ -35,18 +35,19 @@ This inventory maps the approved design direction to existing code and identifie
 
 App shell:
 
-- TopBar: logo/brand, global search, notification, profile, utility actions.
-- AppRail: permanently compact icon plus label navigation; no expand state.
-- ContextSidebar: folder/filter/settings navigation surface.
-- PageHeader: title, count, supporting metadata, primary actions.
+- TopBar: logo/brand, centered global search, adjacent search-filter action, notifications, profile menu trigger, and utility actions. It is a fixed app-shell pattern with a three-column layout: brand, search, account/status controls. Keyboard users can tab through search, filters, notifications, and profile in visual order.
+- AppRail: permanently compact icon plus label navigation; no expand state. The selected item uses `aria-current="page"`, a semantic active surface, and the cyan left indicator measured from the approved north-star tile. Settings is a separate bottom-pinned action.
+- ContextSidebar: folder/filter/settings navigation surface. Count pills and the `My folders` add action share a fixed right-edge grid track so quantities and creation controls align while labels truncate.
+- PageHeader: title, count/supporting metadata, and right-aligned action cluster. Use it for dense app screens, keeping headings at or below the documented app scale.
+- ToolbarViewToggle: equal-height grid/list view selector. Use `aria-pressed` to expose selected state and keep it grouped with the thumbnail-size controls.
+- ThumbnailSizeControl: media zoom slider plus optional fullscreen action. It must always have a programmatic label and use immediate local feedback when wired to state.
 
 Photo browsing:
 
-- MediaGrid: dense adaptive grid/masonry-like layout with stable tile sizing.
-- MediaTile: thumbnail, selection, status badges, video duration, RAW/missing indicators, hover actions.
-- TimelineRail: right-side chronology scanner for years/months.
-- ThumbnailSizeControl: slider/segmented control with icon labels.
-- BulkActionBar: selected count, primary actions, destructive action, close/clear.
+- MediaGrid: dense adaptive grouped media layout with stable tile sizing and date/count headings.
+- MediaTile: thumbnail surface with image overlay, selected state, accessible image label, and contextual action affordance.
+- TimelineRail: right-side chronology scanner for years/months. The active month uses `aria-current="date"` and the cyan line/dot rhythm from the north-star contract.
+- BulkActionBar: bottom selection surface with selected count, primary actions, destructive action, more action, and close/clear control. Keep Star as the first favoriting action in library selection contexts.
 - MetadataPanel: file, capture, identity, duplicate, source, and extraction status.
 
 Search and organization:

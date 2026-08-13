@@ -68,6 +68,29 @@ Planned order:
 6. Albums, tags, and starred views.
 7. Settings and administration surfaces.
 
+### Phase 3 Shell Navigation Patterns
+
+- Added `TopBar`, `AppRail`, and `ContextSidebar` under `frontend/src/design-system/patterns/`.
+- Added `PageHeader`, `ToolbarViewToggle`, `ThumbnailSizeControl`, `MediaGrid`, `MediaTile`, `TimelineRail`, and `BulkActionBar` under `frontend/src/design-system/patterns/`.
+- Updated the north-star library screen story to compose extracted patterns instead of local one-off shell/media markup.
+- Preserved the approved shell contracts: centered global search with adjacent filter action, compact app rail with icon plus label, selected rail indicator geometry, bottom-pinned settings, and context-sidebar right-edge count/add alignment.
+- Preserved the approved media-browser contracts: equal-height toolbar controls, selected grid state, zoom slider, timeline year/month line/dot rhythm, and bottom bulk action bar with Star rather than Heart.
+- Tightened shell accessibility: `TopBar` search now has a programmatic label, profile identity is passed by the caller instead of mocked by default, and context-sidebar folder group headers are not rendered as fake disclosure buttons.
+- Added dedicated `Components/Patterns` Storybook stories for shell navigation and media-browser patterns.
+- Added focused unit coverage for TopBar actions, selected rail state, pinned settings geometry, context-sidebar count/add alignment, media selected state, timeline active state, toolbar selection, zoom callbacks, and bulk action callbacks.
+- Added a north-star Storybook render smoke test so missing imports and other runtime story failures are caught by the unit gate.
+- Added a pattern-story render smoke test so dedicated pattern Storybook stories also catch runtime reference failures.
+
+Validation:
+
+- `npm run test:unit -- src/design-system/patterns/navigation-shell.test.tsx src/design-system/patterns/media-browser-patterns.test.tsx src/design-system/patterns/library-north-star-story.test.tsx src/design-system/patterns/patterns-story.test.tsx` passes.
+- `npm run test:unit` passes.
+- `npm run build` passes.
+- `npm run build-storybook` passes.
+- Targeted ESLint for the pattern files and updated Storybook stories passes.
+- Targeted Prettier check for the pattern files, updated Storybook stories, and design-system docs passes.
+- Built Storybook north-star story was reviewed through local desktop and mobile screenshots; mobile topbar and bulk-action-bar responsive sizing were adjusted during review.
+
 ## Temporary Exceptions
 
 None recorded yet.
