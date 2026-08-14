@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -665,63 +666,118 @@ public class ScanService {
       return;
     }
 
-    transactionTemplate.executeWithoutResult(
-        status -> {
-          ScanCounts counts = new ScanCounts();
-          List<ScanRepository.ObservationInsert> pendingObservations = new ArrayList<>();
-          for (IdentityHashResult result : results) {
-            ScanIdentityJobPayload.ScanIdentityJobItem item = result.item();
-            LibraryRepository.LibraryRootRecord root = rootsById.get(item.rootId());
-            if (root == null) {
-              continue;
-            }
-            ScanRepository.AssetFileRecord current =
-                scanRepository.findAssetFile(item.assetFileId()).orElse(null);
-            if (current == null || !identityPayloadMatches(payload, item, current)) {
-              continue;
-            }
-            if (result.errorMessage() != null) {
-              recordError(
-                  payload.scanRunId(),
-                  payload.libraryId(),
-                  item.rootId(),
-                  item.normalizedPath(),
-                  "file_failed",
-                  result.errorMessage(),
-                  counts);
-              continue;
-            }
-            beginObservationTiming(result.hashDurationMs());
-            try {
-              reconcileHashes(
-                  payload.scanRunId(),
-                  root,
-                  new HashWorkItem(
-                      item.rootId(),
-                      item.assetFileId(),
-                      item.path(),
-                      item.normalizedPath(),
-                      item.fileName(),
-                      item.size(),
-                      item.modifiedAt(),
-                      current),
-                  result.hashes(),
-                  counts,
-                  pendingObservations);
-            } finally {
-              clearObservationTiming();
-            }
-            if (pendingObservations.size() >= OBSERVATION_BATCH_SIZE) {
-              scanRepository.createObservations(pendingObservations);
-              pendingObservations.clear();
-            }
-          }
-          scanRepository.createObservations(pendingObservations);
-          scanRepository.incrementScanRunCounts(payload.scanRunId(), counts);
-        });
+    for (IdentityHashResult result : results) {
+      try {
+        transactionTemplate.executeWithoutResult(
+            status -> reconcileIdentityResult(payload, rootsById, result));
+      } catch (DuplicateKeyException exception) {
+        if (!isAssetContentHashDuplicate(exception)) {
+          throw exception;
+        }
+        transactionTemplate.executeWithoutResult(
+            status -> recoverDuplicateProvisionalPromotion(payload, rootsById, result));
+      }
+    }
     if (metadataEnrichmentService != null) {
       metadataEnrichmentService.enqueueMetadataBackfill(results.size());
     }
+  }
+
+  private void reconcileIdentityResult(
+      ScanIdentityJobPayload payload,
+      Map<UUID, LibraryRepository.LibraryRootRecord> rootsById,
+      IdentityHashResult result) {
+    ScanIdentityJobPayload.ScanIdentityJobItem item = result.item();
+    LibraryRepository.LibraryRootRecord root = rootsById.get(item.rootId());
+    if (root == null) {
+      return;
+    }
+    ScanRepository.AssetFileRecord current =
+        scanRepository.findAssetFile(item.assetFileId()).orElse(null);
+    if (current == null || !identityPayloadMatches(payload, item, current)) {
+      return;
+    }
+    ScanCounts counts = new ScanCounts();
+    List<ScanRepository.ObservationInsert> observations = new ArrayList<>();
+    if (result.errorMessage() != null) {
+      recordError(
+          payload.scanRunId(),
+          payload.libraryId(),
+          item.rootId(),
+          item.normalizedPath(),
+          "file_failed",
+          result.errorMessage(),
+          counts);
+    } else {
+      beginObservationTiming(result.hashDurationMs());
+      try {
+        reconcileHashes(
+            payload.scanRunId(),
+            root,
+            new HashWorkItem(
+                item.rootId(),
+                item.assetFileId(),
+                item.path(),
+                item.normalizedPath(),
+                item.fileName(),
+                item.size(),
+                item.modifiedAt(),
+                current),
+            result.hashes(),
+            counts,
+            observations);
+      } finally {
+        clearObservationTiming();
+      }
+    }
+    scanRepository.createObservations(observations);
+    scanRepository.incrementScanRunCounts(payload.scanRunId(), counts);
+  }
+
+  private void recoverDuplicateProvisionalPromotion(
+      ScanIdentityJobPayload payload,
+      Map<UUID, LibraryRepository.LibraryRootRecord> rootsById,
+      IdentityHashResult result) {
+    ScanIdentityJobPayload.ScanIdentityJobItem item = result.item();
+    LibraryRepository.LibraryRootRecord root = rootsById.get(item.rootId());
+    if (root == null || result.hashes() == null) {
+      return;
+    }
+    ScanRepository.AssetFileRecord current =
+        scanRepository.findAssetFile(item.assetFileId()).orElse(null);
+    if (current == null
+        || !identityPayloadMatches(payload, item, current)
+        || !ProvisionalIdentity.isProvisional(current.contentHash())) {
+      return;
+    }
+    UUID assetId = scanRepository.findAssetByHash(result.hashes().contentHash()).orElse(null);
+    if (assetId == null || assetId.equals(current.assetId())) {
+      throw new DuplicateKeyException(
+          "Could not resolve duplicate asset hash " + result.hashes().contentHash());
+    }
+    ScanCounts counts = new ScanCounts();
+    List<ScanRepository.ObservationInsert> observations = new ArrayList<>();
+    attachProvisionalFileToAsset(
+        payload.scanRunId(),
+        root,
+        current,
+        assetId,
+        item.path(),
+        item.normalizedPath(),
+        item.fileName(),
+        item.size(),
+        item.modifiedAt(),
+        result.hashes(),
+        counts,
+        observations,
+        OffsetDateTime.now());
+    scanRepository.createObservations(observations);
+    scanRepository.incrementScanRunCounts(payload.scanRunId(), counts);
+  }
+
+  private boolean isAssetContentHashDuplicate(DuplicateKeyException exception) {
+    String message = exception.getMostSpecificCause().getMessage();
+    return message != null && message.contains("assets_content_hash_key");
   }
 
   private boolean identityPayloadMatches(
@@ -899,36 +955,20 @@ public class ScanService {
     var existingAssetWithHash = scanRepository.findAssetByHash(hashes.contentHash());
     if (existingAssetWithHash.isPresent()
         && !existingAssetWithHash.get().equals(existing.assetId())) {
-      scanRepository.markStatus(existing.id(), "superseded", null);
-      UUID assetFileId =
-          scanRepository.createAssetFile(
-              existingAssetWithHash.get(),
-              existing.libraryId(),
-              root.id(),
-              path,
-              normalizedPath,
-              fileName,
-              size,
-              modifiedAt,
-              hashes.contentHash(),
-              scanRunId,
-              now);
-      scanRepository.markStatus(existing.id(), "superseded", assetFileId);
-      pendingObservations.add(
-          observation(
-              scanRunId,
-              root.libraryId(),
-              root.id(),
-              existingAssetWithHash.get(),
-              assetFileId,
-              path,
-              normalizedPath,
-              size,
-              modifiedAt,
-              hashes.partialHash(),
-              hashes.contentHash(),
-              "added"));
-      counts.result("added");
+      attachProvisionalFileToAsset(
+          scanRunId,
+          root,
+          existing,
+          existingAssetWithHash.get(),
+          path,
+          normalizedPath,
+          fileName,
+          size,
+          modifiedAt,
+          hashes,
+          counts,
+          pendingObservations,
+          now);
       return;
     }
 
@@ -943,6 +983,52 @@ public class ScanService {
             root.id(),
             existing.assetId(),
             existing.id(),
+            path,
+            normalizedPath,
+            size,
+            modifiedAt,
+            hashes.partialHash(),
+            hashes.contentHash(),
+            "added"));
+    counts.result("added");
+  }
+
+  private void attachProvisionalFileToAsset(
+      UUID scanRunId,
+      LibraryRepository.LibraryRootRecord root,
+      ScanRepository.AssetFileRecord existing,
+      UUID assetId,
+      String path,
+      String normalizedPath,
+      String fileName,
+      long size,
+      OffsetDateTime modifiedAt,
+      FileHasher.Hashes hashes,
+      ScanCounts counts,
+      List<ScanRepository.ObservationInsert> pendingObservations,
+      OffsetDateTime now) {
+    scanRepository.markStatus(existing.id(), "superseded", null);
+    UUID assetFileId =
+        scanRepository.createAssetFile(
+            assetId,
+            existing.libraryId(),
+            root.id(),
+            path,
+            normalizedPath,
+            fileName,
+            size,
+            modifiedAt,
+            hashes.contentHash(),
+            scanRunId,
+            now);
+    scanRepository.markStatus(existing.id(), "superseded", assetFileId);
+    pendingObservations.add(
+        observation(
+            scanRunId,
+            root.libraryId(),
+            root.id(),
+            assetId,
+            assetFileId,
             path,
             normalizedPath,
             size,

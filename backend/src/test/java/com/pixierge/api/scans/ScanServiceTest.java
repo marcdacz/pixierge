@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -306,6 +307,36 @@ class ScanServiceTest {
   }
 
   @Test
+  void duplicateAssetHashRaceRecoversByAttachingProvisionalFileToWinner() throws Exception {
+    UUID libraryId = UUID.randomUUID();
+    UUID rootId = UUID.randomUUID();
+    UUID winningAssetId = UUID.randomUUID();
+    Path file = tempDir.resolve("duplicate.jpg");
+    Files.writeString(file, "same bytes");
+    LibraryRepository.LibraryRootRecord root = root(libraryId, rootId, tempDir);
+    LibraryRepository.LibraryRecord library = library(libraryId, root, List.of());
+    FakeScanRepository scanRepository = new FakeScanRepository(List.of());
+    scanRepository.assetsByHash.put("full", winningAssetId);
+    scanRepository.hideAssetHashUntilDuplicateFailure = true;
+    RecordingBackgroundJobService backgroundJobService = new RecordingBackgroundJobService();
+    ScanService service =
+        service(
+            new FakeLibraryRepository(library),
+            scanRepository,
+            new FakeFileHasher(),
+            backgroundJobService);
+
+    service.executeScan(UUID.randomUUID(), library, null);
+    runIdentityJobs(service, backgroundJobService);
+
+    assertThat(scanRepository.duplicateAssetHashFailures).isEqualTo(1);
+    assertThat(scanRepository.createdAssetFileAssetIds).contains(winningAssetId);
+    assertThat(scanRepository.updatedAssetContentHashes).doesNotContain("full");
+    assertThat(scanRepository.markedStatuses)
+        .anySatisfy(status -> assertThat(status).endsWith(":superseded"));
+  }
+
+  @Test
   void filesystemChangeScanDefersWhenLibraryScanIsAlreadyActive() throws Exception {
     UUID libraryId = UUID.randomUUID();
     UUID rootId = UUID.randomUUID();
@@ -474,6 +505,8 @@ class ScanServiceTest {
     private final List<String> markedStatuses = new ArrayList<>();
     private final List<String> errors = new ArrayList<>();
     private final java.util.Set<UUID> catalogCompleted = new java.util.HashSet<>();
+    private boolean hideAssetHashUntilDuplicateFailure;
+    private int duplicateAssetHashFailures;
     private ScanCounts currentCounts = new ScanCounts();
     private ScanCounts completedCounts;
 
@@ -687,6 +720,9 @@ class ScanServiceTest {
 
     @Override
     Optional<UUID> findAssetByHash(String contentHash) {
+      if (hideAssetHashUntilDuplicateFailure && duplicateAssetHashFailures == 0) {
+        return Optional.empty();
+      }
       return Optional.ofNullable(assetsByHash.get(contentHash));
     }
 
@@ -699,6 +735,11 @@ class ScanServiceTest {
 
     @Override
     void updateAssetContentHash(UUID assetId, String contentHash, OffsetDateTime now) {
+      if (hideAssetHashUntilDuplicateFailure && duplicateAssetHashFailures == 0) {
+        duplicateAssetHashFailures++;
+        throw new DuplicateKeyException(
+            "duplicate key value violates unique constraint \"assets_content_hash_key\"");
+      }
       updatedAssetContentHashes.add(contentHash);
       assetsByHash.put(contentHash, assetId);
     }
