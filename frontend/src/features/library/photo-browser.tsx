@@ -16,6 +16,7 @@ import {
   type AuthResponse
 } from '@/api';
 import { Alert } from '@/components/ui/alert';
+import { BulkActionBar, PageHeader, ThumbnailSizeControl } from '@/design-system/patterns';
 import { AssignmentPicker, type AssignmentDestination } from '@/features/organizer/assignment-picker';
 import { AssetContextMenu, type AssetContextMenuAction } from '@/features/organizer/asset-context-menu';
 import { writeAssetDragData } from '@/features/organizer/drag-types';
@@ -27,8 +28,8 @@ import {
   EmptyPanel,
   flattenBrowseAssetIds,
   formatItemCount,
+  MAX_ASSET_TILE_SIZE_INDEX,
   readStoredAssetTileSizeIndex,
-  ThumbnailSizeControls,
   writeStoredAssetTileSizeIndex
 } from '@/features/library/photo-grid';
 
@@ -449,6 +450,12 @@ export function PhotoBrowser({
       y={contextMenu?.y ?? 0}
     />
   );
+  const selectedSummary =
+    selectedAssets.length === 1
+      ? selectedAssets[0].fileName
+      : selectedAssets.length > 1
+        ? `${selectedAssets[0].fileName} and ${selectedAssets.length - 1} more`
+        : '';
 
   if (selectedAssetId) {
     return (
@@ -473,44 +480,42 @@ export function PhotoBrowser({
   }
 
   return (
-    <section className={className ?? 'flex min-h-0 min-w-0 flex-col overflow-hidden px-0 lg:px-6'}>
-      <div className="shrink-0 bg-background pb-4">
-        <div className="flex items-end gap-2">
-          {leadingControls}
-          <div className="flex min-w-0 flex-1 items-end justify-between gap-2">
-            <div className="min-w-0">
-              {subtitle}
-              <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-                {title}
-                {displayAssets && (
-                  <span className="shrink-0 text-sm text-muted-foreground">
-                    {formatItemCount(displayAssets.totalCount)}
-                  </span>
-                )}
-              </div>
-              {description}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {displayAssets && displayAssets.sections.length > 0 && (
-                <ThumbnailSizeControls
+    <section className={className ?? 'flex min-h-0 min-w-0 flex-col overflow-hidden'}>
+      <div className="shrink-0 bg-canvas pb-4">
+        <div className="flex min-w-0 items-end gap-3">
+          {leadingControls ? <div className="shrink-0">{leadingControls}</div> : null}
+          <PageHeader
+            actions={
+              displayAssets && displayAssets.sections.length > 0 ? (
+                <ThumbnailSizeControl
+                  id={`${browseContextKey}-thumbnail-size`}
+                  label="Thumbnail size"
+                  max={MAX_ASSET_TILE_SIZE_INDEX}
+                  min={0}
                   onChange={(value) => {
                     setAssetTileSizeIndex(value);
                     writeStoredAssetTileSizeIndex(value);
                   }}
                   value={assetTileSizeIndex}
+                  valueText={ASSET_TILE_SIZE_OPTIONS[assetTileSizeIndex]?.key}
                 />
-              )}
-            </div>
-          </div>
+              ) : null
+            }
+            className="min-w-0 flex-1"
+            description={description}
+            eyebrow={subtitle}
+            meta={displayAssets ? formatItemCount(displayAssets.totalCount) : undefined}
+            title={title}
+          />
         </div>
       </div>
 
       <div
-        className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto [overflow-anchor:none]"
+        className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto rounded-xl bg-surface-sunken p-3 [overflow-anchor:none] md:p-4"
         ref={scrollContainerRef}
       >
         {(error || browseError) && <Alert>{browseError ?? error}</Alert>}
-        {loadingAssets && <p className="text-sm text-muted-foreground">Loading assets...</p>}
+        {loadingAssets && <p className="text-sm text-content-muted">Loading assets...</p>}
         {!loadingAssets && displayAssets?.sections.length === 0 && (
           <EmptyPanel description={emptyDescription} icon={FileImage} title={emptyTitle} />
         )}
@@ -532,8 +537,28 @@ export function PhotoBrowser({
         {displayAssets && displayAssets.hasNext && onLoadMore && (
           <div aria-hidden className="h-px shrink-0" ref={loadMoreRef} />
         )}
-        {loadingMore && <p className="pb-4 text-sm text-muted-foreground">Loading more...</p>}
+        {loadingMore && <p className="pb-4 text-sm text-content-muted">Loading more...</p>}
       </div>
+
+      {selectedAssets.length > 0 && (
+        <BulkActionBar
+          actions={[
+            selectionIsStarred
+              ? { icon: StarOff, label: 'Unstar', onSelect: () => void removeFromStarred() }
+              : { icon: Star, label: 'Star', onSelect: () => void addToStarred() },
+            { icon: Images, label: 'Albums', onSelect: () => void openPicker('albums') },
+            { icon: Hash, label: 'Tags', onSelect: () => void openPicker('tags') }
+          ]}
+          onClear={selection.clear}
+          onMore={() => {
+            const x = window.innerWidth / 2;
+            const y = window.innerHeight - 96;
+            setContextMenu({ x, y, assetId: selectedAssets[0].id });
+          }}
+          selectedCount={selectedAssets.length}
+          summary={selectedSummary}
+        />
+      )}
 
       {assetActionsMenu}
       {assignmentPicker}

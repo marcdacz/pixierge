@@ -713,7 +713,6 @@ describe('App', () => {
     expect(await within(foldersNav).findByRole('button', { name: /^Family Photos/ })).toBeInTheDocument();
     expect(await within(foldersNav).findByRole('button', { name: /^family/ })).toBeInTheDocument();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Expand navigation' }));
     const primaryNav = screen.getByRole('navigation', { name: 'Primary' });
     expect(within(primaryNav).queryByText('Family Photos')).not.toBeInTheDocument();
     expect(within(primaryNav).queryByText('3 sources')).not.toBeInTheDocument();
@@ -747,24 +746,26 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: 'Select beach.jpg' })).toBeInTheDocument();
     expect(document.querySelector('[data-asset-placeholder="asset-1"]')).not.toBeNull();
     const assetGrid = document.querySelector('[aria-label="Asset grid"]') as HTMLElement;
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('11rem');
+    const assetTile = screen.getByTestId('asset-tile-asset-1');
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-height')).toBe('11rem');
+    expect(assetTile).toHaveStyle({ '--asset-tile-ratio': '1.5' });
     expect(
       document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/thumbnail?c=grid-cache-asset-1"]')
     ).not.toBeNull();
     const thumbnailSize = screen.getByRole('slider', { name: 'Thumbnail size' });
     fireEvent.change(thumbnailSize, { target: { value: '3' } });
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('calc((100% - 2 * 0.25rem) / 3)');
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-height')).toBe('14rem');
     expect(
       document.querySelector('img[src="http://localhost:8080/api/assets/asset-1/preview?c=grid-cache-asset-1"]')
     ).not.toBeNull();
     fireEvent.change(thumbnailSize, { target: { value: '4' } });
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('calc((100% - 0.25rem) / 2)');
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-height')).toBe('20rem');
     fireEvent.change(thumbnailSize, { target: { value: '5' } });
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('100%');
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-height')).toBe('min(32rem, 70vh)');
     expect(thumbnailSize).toHaveAttribute('aria-valuenow', '5');
     expect(window.localStorage.getItem('pixierge.assetTileSizeIndex')).toBe('5');
     fireEvent.change(thumbnailSize, { target: { value: '0' } });
-    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-size')).toBe('5.5rem');
+    expect(assetGrid.style.getPropertyValue('--asset-grid-tile-height')).toBe('5.5rem');
     expect(thumbnailSize).toHaveAttribute('aria-valuenow', '0');
     expect(window.localStorage.getItem('pixierge.assetTileSizeIndex')).toBe('0');
     expect(

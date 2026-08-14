@@ -1,27 +1,16 @@
-import {
-  ChevronLeft,
-  ChevronRight,
-  FolderOpen,
-  Images,
-  Search,
-  Star,
-  LogOut,
-  Settings,
-  Tags,
-  UserCircle
-} from 'lucide-react';
-import type { ComponentType, ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { FolderOpen, Images, Search, Star, LogOut, Settings, Tags, UserCircle, type LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { logout, type AuthResponse, type LibrarySummary } from '@/api';
 import type { AppView } from '@/App';
 import { Button } from '@/components/ui/button';
+import { PixiergeLogoMark } from '@/components/pixierge-logo-mark';
+import { AppRail, TopBar as DesignTopBar } from '@/design-system/patterns';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { ScanActivityButton } from '@/features/scans/scan-activity-button';
@@ -53,26 +42,9 @@ const primaryNav: NavItemDefinition[] = [
 const utilityNav: NavItemDefinition[] = [{ icon: Settings, label: 'Settings', view: 'settings' }];
 
 type NavItemDefinition = {
-  icon: ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   label: string;
   view: AppView;
-};
-
-const shellLayoutTokens = [
-  '[--shell-header-height:4rem]',
-  '[--shell-rail-width:4.5rem]',
-  '[--shell-sidebar-width:13.75rem]',
-  '[--settings-nav-width:13.75rem]'
-];
-
-const shellContentColumns = {
-  collapsed: 'grid-cols-[var(--shell-rail-width)_minmax(0,1fr)]',
-  expanded: 'grid-cols-[var(--shell-sidebar-width)_minmax(0,1fr)]'
-};
-
-const shellHeaderColumns = {
-  collapsed: 'grid-cols-[var(--shell-rail-width)_minmax(0,1fr)_auto]',
-  expanded: 'grid-cols-[var(--shell-sidebar-width)_minmax(0,1fr)_auto]'
 };
 
 export function AppFrame({
@@ -81,7 +53,6 @@ export function AppFrame({
   children,
   contentMode = 'constrained',
   currentView,
-  libraries,
   onLibrarySearchChange,
   onLibrarySearchQueryChange,
   onLogout,
@@ -91,41 +62,18 @@ export function AppFrame({
   showLibrarySearch = false,
   onViewChange
 }: AppFrameProps) {
-  const [navExpanded, setNavExpanded] = useState(false);
-  const [navAutoCollapsed, setNavAutoCollapsed] = useState(false);
-  const effectiveNavExpanded = navExpanded && !navAutoCollapsed;
   const utilityItems = canOpenSettings ? utilityNav : [];
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') {
-      setNavAutoCollapsed(false);
-      return;
-    }
-
-    const mediaQuery = window.matchMedia('(max-width: 1023px)');
-    const syncAutoCollapse = () => {
-      setNavAutoCollapsed(mediaQuery.matches);
-    };
-
-    syncAutoCollapse();
-    mediaQuery.addEventListener('change', syncAutoCollapse);
-    return () => {
-      mediaQuery.removeEventListener('change', syncAutoCollapse);
-    };
-  }, []);
 
   return (
     <TooltipProvider>
       <main
         className={cn(
-          'grid h-dvh overflow-hidden overscroll-none grid-rows-[var(--shell-header-height)_minmax(0,1fr)] bg-background text-foreground',
-          shellLayoutTokens
+          'grid h-dvh grid-rows-[var(--topbar-height)_minmax(0,1fr)] overflow-hidden overscroll-none bg-canvas text-content'
         )}
       >
-        <TopBar
+        <AppTopBar
           auth={auth}
           canOpenSettings={canOpenSettings}
-          navExpanded={effectiveNavExpanded}
           onLibrarySearchChange={onLibrarySearchChange}
           onLibrarySearchQueryChange={onLibrarySearchQueryChange}
           onLogout={onLogout}
@@ -134,60 +82,32 @@ export function AppFrame({
           searchValue={searchValue}
           showLibrarySearch={showLibrarySearch}
         />
-        <div
-          className={cn(
-            'grid min-h-0 overflow-hidden',
-            effectiveNavExpanded ? shellContentColumns.expanded : shellContentColumns.collapsed
-          )}
-        >
-          <aside className="flex min-h-0 flex-col overflow-y-auto overscroll-y-contain border-r border-border bg-sidebar px-3 py-4">
-            <nav aria-label="Primary" className="grid gap-2">
-              <NavItem
-                active={currentView === 'search'}
-                expanded={effectiveNavExpanded}
-                item={{ icon: Search, label: 'Search', view: 'search' }}
-                onSelect={() => onViewChange('search')}
-              />
-              <LibraryNav
-                active={currentView === 'libraries'}
-                expanded={effectiveNavExpanded}
-                onSelect={() => onViewChange('libraries')}
-              />
-              {primaryNav.map((item) => (
-                <NavItem
-                  active={currentView === item.view}
-                  expanded={effectiveNavExpanded}
-                  key={item.view}
-                  item={item}
-                  onSelect={() => onViewChange(item.view)}
-                />
-              ))}
-            </nav>
-
-            <div className="mt-auto grid gap-3">
-              <Separator />
-              {utilityItems.length > 0 && (
-                <nav aria-label="Utilities" className="grid gap-2">
-                  {utilityItems.map((item) => (
-                    <NavItem
-                      active={currentView === item.view}
-                      expanded={effectiveNavExpanded}
-                      key={item.view}
-                      item={item}
-                      onSelect={() => onViewChange(item.view)}
-                    />
-                  ))}
-                </nav>
-              )}
-              <RailToggle expanded={effectiveNavExpanded} onToggle={() => setNavExpanded((expanded) => !expanded)} />
-            </div>
-          </aside>
+        <div className="grid min-h-0 grid-cols-[var(--rail-width)_minmax(0,1fr)] overflow-hidden">
+          <AppRail
+            items={[
+              navItem({
+                active: currentView === 'search',
+                item: { icon: Search, label: 'Search', view: 'search' },
+                onViewChange
+              }),
+              navItem({
+                active: currentView === 'libraries',
+                item: { icon: FolderOpen, label: 'Libraries', view: 'libraries' },
+                onViewChange
+              }),
+              ...primaryNav.map((item) => navItem({ active: currentView === item.view, item, onViewChange }))
+            ]}
+            onSettingsSelect={utilityItems.length > 0 ? () => onViewChange('settings') : undefined}
+            settingsLabel={utilityItems.length > 0 ? 'Settings' : null}
+            settingsSelected={currentView === 'settings'}
+            settingsTestId="primary-nav-settings"
+          />
 
           <section className="min-h-0 min-w-0 overflow-hidden overscroll-none">
             <div
               className={cn(
-                'h-full min-h-0 overflow-hidden p-6 lg:p-8',
-                contentMode === 'constrained' ? 'mx-auto max-w-6xl' : 'max-w-none lg:px-5'
+                'h-full min-h-0 overflow-hidden p-4 md:p-6',
+                contentMode === 'constrained' ? 'mx-auto max-w-6xl' : 'max-w-none'
               )}
             >
               {children}
@@ -199,10 +119,27 @@ export function AppFrame({
   );
 }
 
-function TopBar({
+function navItem({
+  active,
+  item,
+  onViewChange
+}: {
+  active: boolean;
+  item: NavItemDefinition;
+  onViewChange: (view: AppView) => void;
+}) {
+  return {
+    icon: item.icon,
+    label: item.label,
+    selected: active,
+    testId: `primary-nav-${item.view}`,
+    onSelect: () => onViewChange(item.view)
+  };
+}
+
+function AppTopBar({
   auth,
   canOpenSettings,
-  navExpanded,
   onLibrarySearchChange,
   onLibrarySearchQueryChange,
   onLogout,
@@ -213,7 +150,6 @@ function TopBar({
 }: {
   auth: AuthResponse;
   canOpenSettings: boolean;
-  navExpanded: boolean;
   onLibrarySearchChange: (value: string) => void;
   onLibrarySearchQueryChange: (value: string) => void;
   onLogout: () => void;
@@ -228,16 +164,9 @@ function TopBar({
   }
 
   return (
-    <header
-      className={cn(
-        'grid items-center border-b border-border bg-background',
-        navExpanded ? shellHeaderColumns.expanded : shellHeaderColumns.collapsed
-      )}
-    >
-      <div className={cn('flex h-full items-center', navExpanded ? 'justify-start px-4' : 'justify-center')}>
-        <span className="text-xs font-semibold uppercase tracking-normal text-foreground">pixierge</span>
-      </div>
-      <div className="flex justify-center px-4">
+    <DesignTopBar
+      logo={<PixiergeLogoMark className="w-36 min-w-0 md:w-44" showWordmark />}
+      search={
         <StructuredSearch
           disabled={!showLibrarySearch}
           onChange={onLibrarySearchChange}
@@ -245,27 +174,30 @@ function TopBar({
           placeholder={searchPlaceholder}
           value={searchValue}
         />
-      </div>
-      <div className="flex items-center gap-2 px-4">
-        <ScanActivityButton canOpenSettings={canOpenSettings} onOpenSettings={onOpenSettings} />
-        {canOpenSettings && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label="Settings"
-                data-testid="app-shell-settings"
-                size="icon"
-                type="button"
-                variant="ghost"
-                onClick={onOpenSettings}
-              >
-                <Settings className="h-4 w-4" aria-hidden />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Settings</TooltipContent>
-          </Tooltip>
-        )}
-
+      }
+      utilityActions={
+        <>
+          <ScanActivityButton canOpenSettings={canOpenSettings} onOpenSettings={onOpenSettings} />
+          {canOpenSettings && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label="Settings"
+                  data-testid="app-shell-settings"
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                  onClick={onOpenSettings}
+                >
+                  <Settings className="h-4 w-4" aria-hidden />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Settings</TooltipContent>
+            </Tooltip>
+          )}
+        </>
+      }
+      profileMenu={
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button aria-label="Profile" data-testid="app-shell-profile" size="icon" type="button" variant="ghost">
@@ -280,81 +212,7 @@ function TopBar({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
-    </header>
-  );
-}
-
-function LibraryNav({ active, expanded, onSelect }: { active: boolean; expanded: boolean; onSelect: () => void }) {
-  return (
-    <NavItem
-      active={active}
-      expanded={expanded}
-      item={{ icon: FolderOpen, label: 'Libraries', view: 'libraries' }}
-      onSelect={onSelect}
+      }
     />
-  );
-}
-
-function NavItem({
-  active,
-  expanded,
-  item,
-  onSelect
-}: {
-  active: boolean;
-  expanded: boolean;
-  item: NavItemDefinition;
-  onSelect: () => void;
-}) {
-  const Icon = item.icon;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          aria-label={item.label}
-          aria-current={active ? 'page' : undefined}
-          className={cn(
-            'flex h-11 items-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
-            expanded ? 'w-full justify-start gap-3 px-3 text-sm font-medium' : 'w-11 justify-center',
-            active && 'bg-sidebar-accent text-sidebar-foreground'
-          )}
-          data-testid={`primary-nav-${item.view}`}
-          onClick={onSelect}
-          type="button"
-        >
-          <Icon className="h-5 w-5" aria-hidden />
-          {expanded && <span>{item.label}</span>}
-        </button>
-      </TooltipTrigger>
-      {!expanded && <TooltipContent side="right">{item.label}</TooltipContent>}
-    </Tooltip>
-  );
-}
-
-function RailToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
-  const Icon = expanded ? ChevronLeft : ChevronRight;
-  const label = expanded ? 'Collapse navigation' : 'Expand navigation';
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          aria-label={label}
-          className={cn(
-            'flex h-11 items-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
-            expanded ? 'w-full justify-start gap-3 px-3 text-sm font-medium' : 'w-11 justify-center'
-          )}
-          data-testid="primary-nav-toggle"
-          onClick={onToggle}
-          type="button"
-        >
-          <Icon className="h-5 w-5" aria-hidden />
-          {expanded && <span>Collapse</span>}
-        </button>
-      </TooltipTrigger>
-      {!expanded && <TooltipContent side="right">Expand navigation</TooltipContent>}
-    </Tooltip>
   );
 }

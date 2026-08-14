@@ -334,7 +334,7 @@ describe('AssetTile starred', () => {
 });
 
 describe('AssetGrid', () => {
-  it('keeps tracks at the selected tile size instead of stretching sparse rows', () => {
+  it('keeps a fixed row height while sizing tile width from the asset aspect ratio', () => {
     render(
       <AssetGrid
         assetTileSize={ASSET_TILE_SIZE_OPTIONS[DEFAULT_ASSET_TILE_SIZE_INDEX]}
@@ -350,16 +350,19 @@ describe('AssetGrid', () => {
     );
 
     const grid = screen.getByLabelText('Asset grid');
-    expect(grid.style.gridTemplateColumns).toContain('auto-fill');
-    expect(grid.style.gridTemplateColumns).toContain('var(--asset-grid-tile-size)');
-    expect(grid.style.gridTemplateColumns).not.toContain('1fr');
-    expect(grid.style.getPropertyValue('--asset-grid-tile-size')).toBe(
-      ASSET_TILE_SIZE_OPTIONS[DEFAULT_ASSET_TILE_SIZE_INDEX].minWidth
+    const tile = screen.getByTestId('asset-tile-asset-1');
+    expect(grid).toHaveClass('flex', 'flex-wrap');
+    expect(grid.style.getPropertyValue('--asset-grid-tile-height')).toBe(
+      ASSET_TILE_SIZE_OPTIONS[DEFAULT_ASSET_TILE_SIZE_INDEX].rowHeight
     );
-    expect(screen.getByTestId('asset-tile-asset-1')).toBeInTheDocument();
+    expect(tile).toHaveStyle({ '--asset-tile-ratio': '1.25' });
+    expect(tile).toHaveStyle({
+      height: 'var(--asset-grid-tile-height)',
+      width: 'min(100%, calc(var(--asset-grid-tile-height) * var(--asset-tile-ratio)))'
+    });
   });
 
-  it('uses column-count track sizes for the last three slider steps', () => {
+  it('uses larger fixed row heights for the last three slider steps', () => {
     const { rerender } = render(
       <AssetGrid
         assetTileSize={ASSET_TILE_SIZE_OPTIONS[3]}
@@ -374,12 +377,12 @@ describe('AssetGrid', () => {
       />
     );
 
-    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-size')).toBe(
-      ASSET_TILE_SIZE_OPTIONS[3].minWidth
+    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-height')).toBe(
+      ASSET_TILE_SIZE_OPTIONS[3].rowHeight
     );
-    expect(ASSET_TILE_SIZE_OPTIONS[3].minWidth).toContain('/ 3)');
-    expect(ASSET_TILE_SIZE_OPTIONS[4].minWidth).toContain('/ 2)');
-    expect(ASSET_TILE_SIZE_OPTIONS[5].minWidth).toBe('100%');
+    expect(ASSET_TILE_SIZE_OPTIONS[3].rowHeight).toBe('14rem');
+    expect(ASSET_TILE_SIZE_OPTIONS[4].rowHeight).toBe('20rem');
+    expect(ASSET_TILE_SIZE_OPTIONS[5].rowHeight).toBe('min(32rem, 70vh)');
 
     rerender(
       <AssetGrid
@@ -394,12 +397,12 @@ describe('AssetGrid', () => {
         ]}
       />
     );
-    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-size')).toBe(
-      ASSET_TILE_SIZE_OPTIONS[4].minWidth
+    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-height')).toBe(
+      ASSET_TILE_SIZE_OPTIONS[4].rowHeight
     );
   });
 
-  it('uses a full-width track at the maximum size setting', () => {
+  it('uses the maximum fixed row height at the maximum size setting', () => {
     render(
       <AssetGrid
         assetTileSize={ASSET_TILE_SIZE_OPTIONS[MAX_ASSET_TILE_SIZE_INDEX]}
@@ -414,7 +417,29 @@ describe('AssetGrid', () => {
       />
     );
 
-    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-size')).toBe('100%');
+    expect(screen.getByLabelText('Asset grid').style.getPropertyValue('--asset-grid-tile-height')).toBe(
+      'min(32rem, 70vh)'
+    );
+  });
+
+  it('falls back to a four-by-three tile ratio when dimensions are unavailable', () => {
+    render(
+      <AssetGrid
+        assetTileSize={ASSET_TILE_SIZE_OPTIONS[DEFAULT_ASSET_TILE_SIZE_INDEX]}
+        onOpen={vi.fn()}
+        sections={[
+          {
+            folderPath: '/photos/2017-09-01',
+            folderName: '2017-09-01 edited',
+            assets: [{ ...asset, width: null, height: null }]
+          }
+        ]}
+      />
+    );
+
+    expect(screen.getByTestId('asset-tile-asset-1')).toHaveStyle({
+      '--asset-tile-ratio': `${4 / 3}`
+    });
   });
 
   it('shows an item count beside each section title', () => {

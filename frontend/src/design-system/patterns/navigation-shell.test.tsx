@@ -2,9 +2,17 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Folder, Search } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
+import { PixiergeLogoMark } from '@/components/pixierge-logo-mark';
 import { AppRail, ContextSidebar, TopBar } from './index';
 
 describe('TopBar', () => {
+  it('keeps the Pixierge wordmark at compact app-shell scale', () => {
+    render(<PixiergeLogoMark showWordmark />);
+
+    expect(screen.getByText('PIXIERGE')).toHaveClass('text-lg');
+    expect(document.querySelector('img')).toHaveClass('h-10');
+  });
+
   it('keeps global search centered with adjacent filter, notifications, and profile controls', async () => {
     const user = userEvent.setup();
     const onFilterClick = vi.fn();
@@ -53,11 +61,15 @@ describe('AppRail', () => {
     const nav = screen.getByRole('navigation', { name: 'Primary' });
     const selected = within(nav).getByRole('button', { name: 'Library' });
     const settings = within(nav).getByRole('button', { name: 'Settings' });
+    const selectedLabel = within(selected).getByText('Library');
 
     expect(selected).toHaveAttribute('aria-current', 'page');
-    expect(selected).toHaveClass('h-[3.75rem]', 'bg-surface-active');
-    expect(selected.querySelector('.absolute')).toHaveClass('top-1', 'bottom-1', 'bg-info');
-    expect(settings).toHaveClass('mt-auto', 'h-[3.75rem]', 'shrink-0');
+    expect(selected).toHaveClass('h-14', 'w-full', 'px-1.5', 'bg-surface-active');
+    expect(nav).toHaveClass('px-1');
+    expect(selected.querySelector('.absolute')).toHaveClass('top-2', 'bottom-2', 'left-1', 'bg-info');
+    expect(selectedLabel).toHaveClass('w-full', 'truncate', 'text-center');
+    expect(selectedLabel).toHaveStyle({ fontSize: '0.6875rem', lineHeight: '0.8125rem' });
+    expect(settings).toHaveClass('mt-auto', 'h-14', 'shrink-0');
   });
 });
 

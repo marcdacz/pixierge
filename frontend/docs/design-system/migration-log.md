@@ -91,6 +91,31 @@ Validation:
 - Targeted Prettier check for the pattern files, updated Storybook stories, and design-system docs passes.
 - Built Storybook north-star story was reviewed through local desktop and mobile screenshots; mobile topbar and bulk-action-bar responsive sizing were adjusted during review.
 
+### Phase 4 App Frame And Photo Browser Slice
+
+- Migrated the production `AppFrame` shell to compose the reusable `TopBar` and `AppRail` patterns.
+- Tuned the shared Pixierge top-bar logo to a quieter app-shell scale: 40px mark, 18px wordmark, and narrower production/Storybook logo slot widths.
+- Replaced the old expandable primary rail with the approved permanent compact icon-plus-label rail while preserving existing `primary-nav-*` navigation test IDs.
+- Tightened permanent rail labels to 10px with truncation and inset selected indicators so long labels like Settings and Libraries do not collide with rail affordances.
+- Preserved production shell behavior for structured search, scan activity, settings access, profile menu, logout, auth-gated settings visibility, and route changes.
+- Extended shell patterns with production slots and test hooks instead of duplicating app-specific markup in the route shell.
+- Migrated `PhotoBrowser` to the reusable `PageHeader`, `ThumbnailSizeControl`, and `BulkActionBar` patterns while preserving selection, context-menu actions, assignment picker entry points, infinite-load sentinel behavior, and asset-detail focus mode boundaries.
+- Retokenized the production media canvas and tile selected/focus states around semantic surface, content, focus, and status utilities.
+- Updated production and north-star media grids to use justified rows: tile widths are derived from original asset aspect ratios, complete rows vary height around the slider target to fill the available width, and final widow rows remain relaxed instead of stretching awkwardly. Unknown dimensions fall back to 4:3.
+- Replaced the remaining settings layout dependency on the retired local `--settings-nav-width` variable with the documented `--settings-sidebar-width` token after E2E caught sidebar overlap.
+- Added deterministic production `PhotoBrowser` screen stories for populated, loading, empty, error, selected asset, and bulk selection states.
+- Reviewed and updated affected Playwright visual baselines for scan activity, photo metadata, browse library, and settings.
+
+Validation:
+
+- `npm run test:unit` passes.
+- `npm run build` passes.
+- `npm run build-storybook` passes.
+- Targeted ESLint for migrated shell/pattern/story files passes.
+- `npm run test:e2e -- tests/e2e/admin-shell.spec.ts` passes.
+- `npm run test:vr -- tests/visual/shell.visual.spec.ts` passes after reviewed snapshot updates.
+
 ## Temporary Exceptions
 
-None recorded yet.
+- App-frame/library migration intentionally leaves library/search/albums/tags sidebars, structured filters, settings pages, and photo focus metadata styling on their current component boundaries for later Phase 4 slices.
+- Targeted ESLint for migrated production boundary files still reports pre-existing React hook rule findings in `photo-browser.tsx`, `photo-grid.tsx`, and `settings-page.tsx`; this slice did not weaken or suppress those rules.

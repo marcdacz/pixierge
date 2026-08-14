@@ -6,6 +6,10 @@ export type ThumbnailSizeControlProps = {
   label?: string;
   value?: number;
   defaultValue?: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  valueText?: string;
   onChange?: (value: number) => void;
   onFullscreen?: () => void;
   className?: string;
@@ -16,9 +20,13 @@ export function ThumbnailSizeControl({
   defaultValue = 48,
   id = 'thumbnail-size',
   label = 'Zoom media grid',
+  max = 100,
+  min = 0,
   onChange,
   onFullscreen,
-  value
+  step = 1,
+  value,
+  valueText
 }: ThumbnailSizeControlProps) {
   return (
     <div
@@ -34,21 +42,28 @@ export function ThumbnailSizeControl({
       <input
         className="h-1 w-28 accent-info"
         defaultValue={value === undefined ? defaultValue : undefined}
+        aria-valuemax={max}
+        aria-valuemin={min}
+        aria-valuenow={value}
+        aria-valuetext={valueText}
         id={id}
-        max="100"
-        min="0"
+        max={max}
+        min={min}
         onChange={(event) => onChange?.(event.currentTarget.valueAsNumber)}
+        step={step}
         type="range"
         value={value}
       />
-      <button
-        aria-label="Fullscreen"
-        className="grid h-8 w-8 place-items-center rounded-md transition-colors hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-        onClick={onFullscreen}
-        type="button"
-      >
-        <Maximize2 aria-hidden="true" className="h-4 w-4" />
-      </button>
+      {onFullscreen ? (
+        <button
+          aria-label="Fullscreen"
+          className="grid h-8 w-8 place-items-center rounded-md transition-colors hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          onClick={onFullscreen}
+          type="button"
+        >
+          <Maximize2 aria-hidden="true" className="h-4 w-4" />
+        </button>
+      ) : null}
     </div>
   );
 }

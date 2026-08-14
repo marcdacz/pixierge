@@ -27,7 +27,6 @@ test('admin setup, empty library, settings, and profile logout', async ({ page }
   await expect(page.getByText('/photos/family')).toBeVisible();
   await expect(admin.libraryNavItem(/Family Photos\s+1 source/)).toBeVisible();
 
-  await admin.togglePrimaryNavigation();
   await expect(page.getByRole('navigation', { name: 'Primary' }).getByText('Family Photos')).toBeHidden();
 
   await admin.openPrimary('libraries');

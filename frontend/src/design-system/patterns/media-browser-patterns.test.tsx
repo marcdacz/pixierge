@@ -18,9 +18,18 @@ const mediaGroups: MediaGroup[] = [
     date: 'May 24, 2025',
     count: '3 items',
     assets: [
-      { label: 'Lighthouse', background: 'linear-gradient(135deg, #f9a8d4, #67e8f9)', mode: 'wide' },
-      { label: 'Alpine lake', background: 'linear-gradient(135deg, #fde68a, #0e7490)' },
-      { label: 'Selected clip', background: 'linear-gradient(135deg, #111827, #2563eb)', mode: 'selected' }
+      {
+        label: 'Lighthouse',
+        background: 'linear-gradient(135deg, #f9a8d4, #67e8f9)',
+        aspectRatio: 16 / 9
+      },
+      { label: 'Portrait', background: 'linear-gradient(135deg, #fde68a, #0e7490)', aspectRatio: 2 / 3 },
+      {
+        label: 'Selected clip',
+        background: 'linear-gradient(135deg, #111827, #2563eb)',
+        aspectRatio: 4 / 3,
+        mode: 'selected'
+      }
     ]
   }
 ];
@@ -64,7 +73,14 @@ describe('media browser patterns', () => {
     );
 
     const selectedTile = screen.getByRole('img', { name: 'Selected clip' });
+    const landscapeTile = screen.getByRole('img', { name: 'Lighthouse' });
+    const portraitTile = screen.getByRole('img', { name: 'Portrait' });
     expect(selectedTile).toHaveClass('ring-2', 'ring-focus');
+    expect(landscapeTile).toHaveStyle({ '--media-tile-ratio': `${16 / 9}` });
+    expect(portraitTile).toHaveStyle({ '--media-tile-ratio': `${2 / 3}` });
+    expect(landscapeTile).toHaveStyle({
+      width: 'min(100%, calc(var(--media-row-height) * var(--media-tile-ratio)))'
+    });
     expect(within(selectedTile).getByRole('button', { name: 'Asset actions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'May' })).toHaveAttribute('aria-current', 'date');
   });

@@ -41,7 +41,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const railItems = [
-  { icon: Folder, label: 'Library', selected: true },
+  { icon: Folder, label: 'Libraries', selected: true },
   { icon: Search, label: 'Search' },
   { icon: Star, label: 'Starred' },
   { icon: Images, label: 'Albums' },
@@ -75,13 +75,22 @@ const mediaGroups: MediaGroup[] = [
       {
         label: 'Lighthouse',
         background: 'linear-gradient(135deg, #f9a8d4 0%, #67e8f9 42%, #1e1b4b 100%)',
-        mode: 'wide'
+        aspectRatio: 16 / 9
       },
-      { label: 'Alpine lake', background: 'linear-gradient(135deg, #fde68a 0%, #0e7490 48%, #312e81 100%)' },
-      { label: 'Old street', background: 'linear-gradient(135deg, #fbbf24 0%, #38bdf8 42%, #581c87 100%)' },
+      {
+        label: 'Alpine lake',
+        background: 'linear-gradient(135deg, #fde68a 0%, #0e7490 48%, #312e81 100%)',
+        aspectRatio: 3 / 2
+      },
+      {
+        label: 'Old street',
+        background: 'linear-gradient(135deg, #fbbf24 0%, #38bdf8 42%, #581c87 100%)',
+        aspectRatio: 2 / 3
+      },
       {
         label: 'Selected clip',
         background: 'linear-gradient(135deg, #111827 0%, #2563eb 52%, #7c2d12 100%)',
+        aspectRatio: 4 / 3,
         mode: 'selected'
       }
     ]
@@ -115,7 +124,7 @@ export const ShellNavigation: Story = {
   render: () => (
     <div className="grid h-screen grid-rows-[var(--topbar-height)_1fr] overflow-hidden bg-canvas font-sans text-content">
       <TopBar
-        logo={<PixiergeLogoMark className="w-40 min-w-0 md:w-52" showWordmark />}
+        logo={<PixiergeLogoMark className="w-36 min-w-0 md:w-44" showWordmark />}
         profile={{ initials: 'JL', name: 'Jessica Lau' }}
         searchLabel="Search library"
         searchPlaceholder='Search "mountains"'

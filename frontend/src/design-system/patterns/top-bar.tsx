@@ -5,8 +5,11 @@ import { cn } from '@/lib/utils';
 
 export type TopBarProps = {
   logo: ReactNode;
+  search?: ReactNode;
   searchLabel?: string;
   searchPlaceholder?: string;
+  utilityActions?: ReactNode;
+  profileMenu?: ReactNode;
   profile?: {
     name: string;
     initials: string;
@@ -23,9 +26,12 @@ export function TopBar({
   onFilterClick,
   onNotificationsClick,
   onProfileClick,
+  profileMenu,
   profile,
+  search,
   searchLabel = 'Search library',
-  searchPlaceholder = 'Search'
+  searchPlaceholder = 'Search',
+  utilityActions
 }: TopBarProps) {
   return (
     <header
@@ -36,27 +42,33 @@ export function TopBar({
     >
       {logo}
       <div className="flex min-w-0 items-center gap-2">
-        <label className="flex h-11 min-w-0 flex-1 items-center gap-3 rounded-lg border border-focus bg-surface-sunken px-4 text-sm text-content-muted">
-          <Search aria-hidden="true" className="h-5 w-5 shrink-0" />
-          <input
-            aria-label={searchLabel}
-            className="min-w-0 flex-1 bg-transparent text-content outline-none"
-            placeholder={searchPlaceholder}
-          />
-        </label>
-        <button
-          aria-label="Search filters"
-          className="hidden h-10 w-10 shrink-0 place-items-center rounded-lg border border-border bg-surface-raised text-content-muted transition-colors hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus sm:grid"
-          onClick={onFilterClick}
-          type="button"
-        >
-          <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
-        </button>
+        {search ?? (
+          <>
+            <label className="flex h-11 min-w-0 flex-1 items-center gap-3 rounded-lg border border-focus bg-surface-sunken px-4 text-sm text-content-muted">
+              <Search aria-hidden="true" className="h-5 w-5 shrink-0" />
+              <input
+                aria-label={searchLabel}
+                className="min-w-0 flex-1 bg-transparent text-content outline-none"
+                placeholder={searchPlaceholder}
+              />
+            </label>
+            <button
+              aria-label="Search filters"
+              className="hidden h-10 w-10 shrink-0 place-items-center rounded-lg border border-border bg-surface-raised text-content-muted transition-colors hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus sm:grid"
+              onClick={onFilterClick}
+              type="button"
+            >
+              <SlidersHorizontal aria-hidden="true" className="h-5 w-5" />
+            </button>
+          </>
+        )}
       </div>
       <div className="flex min-w-0 items-center justify-end gap-3">
+        {utilityActions}
         <Button variant="ghost" size="icon" aria-label="Notifications" onClick={onNotificationsClick}>
           <Bell aria-hidden="true" className="h-5 w-5" />
         </Button>
+        {profileMenu}
         {profile ? (
           <button
             className="hidden h-11 items-center gap-3 rounded-lg pl-2 pr-0 text-sm font-semibold text-content transition-colors hover:text-content-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus sm:flex"

@@ -41,7 +41,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const railItems = [
-  { icon: Folder, label: 'Library', selected: true },
+  { icon: Folder, label: 'Libraries', selected: true },
   { icon: Search, label: 'Search' },
   { icon: Star, label: 'Starred' },
   { icon: Images, label: 'Albums' },
@@ -91,15 +91,32 @@ const assetGroups: MediaGroup[] = [
       {
         label: 'Lighthouse',
         background: 'linear-gradient(135deg, #f9a8d4 0%, #67e8f9 42%, #1e1b4b 100%)',
-        mode: 'wide'
+        aspectRatio: 16 / 9
       },
-      { label: 'Alpine lake', background: 'linear-gradient(135deg, #fde68a 0%, #0e7490 48%, #312e81 100%)' },
-      { label: 'Old street', background: 'linear-gradient(135deg, #fbbf24 0%, #38bdf8 42%, #581c87 100%)' },
-      { label: 'Forest', background: 'linear-gradient(135deg, #bbf7d0 0%, #0f766e 46%, #111827 100%)' },
-      { label: 'Flowers', background: 'linear-gradient(135deg, #fecdd3 0%, #fb7185 45%, #14532d 100%)' },
+      {
+        label: 'Alpine lake',
+        background: 'linear-gradient(135deg, #fde68a 0%, #0e7490 48%, #312e81 100%)',
+        aspectRatio: 3 / 2
+      },
+      {
+        label: 'Old street',
+        background: 'linear-gradient(135deg, #fbbf24 0%, #38bdf8 42%, #581c87 100%)',
+        aspectRatio: 2 / 3
+      },
+      {
+        label: 'Forest',
+        background: 'linear-gradient(135deg, #bbf7d0 0%, #0f766e 46%, #111827 100%)',
+        aspectRatio: 4 / 5
+      },
+      {
+        label: 'Flowers',
+        background: 'linear-gradient(135deg, #fecdd3 0%, #fb7185 45%, #14532d 100%)',
+        aspectRatio: 1
+      },
       {
         label: 'Selected clip',
         background: 'linear-gradient(135deg, #111827 0%, #2563eb 52%, #7c2d12 100%)',
+        aspectRatio: 4 / 3,
         mode: 'selected'
       }
     ]
@@ -108,19 +125,51 @@ const assetGroups: MediaGroup[] = [
     date: 'May 23, 2025',
     count: '18 items',
     assets: [
-      { label: 'Road bend', background: 'linear-gradient(135deg, #84cc16 0%, #164e63 52%, #0f172a 100%)' },
-      { label: 'Concert', background: 'linear-gradient(135deg, #22d3ee 0%, #4f46e5 42%, #0f172a 100%)' },
-      { label: 'Ridge', background: 'linear-gradient(135deg, #fed7aa 0%, #92400e 48%, #111827 100%)' },
-      { label: 'Kayak', background: 'linear-gradient(135deg, #38bdf8 0%, #14b8a6 48%, #b91c1c 100%)' },
-      { label: 'Cabin', background: 'linear-gradient(135deg, #166534 0%, #713f12 52%, #0f172a 100%)' },
-      { label: 'Fog pier', background: 'linear-gradient(135deg, #bae6fd 0%, #1e3a8a 54%, #0f172a 100%)', mode: 'wide' },
-      { label: 'Dinner', background: 'linear-gradient(135deg, #fed7aa 0%, #854d0e 46%, #111827 100%)' },
+      {
+        label: 'Road bend',
+        background: 'linear-gradient(135deg, #84cc16 0%, #164e63 52%, #0f172a 100%)',
+        aspectRatio: 3 / 2
+      },
+      {
+        label: 'Concert',
+        background: 'linear-gradient(135deg, #22d3ee 0%, #4f46e5 42%, #0f172a 100%)',
+        aspectRatio: 4 / 3
+      },
+      {
+        label: 'Ridge',
+        background: 'linear-gradient(135deg, #fed7aa 0%, #92400e 48%, #111827 100%)',
+        aspectRatio: 2 / 3
+      },
+      {
+        label: 'Kayak',
+        background: 'linear-gradient(135deg, #38bdf8 0%, #14b8a6 48%, #b91c1c 100%)',
+        aspectRatio: 16 / 9
+      },
+      {
+        label: 'Cabin',
+        background: 'linear-gradient(135deg, #166534 0%, #713f12 52%, #0f172a 100%)',
+        aspectRatio: 1
+      },
+      {
+        label: 'Fog pier',
+        background: 'linear-gradient(135deg, #bae6fd 0%, #1e3a8a 54%, #0f172a 100%)',
+        aspectRatio: 2
+      },
+      {
+        label: 'Dinner',
+        background: 'linear-gradient(135deg, #fed7aa 0%, #854d0e 46%, #111827 100%)',
+        aspectRatio: 5 / 4
+      },
       {
         label: 'Hill country',
         background: 'linear-gradient(135deg, #fef3c7 0%, #84cc16 48%, #166534 100%)',
-        mode: 'wide'
+        aspectRatio: 16 / 9
       },
-      { label: 'City', background: 'linear-gradient(135deg, #0ea5e9 0%, #172554 50%, #020617 100%)' }
+      {
+        label: 'City',
+        background: 'linear-gradient(135deg, #0ea5e9 0%, #172554 50%, #020617 100%)',
+        aspectRatio: 3 / 4
+      }
     ]
   }
 ];
@@ -164,7 +213,7 @@ export function LibraryNorthStar({ theme }: { theme?: 'light' }) {
       data-theme={theme}
     >
       <TopBar
-        logo={<PixiergeLogoMark className="w-40 min-w-0 md:w-52" showWordmark />}
+        logo={<PixiergeLogoMark className="w-36 min-w-0 md:w-44" showWordmark />}
         profile={{ initials: 'JL', name: 'Jessica Lau' }}
         searchLabel="Search library"
         searchPlaceholder='Search "mountains"'

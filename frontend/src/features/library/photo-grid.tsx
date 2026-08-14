@@ -23,7 +23,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BROWSE_LAYOUT_HEIGHT_CLASS } from '@/features/browse/browse-sidebar';
 import { InlineEditableTitle } from '@/features/library/inline-editable-title';
+import { createJustifiedRows } from '@/lib/justified-layout';
 import { cn } from '@/lib/utils';
+import { useMeasuredWidth } from '@/lib/use-measured-width';
 
 export const ASSET_AVAILABILITY_MISSING = 'missing';
 export const ASSET_DUPLICATE_BASE_COUNT = 1;
@@ -44,22 +46,14 @@ function clampAssetFocusZoom(value: number) {
 const RANGE_SLIDER_WIDTH_CLASS = 'w-28';
 /** Matches Tailwind `gap-1`; used by column-count tile sizes below. */
 export const ASSET_GRID_GAP = '0.25rem';
+const ASSET_GRID_GAP_PX = 4;
 export const ASSET_TILE_SIZE_OPTIONS = [
-  { key: 'tiny', minWidth: '5.5rem', imageSource: 'grid' },
-  { key: 'compact', minWidth: '7rem', imageSource: 'grid' },
-  { key: 'comfortable', minWidth: '11rem', imageSource: 'grid' },
-  // Last three steps target ~3 / ~2 / 1 columns across the browse pane.
-  {
-    key: 'large',
-    minWidth: `calc((100% - 2 * ${ASSET_GRID_GAP}) / 3)`,
-    imageSource: 'preview'
-  },
-  {
-    key: 'xlarge',
-    minWidth: `calc((100% - ${ASSET_GRID_GAP}) / 2)`,
-    imageSource: 'preview'
-  },
-  { key: 'huge', minWidth: '100%', imageSource: 'preview' }
+  { key: 'tiny', rowHeight: '5.5rem', targetRowHeight: 88, imageSource: 'grid' },
+  { key: 'compact', rowHeight: '7rem', targetRowHeight: 112, imageSource: 'grid' },
+  { key: 'comfortable', rowHeight: '11rem', targetRowHeight: 176, imageSource: 'grid' },
+  { key: 'large', rowHeight: '14rem', targetRowHeight: 224, imageSource: 'preview' },
+  { key: 'xlarge', rowHeight: '20rem', targetRowHeight: 320, imageSource: 'preview' },
+  { key: 'huge', rowHeight: 'min(32rem, 70vh)', targetRowHeight: 512, imageSource: 'preview' }
 ] as const;
 export const DEFAULT_ASSET_TILE_SIZE_INDEX = 2;
 export const MAX_ASSET_TILE_SIZE_INDEX = ASSET_TILE_SIZE_OPTIONS.length - 1;
@@ -100,6 +94,8 @@ const ASSET_PLACEHOLDER_LIGHTNESS_RANGE_PERCENT = 18;
 
 export type AssetTileSize = (typeof ASSET_TILE_SIZE_OPTIONS)[number];
 
+const FALLBACK_ASSET_ASPECT_RATIO = 4 / 3;
+
 export function AssetGrid({
   assetTileSize,
   onClearSelection,
@@ -132,12 +128,13 @@ export function AssetGrid({
 }) {
   const gridStyle = assetGridStyle(assetTileSize);
 
-  function renderAssetTile(asset: AssetSummary) {
+  function renderAssetTile(asset: AssetSummary, layoutStyle?: CSSProperties) {
     return (
       <AssetTile
         asset={asset}
         imageSource={assetTileSize.imageSource}
         key={asset.id}
+        layoutStyle={layoutStyle}
         onOpen={() => onOpen(asset.id)}
         onSelectClick={
           onSelectClick
@@ -153,24 +150,21 @@ export function AssetGrid({
 
   if (!showSectionHeaders) {
     return (
-      <div
-        aria-label="Asset grid"
-        className="grid"
-        onClick={(event) => {
-          if (event.target === event.currentTarget) onClearSelection?.();
-        }}
-        style={gridStyle}
-      >
-        {sections.flatMap((section) => section.assets.map(renderAssetTile))}
-      </div>
+      <AssetGridSurface
+        assetTileSize={assetTileSize}
+        assets={sections.flatMap((section) => section.assets)}
+        gridStyle={gridStyle}
+        onClearSelection={onClearSelection}
+        renderAssetTile={renderAssetTile}
+      />
     );
   }
 
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-6">
       {sections.map((section) => (
-        <section className="grid gap-2" key={section.folderPath}>
-          <div className="bg-background py-1">
+        <section className="grid gap-3" key={section.folderPath}>
+          <div className="py-1">
             <div className="flex min-w-0 flex-wrap items-baseline gap-2">
               {onRenameSection ? (
                 <InlineEditableTitle
@@ -180,23 +174,80 @@ export function AssetGrid({
                   value={section.folderName}
                 />
               ) : (
-                <h3 className="text-lg font-semibold text-foreground">{section.folderName}</h3>
+                <h3 className="text-base font-semibold text-content">{section.folderName}</h3>
               )}
-              <span className="shrink-0 text-sm text-muted-foreground">{formatItemCount(section.assets.length)}</span>
+              <span className="shrink-0 text-sm text-content-muted">{formatItemCount(section.assets.length)}</span>
             </div>
           </div>
-          <div
-            aria-label="Asset grid"
-            className="grid"
-            onClick={(event) => {
-              if (event.target === event.currentTarget) onClearSelection?.();
-            }}
-            style={gridStyle}
-          >
-            {section.assets.map(renderAssetTile)}
-          </div>
+          <AssetGridSurface
+            assetTileSize={assetTileSize}
+            assets={section.assets}
+            gridStyle={gridStyle}
+            onClearSelection={onClearSelection}
+            renderAssetTile={renderAssetTile}
+          />
         </section>
       ))}
+    </div>
+  );
+}
+
+function AssetGridSurface({
+  assetTileSize,
+  assets,
+  gridStyle,
+  onClearSelection,
+  renderAssetTile
+}: {
+  assetTileSize: AssetTileSize;
+  assets: AssetSummary[];
+  gridStyle: CSSProperties;
+  onClearSelection?: () => void;
+  renderAssetTile: (asset: AssetSummary, layoutStyle?: CSSProperties) => ReactNode;
+}) {
+  const [gridRef, containerWidth] = useMeasuredWidth<HTMLDivElement>();
+  const rows =
+    containerWidth > 0
+      ? createJustifiedRows(
+          assets.map((asset) => ({ aspectRatio: assetAspectRatio(asset), item: asset })),
+          {
+            containerWidth,
+            gap: ASSET_GRID_GAP_PX,
+            targetRowHeight: assetTileSize.targetRowHeight
+          }
+        )
+      : [];
+
+  return (
+    <div
+      aria-label="Asset grid"
+      className={cn(rows.length > 0 ? 'grid gap-1' : 'flex flex-wrap content-start items-start')}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClearSelection?.();
+      }}
+      ref={gridRef}
+      style={gridStyle}
+    >
+      {rows.length > 0
+        ? rows.map((row, rowIndex) => (
+            <div
+              className="flex gap-1"
+              data-asset-row-complete={row.complete}
+              key={`${rowIndex}-${row.items[0]?.item.id ?? 'empty'}`}
+              onClick={(event) => {
+                if (event.target === event.currentTarget) onClearSelection?.();
+              }}
+              style={{ height: row.height }}
+            >
+              {row.items.map((entry) =>
+                renderAssetTile(entry.item, {
+                  height: `${entry.height}px`,
+                  width: `${entry.width}px`
+                })
+              )}
+            </div>
+          ))
+        : assets.map((asset) => renderAssetTile(asset))}
     </div>
   );
 }
@@ -204,7 +255,7 @@ export function AssetGrid({
 export function ThumbnailSizeControls({ onChange, value }: { onChange: (value: number) => void; value: number }) {
   return (
     <div className="flex h-10 items-center gap-1.5" title="Thumbnail size">
-      <Image aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+      <Image aria-hidden className="size-3 shrink-0 text-content-muted" />
       <input
         aria-label="Thumbnail size"
         aria-valuemax={MAX_ASSET_TILE_SIZE_INDEX}
@@ -212,8 +263,8 @@ export function ThumbnailSizeControls({ onChange, value }: { onChange: (value: n
         aria-valuenow={value}
         aria-valuetext={ASSET_TILE_SIZE_OPTIONS[value]?.key}
         className={cn(
-          'h-1.5 cursor-pointer appearance-none rounded-full bg-muted accent-foreground',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          'h-1.5 cursor-pointer appearance-none rounded-full bg-surface-hover accent-info',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
           RANGE_SLIDER_WIDTH_CLASS
         )}
         max={MAX_ASSET_TILE_SIZE_INDEX}
@@ -223,7 +274,7 @@ export function ThumbnailSizeControls({ onChange, value }: { onChange: (value: n
         type="range"
         value={value}
       />
-      <Image aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+      <Image aria-hidden className="size-4 shrink-0 text-content-muted" />
     </div>
   );
 }
@@ -258,18 +309,15 @@ function AssetFocusZoomControls({ onChange, value }: { onChange: (value: number)
 function assetGridStyle(tileSize: AssetTileSize): CSSProperties {
   return {
     '--asset-grid-gap': ASSET_GRID_GAP,
-    '--asset-grid-tile-size': tileSize.minWidth,
-    gap: 'var(--asset-grid-gap)',
-    // Cap tracks at the selected tile size so sparse sections (e.g. one photo) do not stretch.
-    // min(100%, …) still lets tiles shrink on narrow panes.
-    gridTemplateColumns:
-      'repeat(auto-fill, minmax(min(100%, var(--asset-grid-tile-size)), var(--asset-grid-tile-size)))'
+    '--asset-grid-tile-height': tileSize.rowHeight,
+    gap: 'var(--asset-grid-gap)'
   } as CSSProperties;
 }
 
 export function AssetTile({
   asset,
   imageSource,
+  layoutStyle,
   onContextMenu,
   onDragStart,
   onOpen,
@@ -278,6 +326,7 @@ export function AssetTile({
 }: {
   asset: AssetSummary;
   imageSource: AssetTileSize['imageSource'];
+  layoutStyle?: CSSProperties;
   onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void;
   onDragStart?: (event: DragEvent<HTMLButtonElement>) => void;
   onOpen: () => void;
@@ -291,6 +340,7 @@ export function AssetTile({
   const showThumbnail = asset.previewable && asset.identityStatus !== ASSET_IDENTITY_PENDING && !thumbnailFailed;
   const placeholderStyle = assetPlaceholderStyle(asset);
   const thumbnailCacheKey = asset.thumbnailCacheKey;
+  const aspectRatio = assetAspectRatio(asset);
   const sharpSrc =
     imageSource === 'preview'
       ? assetPreviewUrl(asset.id, thumbnailCacheKey)
@@ -312,7 +362,11 @@ export function AssetTile({
     <button
       aria-label={selected ? `Selected ${asset.fileName}` : `Select ${asset.fileName}`}
       aria-selected={selected}
-      className="group relative aspect-[4/3] min-w-0 overflow-hidden bg-muted text-left"
+      className={cn(
+        'group relative min-w-0 overflow-hidden rounded-xs bg-surface text-left transition-[box-shadow,transform]',
+        'hover:ring-1 hover:ring-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+        selected && 'ring-2 ring-focus'
+      )}
       data-asset-id={asset.id}
       data-testid={`asset-tile-${asset.id}`}
       draggable={Boolean(onDragStart)}
@@ -332,6 +386,14 @@ export function AssetTile({
           onOpen();
         }
       }}
+      style={
+        {
+          '--asset-tile-ratio': aspectRatio,
+          height: 'var(--asset-grid-tile-height)',
+          width: 'min(100%, calc(var(--asset-grid-tile-height) * var(--asset-tile-ratio)))',
+          ...layoutStyle
+        } as CSSProperties
+      }
       type="button"
     >
       <div
@@ -372,22 +434,20 @@ export function AssetTile({
         </>
       ) : (
         <div className="grid h-full place-items-center">
-          <FileImage className="h-8 w-8 text-muted-foreground" aria-hidden />
+          <FileImage className="h-8 w-8 text-content-muted" aria-hidden />
         </div>
       )}
-      {selected && (
-        <div aria-hidden className="pointer-events-none absolute inset-0 border-2 border-muted-foreground" />
-      )}
+      {selected && <div aria-hidden className="pointer-events-none absolute inset-0 bg-info/10" />}
       {asset.starred && (
         <span
           aria-label="Starred"
-          className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] grid h-6 w-6 place-items-center rounded-full bg-background/80 text-foreground shadow-sm"
+          className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] grid h-6 w-6 place-items-center rounded-full bg-surface-raised/85 text-content shadow-sm"
         >
           <Star aria-hidden className="h-3.5 w-3.5 fill-current" />
         </span>
       )}
-      <div className="absolute inset-x-0 bottom-0 z-[2] flex min-h-9 items-end justify-between gap-2 bg-gradient-to-t from-background/85 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-        <span className="truncate text-xs font-medium text-foreground">{asset.fileName}</span>
+      <div className="absolute inset-x-0 bottom-0 z-[2] flex min-h-9 items-end justify-between gap-2 bg-gradient-to-t from-black/75 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        <span className="truncate text-xs font-medium text-white/90">{asset.fileName}</span>
         <span className="flex shrink-0 gap-1">
           {asset.identityStatus === ASSET_IDENTITY_PENDING && <Badge variant="secondary">Identity pending</Badge>}
           {asset.availability === ASSET_AVAILABILITY_MISSING && <Badge variant="warning">Missing</Badge>}
@@ -398,6 +458,12 @@ export function AssetTile({
       </div>
     </button>
   );
+}
+
+function assetAspectRatio(asset: AssetSummary) {
+  return asset.width && asset.height && asset.width > 0 && asset.height > 0
+    ? asset.width / asset.height
+    : FALLBACK_ASSET_ASPECT_RATIO;
 }
 
 function assetPlaceholderStyle(asset: AssetSummary): CSSProperties {

@@ -42,10 +42,6 @@ export class AdminShellPage {
     await this.page.getByRole('button', { name: 'Source path Docker guidance' }).hover();
   }
 
-  async togglePrimaryNavigation() {
-    await this.page.getByTestId('primary-nav-toggle').click();
-  }
-
   async openPrimary(view: 'libraries') {
     await this.page.getByTestId(`primary-nav-${view}`).click();
   }

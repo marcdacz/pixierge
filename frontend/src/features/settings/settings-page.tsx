@@ -179,7 +179,7 @@ export function SettingsPage({
         'grid h-full min-h-0 grid-rows-[minmax(0,1fr)] gap-8',
         effectiveNavCollapsed
           ? 'grid-cols-[3.5rem_minmax(0,1fr)]'
-          : 'grid-cols-[var(--settings-nav-width)_minmax(0,1fr)]'
+          : 'grid-cols-[var(--settings-sidebar-width)_minmax(0,1fr)]'
       )}
     >
       <aside className="min-h-0 overflow-y-auto overscroll-y-contain border-r border-border pr-4">
